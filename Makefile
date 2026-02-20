@@ -19,8 +19,8 @@
 # ---------- Configuration ----------
 
 VERSION        ?= latest
-REGISTRY       ?= ghcr.io
-REPO           ?= higress-group/hiclaw
+REGISTRY       ?= higress-registry.cn-hangzhou.cr.aliyuncs.com
+REPO           ?= higress/hiclaw
 
 MANAGER_IMAGE  ?= $(REGISTRY)/$(REPO)/manager-agent
 WORKER_IMAGE   ?= $(REGISTRY)/$(REPO)/worker-agent
@@ -318,8 +318,8 @@ help: ## Show this help
 	@echo ""
 	@echo "Variables:"
 	@echo "  VERSION              Image tag             (default: latest)"
-	@echo "  REGISTRY             Container registry    (default: ghcr.io)"
-	@echo "  REPO                 Repository path       (default: higress-group/hiclaw)"
+	@echo "  REGISTRY             Container registry    (default: higress-registry.cn-hangzhou.cr.aliyuncs.com)"
+	@echo "  REPO                 Repository path       (default: higress/hiclaw)"
 	@echo "  HIGRESS_REGISTRY     Base image registry   (default: cn-hangzhou, see below)"
 	@echo "  SKIP_BUILD           Skip build in 'install' (set to 1 to skip)"
 	@echo "  SKIP_INSTALL         Skip install in 'test' (set to 1 to test existing)"

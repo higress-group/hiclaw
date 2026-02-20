@@ -257,6 +257,8 @@ HICLAW_PORT_CONSOLE=${HICLAW_PORT_CONSOLE}
 
 # Data persistence
 HICLAW_DATA_DIR=${HICLAW_DATA_DIR:-}
+# Host directory sharing
+HICLAW_HOST_SHARE_DIR=${HICLAW_HOST_SHARE_DIR:-}
 EOF
 
     chmod 600 "${ENV_FILE}"
@@ -288,15 +290,35 @@ EOF
         DATA_MOUNT_ARGS="-v hiclaw-data:/data"
     fi
 
+    # Host directory mount: for file sharing with agents (defaults to user's home)
+    if [ "${HICLAW_NON_INTERACTIVE}" != "1" ] && [ -z "${HICLAW_HOST_SHARE_DIR+x}" ]; then
+        read -p "Host directory to share with agents (default: $HOME): " HICLAW_HOST_SHARE_DIR
+        HICLAW_HOST_SHARE_DIR="${HICLAW_HOST_SHARE_DIR:-$HOME}"
+        export HICLAW_HOST_SHARE_DIR
+    elif [ -z "${HICLAW_HOST_SHARE_DIR+x}" ]; then
+        HICLAW_HOST_SHARE_DIR="$HOME"
+        export HICLAW_HOST_SHARE_DIR
+    fi
+
+    if [ -d "${HICLAW_HOST_SHARE_DIR}" ]; then
+        HOST_SHARE_MOUNT_ARGS="-v ${HICLAW_HOST_SHARE_DIR}:/host-share"
+        log "Sharing host directory: ${HICLAW_HOST_SHARE_DIR} -> /host-share in container"
+    else
+        log "WARNING: Host directory ${HICLAW_HOST_SHARE_DIR} does not exist, using without validation"
+        HOST_SHARE_MOUNT_ARGS="-v ${HICLAW_HOST_SHARE_DIR}:/host-share"
+    fi
+
     # Run Manager container
     log "Starting Manager container..."
     docker run -d \
         --name hiclaw-manager \
         --env-file "${ENV_FILE}" \
+        -e HOST_ORIGINAL_HOME="${HICLAW_HOST_SHARE_DIR}" \
         ${SOCKET_MOUNT_ARGS} \
         -p "${HICLAW_PORT_GATEWAY}:8080" \
         -p "${HICLAW_PORT_CONSOLE}:8001" \
         ${DATA_MOUNT_ARGS} \
+        ${HOST_SHARE_MOUNT_ARGS} \
         --restart unless-stopped \
         "${MANAGER_IMAGE}"
 

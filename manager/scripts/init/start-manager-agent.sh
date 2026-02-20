@@ -2,12 +2,40 @@
 # start-manager-agent.sh - Initialize and start the Manager Agent
 # This is the last component to start (priority 800).
 # It waits for all dependencies, creates Matrix users, configures Higress,
-# and launches OpenClaw.
+# creates symlinks for host directory access, and launches OpenClaw.
 
 source /opt/hiclaw/scripts/lib/base.sh
 
 MATRIX_DOMAIN="${HICLAW_MATRIX_DOMAIN:-matrix-local.hiclaw.io:8080}"
 AI_GATEWAY_DOMAIN="${HICLAW_AI_GATEWAY_DOMAIN:-llm-local.hiclaw.io}"
+
+# ============================================================
+# Create symlink for host directory access
+# If /host-share is mounted, create a symlink using the original host's HOME path
+# ============================================================
+if [ -d "/host-share" ]; then
+    # Determine the original host's home directory path for consistent access
+    # The user can set HOST_ORIGINAL_HOME via environment variable if needed
+    ORIGINAL_HOST_HOME="${HOST_ORIGINAL_HOME:-$HOME}"
+
+    # Only create the symlink if it won't conflict with existing paths in the container
+    if [ ! -e "${ORIGINAL_HOST_HOME}" ] && [ "${ORIGINAL_HOST_HOME}" != "/" ] && [ "${ORIGINAL_HOST_HOME}" != "/root" ] && [ "${ORIGINAL_HOST_HOME}" != "/data" ] && [ "${ORIGINAL_HOST_HOME}" != "/host-share" ]; then
+        # Create parent directories if they don't exist
+        mkdir -p "$(dirname "${ORIGINAL_HOST_HOME}")"
+
+        # Create symlink from original host home path to the mounted host share
+        ln -sfn /host-share "${ORIGINAL_HOST_HOME}"
+        log "Created symlink: ${ORIGINAL_HOST_HOME} -> /host-share"
+        log "Host files now accessible at: ${ORIGINAL_HOST_HOME}/"
+    else
+        log "Skipping symlink creation to avoid conflict with existing path: ${ORIGINAL_HOST_HOME}"
+        # Create a fallback symlink with a different name
+        ln -sfn /host-share /root/host-home
+        log "Created fallback symlink: /root/host-home -> /host-share"
+    fi
+else
+    log "Host share directory (/host-share) not found, skipping symlink creation"
+fi
 
 # Add local domains to /etc/hosts so they resolve inside the container
 HOSTS_DOMAINS="${MATRIX_DOMAIN%%:*} ${HICLAW_MATRIX_CLIENT_DOMAIN:-matrix-client-local.hiclaw.io} ${AI_GATEWAY_DOMAIN} ${HICLAW_FS_DOMAIN:-fs-local.hiclaw.io}"

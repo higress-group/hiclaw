@@ -106,6 +106,16 @@ All persistent data is stored in the `hiclaw-data` Docker volume:
 - MinIO storage (Agent configs, task data)
 - Higress configuration
 
+Additionally, the user's home directory can be shared with agents for file access:
+
+#### Home Directory Sharing (Optional)
+You can optionally share the user's home directory with agents:
+- By default, `$HOME` is available at `/host-share` inside the container
+- A symlink is created from the original host home path (e.g., `/home/zhangty`) to `/host-share`
+- Agents can access and manipulate files using the same paths as on the host
+- This enables seamless file access between host and agents using consistent paths
+- To enable this feature, the installer will prompt for the directory to share (default: $HOME)
+
 ### Backup
 
 ```bash
@@ -118,4 +128,36 @@ docker run --rm -v hiclaw-data:/data -v $(pwd):/backup ubuntu \
 ```bash
 docker run --rm -v hiclaw-data:/data -v $(pwd):/backup ubuntu \
   tar xzf /backup/hiclaw-backup-YYYYMMDD.tar.gz -C /
+```
+
+### Directory Structure
+
+The system maintains the Docker volume for persistent storage and can optionally share the host directory:
+
+- `hiclaw-data` Docker volume: Contains all persistent system data
+- Host `$HOME` directory: Optionally shared to container at `/host-share`
+- Inside container: Original host path (e.g., `/home/zhangty`) via symlink to `/host-share` when available
+- This provides consistent file paths between host and container environments when sharing is enabled
+
+This allows agents to directly read and write files from the host system using identical paths when directory sharing is enabled,
+facilitating file transfer and processing workflows with path consistency.
+
+### Example Usage
+
+```bash
+# Example 1: Install with home directory sharing (recommended)
+HICLAW_LLM_API_KEY=your-key-here ./install/hiclaw-install.sh manager
+
+# Example 2: Place files in home directory for agent access
+mkdir -p ~/project-inputs/
+echo "Sample data" > ~/project-inputs/sample.txt
+
+# Example 3: Agent can access files at the same path in container as on host
+# Host path: /home/zhangty/project-inputs/sample.txt
+# Container path: /home/zhangty/project-inputs/sample.txt (via symlink)
+
+# Example 4: Use in agent configuration to access host files
+# In agent configuration, refer to files using the same path as host:
+# Host: /home/zhangty/data/input.txt
+# Container: /home/zhangty/data/input.txt (identical path via symlink)
 ```
