@@ -203,7 +203,7 @@ bash <(curl -sSL https://higress.ai/hiclaw/install.sh)
 ### Windows 安装（PowerShell 7+）
 
 ```powershell
-Invoke-Expression (Invoke-WebRequest -Uri "https://higress.ai/hiclaw/install.ps1" -UseBasicParsing).Content
+Set-ExecutionPolicy Bypass -Scope Process -Force; Invoke-Expression ((New-Object System.Net.WebClient).DownloadString('https://higress.ai/hiclaw/install.ps1'))
 ```
 
 > ⚠️ Windows 用户需要先安装 **PowerShell 7+** 和 **Docker Desktop**。
