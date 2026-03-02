@@ -947,10 +947,31 @@ EOF
     fi
 
     # Pull images (worker image must be ready before manager creates workers)
-    log "Pulling Manager image: ${MANAGER_IMAGE}"
-    docker pull "${MANAGER_IMAGE}"
-    log "Pulling Worker image: ${WORKER_IMAGE}"
-    docker pull "${WORKER_IMAGE}"
+    # For local images (prefix "hiclaw/"), skip pull if exists
+    # For remote images, always pull to get updates
+    LOCAL_IMAGE_PREFIX="hiclaw/"
+    if [[ "${MANAGER_IMAGE}" == "${LOCAL_IMAGE_PREFIX}"* ]]; then
+        if docker image inspect "${MANAGER_IMAGE}" >/dev/null 2>&1; then
+            log "Manager image already exists locally: ${MANAGER_IMAGE}"
+        else
+            log "Pulling Manager image: ${MANAGER_IMAGE}"
+            docker pull "${MANAGER_IMAGE}"
+        fi
+    else
+        log "Pulling Manager image: ${MANAGER_IMAGE}"
+        docker pull "${MANAGER_IMAGE}"
+    fi
+    if [[ "${WORKER_IMAGE}" == "${LOCAL_IMAGE_PREFIX}"* ]]; then
+        if docker image inspect "${WORKER_IMAGE}" >/dev/null 2>&1; then
+            log "Worker image already exists locally: ${WORKER_IMAGE}"
+        else
+            log "Pulling Worker image: ${WORKER_IMAGE}"
+            docker pull "${WORKER_IMAGE}"
+        fi
+    else
+        log "Pulling Worker image: ${WORKER_IMAGE}"
+        docker pull "${WORKER_IMAGE}"
+    fi
 
     # Run Manager container
     log "Starting Manager container..."

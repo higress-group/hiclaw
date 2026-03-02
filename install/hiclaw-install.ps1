@@ -1076,12 +1076,35 @@ function Install-Manager {
         docker rm hiclaw-manager 2>$null
     }
 
-    # Pull images
-    Write-Log "Pulling Manager image: $($script:MANAGER_IMAGE)"
-    & docker pull $script:MANAGER_IMAGE
+    # Pull images (skip if already exists locally)
+    # For local images (prefix "hiclaw/"), skip pull if exists
+    # For remote images, always pull to get updates
+    $LocalImagePrefix = "hiclaw/"
+    if ($script:MANAGER_IMAGE.StartsWith($LocalImagePrefix)) {
+        $managerImageExists = docker image inspect $script:MANAGER_IMAGE 2>$null
+        if ($LASTEXITCODE -eq 0) {
+            Write-Log "Manager image already exists locally: $($script:MANAGER_IMAGE)"
+        } else {
+            Write-Log "Pulling Manager image: $($script:MANAGER_IMAGE)"
+            & docker pull $script:MANAGER_IMAGE
+        }
+    } else {
+        Write-Log "Pulling Manager image: $($script:MANAGER_IMAGE)"
+        & docker pull $script:MANAGER_IMAGE
+    }
 
-    Write-Log "Pulling Worker image: $($script:WORKER_IMAGE)"
-    & docker pull $script:WORKER_IMAGE
+    if ($script:WORKER_IMAGE.StartsWith($LocalImagePrefix)) {
+        $workerImageExists = docker image inspect $script:WORKER_IMAGE 2>$null
+        if ($LASTEXITCODE -eq 0) {
+            Write-Log "Worker image already exists locally: $($script:WORKER_IMAGE)"
+        } else {
+            Write-Log "Pulling Worker image: $($script:WORKER_IMAGE)"
+            & docker pull $script:WORKER_IMAGE
+        }
+    } else {
+        Write-Log "Pulling Worker image: $($script:WORKER_IMAGE)"
+        & docker pull $script:WORKER_IMAGE
+    }
 
     # Run container
     Write-Log "Starting Manager container..."

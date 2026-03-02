@@ -1,8 +1,11 @@
 # ============================================================
-# OpenClaw Base Image - Shared build for Manager and Worker
+# OpenClaw Base Image - Shared base for Manager and Worker
 # ============================================================
-# Pre-compiles OpenClaw + mcporter so that Manager and Worker
-# can share the same base layer, avoiding ~900MB duplicate downloads.
+# Based on higress/all-in-one so that Manager and Worker share
+# the same base layers, avoiding ~900MB duplicate downloads.
+#
+# Includes: all-in-one (Higress) + Node.js 22 + OpenClaw + mcporter
+#           + common tools (git, jq, nginx, etc.)
 #
 # Build args:
 #   HIGRESS_REGISTRY  - base image registry (default: cn-hangzhou)
@@ -11,7 +14,8 @@
 
 ARG HIGRESS_REGISTRY=higress-registry.cn-hangzhou.cr.aliyuncs.com
 
-FROM ${HIGRESS_REGISTRY}/higress/node:20-slim
+# Based on all-in-one (Ubuntu 22.04) for layer sharing with Manager
+FROM ${HIGRESS_REGISTRY}/higress/all-in-one:2.1.11
 
 # Build args (must be declared BEFORE any RUN that uses them)
 ARG APT_MIRROR=mirrors.aliyun.com
@@ -27,17 +31,55 @@ ENV HTTP_PROXY=${HTTP_PROXY} \
     http_proxy=${http_proxy} \
     https_proxy=${https_proxy}
 
+# all-in-one is based on Ubuntu 22.04, uses sources.list (not ubuntu.sources)
 RUN if [ -n "${APT_MIRROR}" ]; then \
-        sed -i "s|deb.debian.org|${APT_MIRROR}|g" /etc/apt/sources.list.d/debian.sources 2>/dev/null || \
-        sed -i "s|deb.debian.org|${APT_MIRROR}|g" /etc/apt/sources.list 2>/dev/null || true; \
+        sed -i "s|archive.ubuntu.com|${APT_MIRROR}|g; s|security.ubuntu.com|${APT_MIRROR}|g" \
+            /etc/apt/sources.list 2>/dev/null || true; \
     fi && \
-    apt-get update && apt-get install -y git python3 make g++ curl && \
-    npm install -g pnpm n && n 22 && \
-    hash -r && node --version
+    apt-get update && apt-get install -y \
+    git python3 make g++ curl \
+    jq nginx gettext-base openssh-client ca-certificates procps \
+    && rm -rf /var/lib/apt/lists/*
 
-RUN git clone https://github.com/johnlanni/openclaw.git /opt/openclaw && \
-    cd /opt/openclaw && git checkout df5225e1fc310158f84f888b74ba2ea815190181
+# Install Node.js 22 (all-in-one doesn't include Node.js)
+RUN curl -fsSL https://deb.nodesource.com/setup_22.x | bash - && \
+    apt-get install -y nodejs && \
+    npm install -g pnpm && \
+    rm -rf /var/lib/apt/lists/*
 
-RUN cd /opt/openclaw && pnpm config set registry ${NPM_REGISTRY} && pnpm install && pnpm build
+# Clone, build, and optimize OpenClaw
+# 1. Clone with single branch to minimize .git size
+# 2. Install dependencies and build
+# 3. Remove unnecessary files (tests, .git, etc.) - keep all node_modules for extensions
+RUN git clone --depth 1 --single-branch \
+        https://github.com/johnlanni/openclaw.git /opt/openclaw && \
+    cd /opt/openclaw && \
+    git fetch --depth 1 origin df5225e1fc310158f84f888b74ba2ea815190181 && \
+    git checkout df5225e1fc310158f84f888b74ba2ea815190181 && \
+    pnpm config set registry ${NPM_REGISTRY} && \
+    pnpm install && \
+    pnpm build && \
+    rm -rf \
+        .git .github \
+        test \
+        docker-compose.yml Dockerfile* \
+        scripts/git-hooks \
+        assets README-header.png \
+        .secrets.baseline .pre-commit-config.yaml \
+        .dockerignore .gitignore .gitattributes \
+        .oxfmtrc.jsonc .oxlintrc.json .shellcheckrc \
+        .detect-secrets.cfg .npmrc \
+        .env.example appcast.xml \
+        vitest*.config.ts tsdown.config.ts fly*.toml render.yaml && \
+    rm -rf /root/.local/share/pnpm /root/.npm
 
-RUN npm install -g mcporter
+# Install mcporter
+RUN npm install -g mcporter && \
+    rm -rf /root/.npm
+
+# Clear proxy env vars (they're only needed during build, not at runtime)
+# Without this, curl in the container would try to use the proxy for localhost
+ENV HTTP_PROXY= \
+    HTTPS_PROXY= \
+    http_proxy= \
+    https_proxy=
