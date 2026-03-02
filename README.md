@@ -48,7 +48,7 @@ Set-ExecutionPolicy Bypass -Scope Process -Force; Invoke-Expression ((New-Object
 ```
 
 The installation script will:
-1. **Detect your timezone** (supports Linux and macOS) for optimal registry selection
+1. **Detect your timezone** for optimal registry selection
 2. **Prompt for configuration** (LLM provider, API key, ports, etc.) - all can be pre-set via environment variables
 3. **Wait for Manager to be ready** before exiting
 4. **Send a welcome message** to the Manager, which will greet you in your likely local language

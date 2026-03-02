@@ -93,8 +93,12 @@ function Test-DockerRunning {
     }
 }
 
-function Get-Timezone {
+function Get-HiClawTimeZone {
     try {
+        if ($env:HICLAW_TIMEZONE) {
+            return $env:HICLAW_TIMEZONE
+        }
+
         $tz = (Get-TimeZone).Id
         # Convert Windows timezone to IANA format
         $tzMap = @{
@@ -213,8 +217,7 @@ function Wait-ManagerReady {
                 Write-Log "Manager agent is ready!"
                 return $true
             }
-        }
-        catch {
+        } catch {
             # Ignore errors during polling
         }
 
@@ -507,8 +510,7 @@ function Send-WelcomeMessage {
                 $roomId = $rid
                 break
             }
-        }
-        catch {
+        } catch {
             continue
         }
     }
@@ -527,8 +529,7 @@ function Send-WelcomeMessage {
                 -H "Content-Type: application/json" `
                 -d $createBody 2>$null
             $roomId = ($createResp | ConvertFrom-Json).room_id
-        }
-        catch {
+        } catch {
             Write-Log "WARNING: Could not find or create DM room with Manager"
             return $false
         }
@@ -553,8 +554,7 @@ function Send-WelcomeMessage {
             if ($members -match [regex]::Escape($managerFullId)) {
                 break
             }
-        }
-        catch {
+        } catch {
             # Continue waiting
         }
 
@@ -616,7 +616,7 @@ function Install-Manager {
     Write-Log "=== HiClaw Manager Installation ==="
 
     # Detect timezone
-    $script:HICLAW_TIMEZONE = if ($env:HICLAW_TIMEZONE) { $env:HICLAW_TIMEZONE } else { Get-Timezone }
+    $script:HICLAW_TIMEZONE =  { $(Get-HiClawTimeZone) } 
 
     # Detect registry
     $script:HICLAW_REGISTRY = Get-Registry -Timezone $script:HICLAW_TIMEZONE
@@ -726,18 +726,19 @@ function Install-Manager {
                 # Stop and remove containers
                 if ($runningManager -or (docker ps -a --format "{{.Names}}" 2>$null | Select-String "^hiclaw-manager$")) {
                     Write-Log "Stopping and removing existing manager container..."
-                    docker stop hiclaw-manager 2>$null
-                    docker rm hiclaw-manager 2>$null
+                    docker stop hiclaw-manager *>$null
+                    docker rm hiclaw-manager *>$null
                 }
 
                 if ($existingWorkers) {
                     Write-Log "Stopping and removing existing worker containers..."
                     $existingWorkers | ForEach-Object {
-                        docker stop $_ 2>$null
-                        docker rm $_ 2>$null
+                        docker stop $_ *>$null
+                        docker rm $_ *>$null
                         Write-Log "  Removed: $_"
                     }
                 }
+                break
             }
             "^(2|reinstall)$" {
                 Write-Log "Performing clean reinstall..."
@@ -748,7 +749,7 @@ function Install-Manager {
                     $envContent = Get-Content $script:HICLAW_ENV_FILE
                     $wsLine = $envContent | Select-String "^HICLAW_WORKSPACE_DIR="
                     if ($wsLine) {
-                        $existingWorkspace = $wsLine.Line.Substring(20)
+                        $existingWorkspace = $wsLine.Line.Substring(21)
                     }
                 }
 
@@ -777,19 +778,19 @@ function Install-Manager {
                 Write-Log "Confirmed. Cleaning up..."
 
                 # Stop and remove all containers
-                docker stop hiclaw-manager 2>$null
-                docker rm hiclaw-manager 2>$null
+                docker stop hiclaw-manager *>$null
+                docker rm hiclaw-manager *>$null
 
                 docker ps -a --format "{{.Names}}" 2>$null | Select-String "^hiclaw-worker-" | ForEach-Object {
-                    docker stop $_ 2>$null
-                    docker rm $_ 2>$null
+                    docker stop $_ *>$null
+                    docker rm $_ *>$null
                     Write-Log "  Removed worker: $_"
                 }
 
                 # Remove Docker volume
                 if (docker volume ls -q 2>$null | Select-String "^hiclaw-data$") {
                     Write-Log "Removing Docker volume: hiclaw-data"
-                    docker volume rm hiclaw-data 2>$null
+                    docker volume rm hiclaw-data *>$null
                 }
 
                 # Remove workspace
@@ -805,6 +806,7 @@ function Install-Manager {
                 }
 
                 Write-Log "Cleanup complete. Starting fresh installation..."
+                break
             }
             "^(3|cancel|.*)$" {
                 Write-Log "Installation cancelled."
@@ -1072,8 +1074,8 @@ function Install-Manager {
     $existingContainer = docker ps -a --format "{{.Names}}" 2>$null | Select-String "^hiclaw-manager$"
     if ($existingContainer) {
         Write-Log "Removing existing hiclaw-manager container..."
-        docker stop hiclaw-manager 2>$null
-        docker rm hiclaw-manager 2>$null
+        docker stop hiclaw-manager *>$null
+        docker rm hiclaw-manager *>$null
     }
 
     # Pull images (skip if already exists locally)
@@ -1216,8 +1218,8 @@ function Install-Worker {
     # Handle reset
     if ($Reset) {
         Write-Log "Resetting Worker: $Name..."
-        docker stop $containerName 2>$null
-        docker rm $containerName 2>$null
+        docker stop $containerName *>$null
+        docker rm $containerName *>$null
     }
 
     # Check for existing container
@@ -1227,7 +1229,7 @@ function Install-Worker {
     }
 
     # Detect timezone and registry
-    $timezone = if ($env:HICLAW_TIMEZONE) { $env:HICLAW_TIMEZONE } else { Get-Timezone }
+    $timezone =  { $(Get-HiClawTimeZone) } 
     $registry = Get-Registry -Timezone $timezone
     $workerImage = if ($env:HICLAW_INSTALL_WORKER_IMAGE) {
         $env:HICLAW_INSTALL_WORKER_IMAGE
@@ -1275,8 +1277,8 @@ function Uninstall-HiClaw {
     $manager = docker ps -a --format "{{.Names}}" 2>$null | Select-String "^hiclaw-manager$"
     if ($manager) {
         Write-Log "Stopping and removing hiclaw-manager..."
-        docker stop hiclaw-manager 2>$null
-        docker rm hiclaw-manager 2>$null
+        docker stop hiclaw-manager *>$null
+        docker rm hiclaw-manager *>$null
     }
 
     # Stop and remove workers
@@ -1284,8 +1286,8 @@ function Uninstall-HiClaw {
     if ($workers) {
         Write-Log "Stopping and removing worker containers..."
         $workers | ForEach-Object {
-            docker stop $_ 2>$null
-            docker rm $_ 2>$null
+            docker stop $_ *>$null
+            docker rm $_ *>$null
             Write-Log "  Removed: $_"
         }
     }
@@ -1294,7 +1296,7 @@ function Uninstall-HiClaw {
     $volume = docker volume ls -q 2>$null | Select-String "^hiclaw-data$"
     if ($volume) {
         Write-Log "Removing Docker volume: hiclaw-data"
-        docker volume rm hiclaw-data 2>$null
+        docker volume rm hiclaw-data *>$null
     }
 
     # Remove env file
