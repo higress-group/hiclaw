@@ -636,6 +636,10 @@ function Install-Manager {
 
     Write-Log "Registry: $($script:HICLAW_REGISTRY)"
     Write-Log ""
+    Write-Log "Installation directory: $(Get-Location)"
+    Write-Log "  (The env file 'hiclaw-manager.env' will be created in this directory.)"
+    Write-Log "  (Run this script from the directory where you want to manage this installation.)"
+    Write-Log ""
 
     # Check Docker
     if (-not (Test-DockerRunning)) {
@@ -1076,6 +1080,31 @@ function Install-Manager {
         Write-Log "Removing existing hiclaw-manager container..."
         docker stop hiclaw-manager *>$null
         docker rm hiclaw-manager *>$null
+    }
+
+    # Check if the Docker volume is already owned by a different installation directory
+    $volumeExists = docker volume ls -q 2>$null | Select-String "^$($config.DATA_DIR)$"
+    if ($volumeExists) {
+        $existingInstallPath = (docker volume inspect $config.DATA_DIR --format '{{index .Labels "hiclaw.install-path"}}' 2>$null) -join ""
+        $currentInstallPath = (Get-Location).Path
+        if ($existingInstallPath -and $existingInstallPath.Trim() -ne $currentInstallPath) {
+            Write-Host ""
+            Write-Host "`e[31m[HiClaw ERROR] Volume conflict detected!`e[0m"
+            Write-Host "`e[31m  Docker volume '$($config.DATA_DIR)' was created by a different installation:`e[0m"
+            Write-Host "`e[31m    Original install directory : $($existingInstallPath.Trim())`e[0m"
+            Write-Host "`e[31m    Current  install directory : $currentInstallPath`e[0m"
+            Write-Host ""
+            Write-Host "`e[33m  Each HiClaw installation must use its own Docker volume.`e[0m"
+            Write-Host "`e[33m  Options:`e[0m"
+            Write-Host "`e[33m    1. Run this script from the original directory: $($existingInstallPath.Trim())`e[0m"
+            Write-Host "`e[33m    2. Use a different volume name: `$env:HICLAW_DATA_DIR='hiclaw-data-2'; .\hiclaw-install.ps1`e[0m"
+            Write-Host "`e[33m    3. Perform a clean reinstall from the original directory (option 2 in the upgrade menu)`e[0m"
+            Write-Host ""
+            throw "Volume conflict: cannot reuse volume '$($config.DATA_DIR)' from a different installation directory."
+        }
+    } else {
+        # Create the volume with an install-path label so future installs can detect conflicts
+        docker volume create --label "hiclaw.install-path=$($(Get-Location).Path)" $config.DATA_DIR | Out-Null
     }
 
     # Pull images (skip if already exists locally)

@@ -485,6 +485,10 @@ install_manager() {
     log "=== HiClaw Manager Installation ==="
     log "Registry: ${HICLAW_REGISTRY}"
     log ""
+    log "Installation directory: $(pwd)"
+    log "  (The env file 'hiclaw-manager.env' will be created in this directory.)"
+    log "  (Run this script from the directory where you want to manage this installation.)"
+    log ""
 
     # Onboarding mode selection (skip if already in non-interactive mode)
     if [ "${HICLAW_NON_INTERACTIVE}" != "1" ]; then
@@ -913,6 +917,31 @@ EOF
         log "Removing existing hiclaw-manager container..."
         docker stop hiclaw-manager 2>/dev/null || true
         docker rm hiclaw-manager 2>/dev/null || true
+    fi
+
+    # Check if the Docker volume is already owned by a different installation directory
+    if docker volume ls -q | grep -q "^${HICLAW_DATA_DIR}$"; then
+        EXISTING_INSTALL_PATH=$(docker volume inspect "${HICLAW_DATA_DIR}" \
+            --format '{{index .Labels "hiclaw.install-path"}}' 2>/dev/null || true)
+        CURRENT_INSTALL_PATH="$(pwd)"
+        if [ -n "${EXISTING_INSTALL_PATH}" ] && [ "${EXISTING_INSTALL_PATH}" != "${CURRENT_INSTALL_PATH}" ]; then
+            echo ""
+            echo -e "\033[31m[HiClaw ERROR] Volume conflict detected!\033[0m" >&2
+            echo -e "\033[31m  Docker volume '${HICLAW_DATA_DIR}' was created by a different installation:\033[0m" >&2
+            echo -e "\033[31m    Original install directory : ${EXISTING_INSTALL_PATH}\033[0m" >&2
+            echo -e "\033[31m    Current  install directory : ${CURRENT_INSTALL_PATH}\033[0m" >&2
+            echo "" >&2
+            echo -e "\033[33m  Each HiClaw installation must use its own Docker volume.\033[0m" >&2
+            echo -e "\033[33m  Options:\033[0m" >&2
+            echo -e "\033[33m    1. Run this script from the original directory: ${EXISTING_INSTALL_PATH}\033[0m" >&2
+            echo -e "\033[33m    2. Use a different volume name: HICLAW_DATA_DIR=hiclaw-data-2 $0\033[0m" >&2
+            echo -e "\033[33m    3. Perform a clean reinstall from the original directory (option 2 in the upgrade menu)\033[0m" >&2
+            echo "" >&2
+            exit 1
+        fi
+    else
+        # Create the volume with an install-path label so future installs can detect conflicts
+        docker volume create --label "hiclaw.install-path=$(pwd)" "${HICLAW_DATA_DIR}" > /dev/null
     fi
 
     # Data mount: Docker volume
