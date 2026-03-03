@@ -59,6 +59,11 @@ RUN git clone --depth 1 --single-branch \
     pnpm config set registry ${NPM_REGISTRY} && \
     pnpm install && \
     pnpm build && \
+    echo "==> Verifying critical native addons..." && \
+    ADDON_DIR=/opt/openclaw/node_modules/.pnpm/@matrix-org+matrix-sdk-crypto-nodejs@0.4.0/node_modules/@matrix-org/matrix-sdk-crypto-nodejs && \
+    ls "$ADDON_DIR"/matrix-sdk-crypto.linux-*.node 2>/dev/null | grep -q . \
+        || (echo "ERROR: matrix-sdk-crypto native addon missing (pnpm install may have silently failed on this arch)" && exit 1) && \
+    echo "==> Native addon check passed: $(ls $ADDON_DIR/matrix-sdk-crypto.linux-*.node)" && \
     rm -rf \
         .git .github \
         test \
