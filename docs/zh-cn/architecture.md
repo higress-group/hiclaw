@@ -2,7 +2,7 @@
 
 ## 系统概览
 
-HiClaw 是一个 Agent 团队系统，让多个 AI Agent 通过即时通讯（Matrix 协议）在人工监督下协同工作。
+HiClaw 是一个 Agent 团队系统，让多个 AI Agent 通过即时通讯（Matrix 协议）在人工监督下协同工作，同时具备企业级安全特性。
 
 ```mermaid
 graph TB
