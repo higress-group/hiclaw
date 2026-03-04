@@ -16,16 +16,7 @@ This guide walks you through installing HiClaw, creating your first Agent team, 
 
 ### 1.1 Run the installer
 
-**Option A: Using Make (for developers who cloned the repo)**
-
-```bash
-# Minimal install — only LLM key required, all defaults applied
-HICLAW_LLM_API_KEY="sk-xxx" make install
-```
-
-This builds images locally, mounts the container runtime socket (for direct Worker creation), and saves config to `./hiclaw-manager.env`.
-
-**Option B: One-line install (no git clone needed)**
+**Option A: One-line install**
 
 ```bash
 bash <(curl -sSL https://higress.ai/hiclaw/install.sh)
@@ -36,6 +27,15 @@ Follow the interactive prompts to configure:
 - Admin username and password
 - Domain names (press Enter to accept defaults)
 - GitHub PAT (optional)
+
+**Option B: Using Make (for developers who cloned the repo)**
+
+```bash
+# Minimal install — only LLM key required, all defaults applied
+HICLAW_LLM_API_KEY="sk-xxx" make install
+```
+
+This builds images locally, mounts the container runtime socket (for direct Worker creation), and saves config to `./hiclaw-manager.env`.
 
 Both methods support environment variable overrides for all settings. See `install/hiclaw-install.sh` header for the full list.
 
