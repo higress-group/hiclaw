@@ -38,9 +38,10 @@ update_builtin_section() {
     fi
 
     if grep -q 'hiclaw-builtin-start' "${target}" 2>/dev/null; then
-        # Detect corrupted file: markers count must be exactly start=1, end=1, and line count <= 500,
-        # and the builtin heading (first non-empty line of source) must appear exactly once.
-        local start_count end_count heading heading_count
+        # Detect corrupted file: markers count must be exactly start=1, end=1,
+        # heading must appear exactly once, and content after end marker must not
+        # exceed 2x the source file length (guards against builtin content leaking into user area).
+        local start_count end_count heading heading_count after_end_lines source_lines
         start_count=$(awk '$0 == "<!-- hiclaw-builtin-start -->" {c++} END {print c+0}' "${target}" 2>/dev/null || echo 0)
         end_count=$(awk '$0 == "<!-- hiclaw-builtin-end -->" {c++} END {print c+0}' "${target}" 2>/dev/null || echo 0)
         heading=$(grep -m1 '^#' "${source}" 2>/dev/null || true)
@@ -49,19 +50,21 @@ update_builtin_section() {
         else
             heading_count=1  # no heading in source, skip this check
         fi
-        if [ "${start_count}" -ne 1 ] || [ "${end_count}" -ne 1 ] || [ "${heading_count}" -gt 1 ]; then
-            log "  Corrupted (start=${start_count}, end=${end_count}, heading_count=${heading_count}): ${target} — force rewriting"
+        source_lines=$(wc -l < "${source}" 2>/dev/null || echo 1)
+        after_end_lines=$(awk '$0 == "<!-- hiclaw-builtin-end -->" {found=1; next} found{c++} END {print c+0}' "${target}" 2>/dev/null || echo 0)
+        if [ "${start_count}" -ne 1 ] || [ "${end_count}" -ne 1 ] || [ "${heading_count}" -gt 1 ] || [ "${after_end_lines}" -gt $(( source_lines * 2 )) ]; then
+            log "  Corrupted (start=${start_count}, end=${end_count}, heading_count=${heading_count}, after_end=${after_end_lines}, src=${source_lines}): ${target} — force rewriting"
             local user_content=""
             # Only attempt to preserve user content if there's at least one end marker to anchor on.
-            # Also strip any lines matching the builtin heading to avoid duplicates.
+            # Also strip any lines that appear in the source (leaked builtin content) and the heading.
             if [ "${end_count}" -ge 1 ]; then
                 user_content=$(awk '{lines[NR]=$0} END{for(i=NR;i>=1;i--) print lines[i]}' "${target}" \
                     | awk '$0 == "<!-- hiclaw-builtin-end -->" {exit} {print}' \
                     | awk '{lines[NR]=$0} END{for(i=NR;i>=1;i--) print lines[i]}' \
                     | grep -v 'hiclaw-builtin' || true)
-                # Strip duplicate heading lines (same as the first heading in source)
-                if [ -n "${heading}" ] && [ -n "${user_content}" ]; then
-                    user_content=$(printf '%s\n' "${user_content}" | grep -vF "${heading}" || true)
+                # Filter out any lines that exist in the source file (leaked builtin content)
+                if [ -n "${user_content}" ]; then
+                    user_content=$(printf '%s\n' "${user_content}" | grep -vxFf "${source}" || true)
                 fi
             fi
             {
