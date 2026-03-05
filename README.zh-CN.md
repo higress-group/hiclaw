@@ -60,7 +60,7 @@ Set-ExecutionPolicy Bypass -Scope Process -Force; Invoke-Expression ((New-Object
 - [Docker Desktop](https://www.docker.com/products/docker-desktop/)（Windows / macOS）
 - [Docker Engine](https://docs.docker.com/engine/install/)（Linux）或 [Podman Desktop](https://podman-desktop.io/)（替代方案）
 
-**资源需求**：Docker 虚拟机至少需要分配 2 核 CPU 和 4 GB 内存。Docker Desktop 用户可在 Settings → Resources 中调整。
+**资源需求**：最低 2 核 CPU 和 4 GB 内存。如果希望部署较多 Worker 体验更强大的 Agent Teams 能力，**建议 4 核 8 GB 内存** —— 目前 OpenClaw 内存占用较高。Docker Desktop 用户可在 Settings → Resources 中调整。
 
 ### 升级
 

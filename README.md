@@ -65,7 +65,7 @@ Set-ExecutionPolicy Bypass -Scope Process -Force; Invoke-Expression ((New-Object
 - [Docker Desktop](https://www.docker.com/products/docker-desktop/) (Windows / macOS)
 - [Docker Engine](https://docs.docker.com/engine/install/) (Linux) or [Podman Desktop](https://podman-desktop.io/) (alternative)
 
-**Resource requirements**: The Docker VM needs at least 2 CPU cores and 4 GB RAM. In Docker Desktop, go to Settings → Resources to adjust.
+**Resource requirements**: Minimum 2 CPU cores and 4 GB RAM. If you want to deploy multiple Workers for a more powerful Agent Teams experience, **4 CPU cores and 8 GB RAM are recommended** — OpenClaw's memory usage is relatively high. In Docker Desktop, go to Settings → Resources to adjust.
 
 ### Upgrade
 
