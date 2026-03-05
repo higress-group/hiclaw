@@ -79,7 +79,7 @@ update_builtin_section() {
 
         # Extract user content after the end marker
         local user_content
-        user_content=$(awk '$0 == "<!-- hiclaw-builtin-end -->" {found=1; next} found{print}' "${target}" | grep -v 'hiclaw-builtin')
+        user_content=$(awk '$0 == "<!-- hiclaw-builtin-end -->" {found=1; next} found{print}' "${target}" | grep -v 'hiclaw-builtin' || true)
         {
             printf '%s\n' "${BUILTIN_HEADER}"
             cat "${source}"
