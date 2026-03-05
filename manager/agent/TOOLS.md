@@ -40,6 +40,11 @@ Full lifecycle of Worker containers and skill assignments.
 - Admin says "add the github-operations skill to Alice" or "reset the Bob worker"
 - Admin says "switch Alice's model to claude-sonnet-4-6" → use `lifecycle-worker.sh --action update-model`
 
+**After creating a Worker**, always tell the admin:
+1. A 3-person room (Human + Manager + Worker) has been created — please check your Matrix invitations and accept it
+2. In any group room with 3+ people, you must **@mention** the person you want to respond — they only wake up when explicitly mentioned
+3. You can also click the Worker's avatar to open a **direct message** with them — no @mention needed, and the conversation is private (Manager cannot see it)
+
 ## project-management
 
 Multi-Worker collaborative projects.
