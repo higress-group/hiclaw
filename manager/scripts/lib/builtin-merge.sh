@@ -87,7 +87,7 @@ update_builtin_section() {
             printf '%s\n' "${BUILTIN_HEADER}"
             cat "${source}"
             printf '\n%s\n' "${BUILTIN_END}"
-            [ -n "${user_content}" ] && printf '\n%s\n' "${user_content}"
+            if [ -n "${user_content}" ]; then printf '\n%s\n' "${user_content}"; fi
         } > "${target}.tmp" || { log "  ERROR: failed to write ${target}.tmp"; return 1; }
         mv "${target}.tmp" "${target}" || { log "  ERROR: failed to move ${target}.tmp -> ${target}"; return 1; }
         log "  Updated builtin section: ${target}"
