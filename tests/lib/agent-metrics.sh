@@ -147,6 +147,176 @@ get_latest_session() {
     docker exec "$container" sh -c "ls -t '${session_dir}'/*.jsonl 2>/dev/null | head -1" 2>/dev/null
 }
 
+# ============================================================
+# Baseline & Delta Metrics (for per-test metrics)
+# ============================================================
+
+# Snapshot current session metrics as baseline for later delta calculation
+# Usage: METRICS_BASELINE=$(snapshot_baseline "worker1" "worker2" ...)
+# Returns: JSON with current cumulative metrics for all agents
+snapshot_baseline() {
+    local workers=("$@")
+    
+    local manager_container="${TEST_MANAGER_CONTAINER:-hiclaw-manager}"
+    local manager_session_dir="/root/manager-workspace/.openclaw/agents/main/sessions"
+    
+    local result='{"agents": {}}'
+    
+    # Collect Manager baseline
+    local manager_session
+    manager_session=$(get_latest_session "$manager_container" "$manager_session_dir")
+    
+    if [ -n "$manager_session" ]; then
+        local manager_metrics
+        manager_metrics=$(docker exec "$manager_container" cat "$manager_session" 2>/dev/null | parse_session_metrics_inline)
+        if [ -n "$manager_metrics" ]; then
+            result=$(echo "$result" | jq --argjson m "$manager_metrics" '.agents.manager = $m')
+        fi
+    fi
+    
+    # Collect Worker baselines
+    for worker in "${workers[@]}"; do
+        local worker_container="hiclaw-worker-${worker}"
+        local worker_session_dir="/root/hiclaw-fs/agents/${worker}/.openclaw/agents/main/sessions"
+        
+        if ! docker ps --format '{{.Names}}' 2>/dev/null | grep -q "^${worker_container}$"; then
+            continue
+        fi
+        
+        local worker_session
+        worker_session=$(get_latest_session "$worker_container" "$worker_session_dir")
+        
+        if [ -n "$worker_session" ]; then
+            local worker_metrics
+            worker_metrics=$(docker exec "$worker_container" cat "$worker_session" 2>/dev/null | parse_session_metrics_inline)
+            if [ -n "$worker_metrics" ]; then
+                result=$(echo "$result" | jq --arg w "$worker" --argjson m "$worker_metrics" '.agents[$w] = $m')
+            fi
+        fi
+    done
+    
+    echo "$result"
+}
+
+# Collect delta metrics (difference from baseline) - metrics consumed during THIS test only
+# Usage: METRICS=$(collect_delta_metrics <test_name> "$METRICS_BASELINE" "worker1" "worker2" ...)
+collect_delta_metrics() {
+    local test_name="$1"
+    local baseline="$2"
+    shift 2
+    local workers=("$@")
+    
+    local manager_container="${TEST_MANAGER_CONTAINER:-hiclaw-manager}"
+    local manager_session_dir="/root/manager-workspace/.openclaw/agents/main/sessions"
+    
+    # Initialize result structure
+    local result='{"test_name": "'"${test_name}"'", "timestamp": "'"$(date -Iseconds)"'", "agents": {}, "totals": {"llm_calls": 0, "tokens": {"input": 0, "output": 0, "cache_read": 0, "cache_write": 0, "total": 0}, "timing": {"duration_seconds": 0}}}'
+    
+    # Collect Manager delta
+    log_info "Collecting Manager delta metrics..." >&2
+    local manager_session
+    manager_session=$(get_latest_session "$manager_container" "$manager_session_dir")
+    
+    if [ -n "$manager_session" ]; then
+        local current_manager
+        current_manager=$(docker exec "$manager_container" cat "$manager_session" 2>/dev/null | parse_session_metrics_inline)
+        if [ -n "$current_manager" ]; then
+            local baseline_manager=$(echo "$baseline" | jq -r '.agents.manager // empty')
+            local manager_delta
+            
+            if [ -n "$baseline_manager" ] && [ "$baseline_manager" != "null" ] && [ "$baseline_manager" != "" ]; then
+                # Calculate delta
+                manager_delta=$(echo "$current_manager" | jq --argjson base "$baseline_manager" '
+                    {
+                        llm_calls: (.llm_calls - $base.llm_calls),
+                        tokens: {
+                            input: (.tokens.input - $base.tokens.input),
+                            output: (.tokens.output - $base.tokens.output),
+                            cache_read: (.tokens.cache_read - $base.tokens.cache_read),
+                            cache_write: (.tokens.cache_write - $base.tokens.cache_write),
+                            total: ((.tokens.input - $base.tokens.input) + (.tokens.output - $base.tokens.output))
+                        },
+                        timing: .timing
+                    }
+                ')
+            else
+                # No baseline, use current as-is
+                manager_delta="$current_manager"
+            fi
+            
+            result=$(echo "$result" | jq --argjson m "$manager_delta" '.agents.manager = $m')
+            log_info "Manager delta: $(echo "$manager_delta" | jq -r '.llm_calls') LLM calls, $(echo "$manager_delta" | jq -r '.tokens.total') tokens" >&2
+        fi
+    fi
+    
+    # Collect Worker deltas
+    for worker in "${workers[@]}"; do
+        local worker_container="hiclaw-worker-${worker}"
+        local worker_session_dir="/root/hiclaw-fs/agents/${worker}/.openclaw/agents/main/sessions"
+        
+        log_info "Collecting Worker '${worker}' delta metrics..." >&2
+        
+        if ! docker ps --format '{{.Names}}' 2>/dev/null | grep -q "^${worker_container}$"; then
+            log_info "Worker '${worker}' container not running, skipping" >&2
+            continue
+        fi
+        
+        local worker_session
+        worker_session=$(get_latest_session "$worker_container" "$worker_session_dir")
+        
+        if [ -n "$worker_session" ]; then
+            local current_worker
+            current_worker=$(docker exec "$worker_container" cat "$worker_session" 2>/dev/null | parse_session_metrics_inline)
+            if [ -n "$current_worker" ]; then
+                local baseline_worker=$(echo "$baseline" | jq -r --arg w "$worker" '.agents[$w] // empty')
+                local worker_delta
+                
+                if [ -n "$baseline_worker" ] && [ "$baseline_worker" != "null" ] && [ "$baseline_worker" != "" ]; then
+                    # Calculate delta
+                    worker_delta=$(echo "$current_worker" | jq --argjson base "$baseline_worker" '
+                        {
+                            llm_calls: (.llm_calls - $base.llm_calls),
+                            tokens: {
+                                input: (.tokens.input - $base.tokens.input),
+                                output: (.tokens.output - $base.tokens.output),
+                                cache_read: (.tokens.cache_read - $base.tokens.cache_read),
+                                cache_write: (.tokens.cache_write - $base.tokens.cache_write),
+                                total: ((.tokens.input - $base.tokens.input) + (.tokens.output - $base.tokens.output))
+                            },
+                            timing: .timing
+                        }
+                    ')
+                else
+                    # No baseline, use current as-is
+                    worker_delta="$current_worker"
+                fi
+                
+                result=$(echo "$result" | jq --arg w "$worker" --argjson m "$worker_delta" '.agents[$w] = $m')
+                log_info "Worker '${worker}' delta: $(echo "$worker_delta" | jq -r '.llm_calls') LLM calls, $(echo "$worker_delta" | jq -r '.tokens.total') tokens" >&2
+            fi
+        else
+            log_info "No session found for Worker '${worker}'" >&2
+        fi
+    done
+    
+    # Calculate totals
+    result=$(echo "$result" | jq '
+        .totals.llm_calls = ([.agents[].llm_calls] | add // 0)
+        | .totals.tokens.input = ([.agents[].tokens.input] | add // 0)
+        | .totals.tokens.output = ([.agents[].tokens.output] | add // 0)
+        | .totals.tokens.cache_read = ([.agents[].tokens.cache_read] | add // 0)
+        | .totals.tokens.cache_write = ([.agents[].tokens.cache_write] | add // 0)
+        | .totals.tokens.total = (.totals.tokens.input + .totals.tokens.output)
+        | .totals.timing.duration_seconds = ([.agents[].timing.duration_seconds] | add // 0)
+    ')
+    
+    echo "$result"
+}
+
+# ============================================================
+# Multi-Agent Metrics Collection (Cumulative)
+# ============================================================
+
 # Collect metrics from Manager and specified workers
 # Usage: collect_test_metrics <test_name> [worker_names...]
 # Output: JSON with all agent metrics and totals

@@ -51,7 +51,7 @@ assert_not_empty "${DM_ROOM}" "DM room with Manager exists"
 # Wait for Manager Agent to be fully ready (OpenClaw gateway + joined DM room)
 wait_for_manager_agent_ready 300 "${DM_ROOM}" "${ADMIN_TOKEN}" || {
     log_fail "Manager Agent not ready in time"
-    test_teardown "02-create-worker"
+    test_teardown "${TEST_NAME}"
     test_summary
     exit 1
 }
@@ -106,12 +106,15 @@ log_section "Start Worker Container"
 log_info "Worker Alice verification complete (container start requires install params from Manager)"
 
 # ============================================================
-# Collect Agent Metrics
+# Collect Agent Metrics (Cumulative from session start)
 # ============================================================
+# Note: These are cumulative values from session start, not delta for this test only.
+# In a clean CI environment (fresh containers per test run), this equals the test's actual consumption.
+# For local development with long-running sessions, values may include prior test activity.
 
 log_section "Collect Agent Metrics"
 
-# Collect metrics from Manager and Worker alice
+# Collect cumulative metrics from Manager and Worker alice
 METRICS=$(collect_test_metrics "${TEST_NAME}" "alice")
 
 # Print formatted report
