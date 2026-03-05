@@ -1,5 +1,6 @@
 # 常见问题
 
+- [如何查看当前 HiClaw 版本](#如何查看当前-hiclaw-版本)
 - [Windows 下执行安装脚本闪退](#windows-下执行安装脚本闪退)
 - [Manager Agent 启动超时](#manager-agent-启动超时)
 - [局域网其他电脑如何访问 Web 端](#局域网其他电脑如何访问-web-端)
@@ -10,6 +11,22 @@
 - [HiClaw 支持发送和接收文件吗](#hiclaw-支持发送和接收文件吗)
 - [为什么 Manager/Worker 一直显示"输入中"](#为什么-managerworker-一直显示输入中)
 - [在房间里和 Manager 聊天没有响应或返回错误状态码](#在房间里和-manager-聊天没有响应或返回错误状态码)
+
+---
+
+## 如何查看当前 HiClaw 版本
+
+执行以下命令查看已安装的版本：
+
+```bash
+docker exec hiclaw-manager cat /opt/hiclaw/agent/.builtin-version
+```
+
+安装时指定版本：
+
+```bash
+HICLAW_VERSION=0.1.0 bash <(curl -sSL https://higress.ai/hiclaw/install.sh)
+```
 
 ---
 

@@ -1,5 +1,6 @@
 # FAQ
 
+- [How to check the current HiClaw version](#how-to-check-the-current-hiclaw-version)
 - [Installation script exits immediately on Windows](#installation-script-exits-immediately-on-windows)
 - [Manager Agent startup timeout](#manager-agent-startup-timeout)
 - [Accessing the web UI from other devices on the LAN](#accessing-the-web-ui-from-other-devices-on-the-lan)
@@ -10,6 +11,22 @@
 - [Does HiClaw support sending and receiving files](#does-hiclaw-support-sending-and-receiving-files)
 - [Why does Manager/Worker keep showing "typing"](#why-does-managerworker-keep-showing-typing)
 - [Manager not responding or returning error status codes](#manager-not-responding-or-returning-error-status-codes)
+
+---
+
+## How to check the current HiClaw version
+
+Run the following command to see the installed version:
+
+```bash
+docker exec hiclaw-manager cat /opt/hiclaw/agent/.builtin-version
+```
+
+To install a specific version, use the `HICLAW_VERSION` environment variable during installation:
+
+```bash
+HICLAW_VERSION=0.1.0 bash <(curl -sSL https://higress.ai/hiclaw/install.sh)
+```
 
 ---
 
