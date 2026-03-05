@@ -15,82 +15,10 @@ WORKSPACE="/root/manager-workspace"
 REGISTRY="${WORKSPACE}/workers-registry.json"
 IMAGE_VERSION=$(cat "${AGENT_SRC}/.builtin-version" 2>/dev/null || echo "unknown")
 
-BUILTIN_START="<!-- hiclaw-builtin-start -->"
-BUILTIN_END="<!-- hiclaw-builtin-end -->"
-BUILTIN_HEADER='<!-- hiclaw-builtin-start -->
-> ⚠️ **DO NOT EDIT** this section. It is managed by HiClaw and will be automatically
-> replaced on upgrade. To customize, add your content **after** the
-> `<!-- hiclaw-builtin-end -->` marker below.
-'
+source /opt/hiclaw/scripts/lib/builtin-merge.sh
 
 log() {
     echo "[upgrade-builtins $(date '+%Y-%m-%d %H:%M:%S')] $1"
-}
-
-# ============================================================
-# update_builtin_section <target_file> <source_file>
-#
-# Merges the builtin section from source into target:
-#   - If target doesn't exist: write marker-wrapped source content
-#   - If target has markers: replace builtin section, preserve user content
-#   - If target has no markers (old install): prepend markers, keep old content as user zone
-# ============================================================
-update_builtin_section() {
-    local target="$1"
-    local source="$2"
-
-    if [ ! -f "${source}" ]; then
-        log "  WARNING: source not found: ${source}, skipping"
-        return 0
-    fi
-
-    mkdir -p "$(dirname "${target}")"
-
-    if [ ! -f "${target}" ]; then
-        # First time: write full builtin content with markers
-        log "  Creating: ${target}"
-        printf '%s\n' "${BUILTIN_HEADER}" > "${target}"
-        cat "${source}" >> "${target}"
-        printf '\n%s\n' "${BUILTIN_END}" >> "${target}"
-        return 0
-    fi
-
-    if grep -q 'hiclaw-builtin-start' "${target}" 2>/dev/null; then
-        # Has markers: check if builtin content actually changed
-        # Filter out the header block (start marker + all > warning lines + blank line)
-        local current_builtin new_builtin
-        current_builtin=$(awk '/hiclaw-builtin-start/{found=1; skip=1; next} skip && /^>/{next} skip && /^$/{skip=0; next} /hiclaw-builtin-end/{found=0; skip=0} found{print}' "${target}")
-        new_builtin=$(cat "${source}")
-        if [ "${current_builtin}" = "${new_builtin}" ]; then
-            log "  Up to date: ${target}"
-            return 0
-        fi
-        # Extract user content after end marker; strip stray marker lines (e.g., from old corrupted files)
-        local user_content
-        user_content=$(awk '/hiclaw-builtin-end/{found=1; next} found{print}' "${target}" | grep -v 'hiclaw-builtin')
-        {
-            printf '%s\n' "${BUILTIN_HEADER}"
-            cat "${source}"
-            printf '\n%s\n' "${BUILTIN_END}"
-            if [ -n "${user_content}" ]; then
-                printf '\n%s\n' "${user_content}"
-            fi
-        } > "${target}.tmp"
-        mv "${target}.tmp" "${target}"
-        log "  Updated builtin section: ${target}"
-    else
-        # Old install without markers: preserve existing content as user zone
-        log "  Adding markers to legacy file: ${target}"
-        local old_content
-        old_content=$(cat "${target}")
-        {
-            printf '%s\n' "${BUILTIN_HEADER}"
-            cat "${source}"
-            printf '\n%s\n' "${BUILTIN_END}"
-            printf '\n%s\n' "${old_content}"
-        } > "${target}.tmp"
-        mv "${target}.tmp" "${target}"
-    fi
 }
 
 # ============================================================

@@ -14,6 +14,8 @@ WORKER_NAME="$1"
 WORKER_MATRIX_TOKEN="$2"
 WORKER_GATEWAY_KEY="$3"
 MODEL_NAME="${4:-${HICLAW_DEFAULT_MODEL:-qwen3.5-plus}}"
+# Strip provider prefix if caller passed "hiclaw-gateway/<model>" by mistake
+MODEL_NAME="${MODEL_NAME#hiclaw-gateway/}"
 
 if [ -z "${WORKER_NAME}" ] || [ -z "${WORKER_MATRIX_TOKEN}" ] || [ -z "${WORKER_GATEWAY_KEY}" ]; then
     echo "Usage: generate-worker-config.sh <WORKER_NAME> <MATRIX_TOKEN> <GATEWAY_KEY> [MODEL_ID]"
@@ -34,7 +36,7 @@ case "${MODEL_NAME}" in
         CTX=400000; MAX=128000 ;;
     claude-opus-4-6)
         CTX=1000000; MAX=128000 ;;
-    claude-sonnet-4-5)
+    claude-sonnet-4-6)
         CTX=1000000; MAX=64000 ;;
     claude-haiku-4-5)
         CTX=200000; MAX=64000 ;;

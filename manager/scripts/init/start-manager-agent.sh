@@ -95,8 +95,8 @@ if [ ! -f /root/manager-workspace/.initialized ]; then
     bash /opt/hiclaw/scripts/init/upgrade-builtins.sh
     touch /root/manager-workspace/.initialized
     log "Manager workspace initialized (version: ${IMAGE_VERSION})"
-elif [ "${IMAGE_VERSION}" != "${INSTALLED_VERSION}" ]; then
-    log "Upgrade detected: ${INSTALLED_VERSION} -> ${IMAGE_VERSION}"
+elif [ "${IMAGE_VERSION}" != "${INSTALLED_VERSION}" ] || [ "${IMAGE_VERSION}" = "latest" ]; then
+    log "Upgrade detected: ${INSTALLED_VERSION} -> ${IMAGE_VERSION}${IMAGE_VERSION:+ (latest: always upgrade)}"
     bash /opt/hiclaw/scripts/init/upgrade-builtins.sh
     log "Manager workspace upgraded to version: ${IMAGE_VERSION}"
 else
@@ -254,7 +254,7 @@ case "${MODEL_NAME}" in
         export MODEL_CONTEXT_WINDOW=400000 MODEL_MAX_TOKENS=128000 ;;
     claude-opus-4-6)
         export MODEL_CONTEXT_WINDOW=1000000 MODEL_MAX_TOKENS=128000 ;;
-    claude-sonnet-4-5)
+    claude-sonnet-4-6)
         export MODEL_CONTEXT_WINDOW=1000000 MODEL_MAX_TOKENS=64000 ;;
     claude-haiku-4-5)
         export MODEL_CONTEXT_WINDOW=200000 MODEL_MAX_TOKENS=64000 ;;
