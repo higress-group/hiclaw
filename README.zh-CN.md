@@ -24,6 +24,9 @@ HiClaw 是基于 [OpenClaw](https://github.com/nicepkg/openclaw) 的开源 Agent
 
 所有通信都发生在 Matrix 群聊房间里。你看得到一切，随时可以介入——就像在微信群里和一支团队协作。
 
+## 动态
+- **2026-03-04:** HiClaw 开源，引入 Manager Agent 角色，构建企业级多 Agent 协同平台。了解[更多](https://github.com/higress-group/hiclaw/blob/main/blog/zh-cn/hiclaw-announcement.md) 。
+
 ## 为什么选 HiClaw
 
 **安全设计**：Worker 永远不持有真实的 API Key 或 GitHub PAT，只有一个消费者令牌（类似"工牌"）。即使 Worker 被攻击，攻击者也拿不到任何真实凭证。
@@ -263,7 +266,7 @@ make help  # 查看所有可用目标
 - 微信群——扫码加入：
 
 <p align="center">
-  <img src="https://img.alicdn.com/imgextra/i1/O1CN01TL78xI1V83fYAkbZK_!!6000000002607-2-tps-772-752.png" width="200" alt="微信群" />
+  <img src="https://img.alicdn.com/imgextra/i2/O1CN01iCufka1CYBZ1RiRv4_!!6000000000092-2-tps-762-724.png" width="200" alt="微信群" />
 </p>
 
 ## 许可证
