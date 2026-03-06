@@ -12,6 +12,7 @@
 - [HiClaw 支持发送和接收文件吗](#hiclaw-支持发送和接收文件吗)
 - [为什么 Manager/Worker 一直显示"输入中"](#为什么-managerworker-一直显示输入中)
 - [在房间里和 Manager 聊天没有响应或返回错误状态码](#在房间里和-manager-聊天没有响应或返回错误状态码)
+- [HTTP 401: invalid access token or token expired](#http-401-invalid-access-token-or-token-expired)
 
 ---
 
@@ -169,6 +170,20 @@ docker exec -it hiclaw-manager cat /var/log/hiclaw/higress-gateway.log
 - **404**：模型名称填写有误。
 
 要判断是后端服务出错还是 Higress 自身配置问题，查看日志中的 `upstream_host` 字段：如果该字段有值，说明请求已到达后端，异常状态码是由上游服务返回的；如果为空，说明 Higress 本身无法路由该请求。
+
+---
+
+## HTTP 401: invalid access token or token expired
+
+如果 Manager 或 Worker 调用 LLM 时出现这个错误，检查一下是否在安装时选择了**百炼 Coding Plan**，但还没有去开通。
+
+百炼 Coding Plan 是阿里云提供的免费试用计划，需要先激活才能使用：
+
+1. 访问：https://www.aliyun.com/benefit/scene/codingplan
+2. 使用阿里云账号登录
+3. 按照指引完成激活
+
+激活后重新执行安装或重启 Manager 容器即可正常使用。
 
 ---
 

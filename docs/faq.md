@@ -12,6 +12,7 @@
 - [Does HiClaw support sending and receiving files](#does-hiclaw-support-sending-and-receiving-files)
 - [Why does Manager/Worker keep showing "typing"](#why-does-managerworker-keep-showing-typing)
 - [Manager not responding or returning error status codes](#manager-not-responding-or-returning-error-status-codes)
+- [HTTP 401: invalid access token or token expired](#http-401-invalid-access-token-or-token-expired)
 
 ---
 
@@ -169,6 +170,20 @@ Search the log for the relevant status code. Common causes:
 - **404**: The model name is probably wrong.
 
 To determine whether the error came from the backend or from a Higress misconfiguration, check the `upstream_host` field in the log entry. If `upstream_host` has a value, the request reached the backend and the error was returned by the upstream service. If it's empty, Higress itself couldn't route the request.
+
+---
+
+## HTTP 401: invalid access token or token expired
+
+If you see this error when Manager or Worker tries to call the LLM, check whether you selected **Bailian Coding Plan** during installation but haven't activated it yet.
+
+Bailian Coding Plan is a free trial program from Alibaba Cloud. To use it, you need to activate it first:
+
+1. Visit: https://www.aliyun.com/benefit/scene/codingplan
+2. Log in with your Alibaba Cloud account
+3. Follow the instructions to activate the Coding Plan
+
+After activation, re-run the installation or restart the Manager container. The token should work immediately.
 
 ---
 
