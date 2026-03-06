@@ -1,6 +1,7 @@
 # 常见问题
 
 - [如何查看当前 HiClaw 版本](#如何查看当前-hiclaw-版本)
+- [如何对接飞书/钉钉/企业微信/Discord/Telegram](#如何对接飞书钉钉企业微信discordtelegram)
 - [Windows 下执行安装脚本闪退](#windows-下执行安装脚本闪退)
 - [Manager Agent 启动超时](#manager-agent-启动超时)
 - [局域网其他电脑如何访问 Web 端](#局域网其他电脑如何访问-web-端)
@@ -168,3 +169,28 @@ docker exec -it hiclaw-manager cat /var/log/hiclaw/higress-gateway.log
 - **404**：模型名称填写有误。
 
 要判断是后端服务出错还是 Higress 自身配置问题，查看日志中的 `upstream_host` 字段：如果该字段有值，说明请求已到达后端，异常状态码是由上游服务返回的；如果为空，说明 Higress 本身无法路由该请求。
+
+---
+
+## 如何对接飞书/钉钉/企业微信/Discord/Telegram
+
+HiClaw Manager 基于 OpenClaw 构建，原生支持多种消息渠道。要对接其他渠道：
+
+**方法一：直接修改配置**
+
+Manager 的工作目录是宿主机上的 `~/hiclaw-manager`，里面的 `openclaw.json` 可以直接编辑。参照 [OpenClaw 渠道文档](https://docs.openclaw.ai) 中各平台的配置格式进行配置。
+
+修改后重启 Manager 容器使配置生效：
+
+```bash
+docker restart hiclaw-manager
+```
+
+**方法二：让 Manager 学习你现有的 OpenClaw 配置**
+
+如果你已经在其他地方使用 OpenClaw 接入了其他渠道，可以让 Manager 读取你现有的配置：
+
+- **告诉 Manager 文件位置**：在 Element Web 中告诉 Manager 你的 OpenClaw 配置文件路径（例如 "我的 OpenClaw 配置在 `/home/user/my-openclaw.json`"），Manager 会直接读取。
+- **通过附件发送**：在 Element Web 或其他 Matrix 客户端中，把配置文件作为附件上传发送给 Manager，Manager 会接收并读取。
+
+然后让 Manager 帮你在它的配置里添加相同的渠道。

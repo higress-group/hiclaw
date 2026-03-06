@@ -1,6 +1,7 @@
 # FAQ
 
 - [How to check the current HiClaw version](#how-to-check-the-current-hiclaw-version)
+- [How to connect Feishu/DingTalk/WeCom/Discord/Telegram](#how-to-connect-feishudingtalkwecomdiscordtelegram)
 - [Installation script exits immediately on Windows](#installation-script-exits-immediately-on-windows)
 - [Manager Agent startup timeout](#manager-agent-startup-timeout)
 - [Accessing the web UI from other devices on the LAN](#accessing-the-web-ui-from-other-devices-on-the-lan)
@@ -168,3 +169,28 @@ Search the log for the relevant status code. Common causes:
 - **404**: The model name is probably wrong.
 
 To determine whether the error came from the backend or from a Higress misconfiguration, check the `upstream_host` field in the log entry. If `upstream_host` has a value, the request reached the backend and the error was returned by the upstream service. If it's empty, Higress itself couldn't route the request.
+
+---
+
+## How to connect Feishu/DingTalk/WeCom/Discord/Telegram
+
+HiClaw Manager is built on OpenClaw, which supports multiple messaging channels out of the box. To connect additional channels:
+
+**Method 1: Edit config directly**
+
+The Manager's working directory is `~/hiclaw-manager` (on your host). Edit `openclaw.json` in that directory to add channel configuration. Refer to [OpenClaw channel documentation](https://docs.openclaw.ai) for the specific config format for each platform.
+
+After editing, restart the Manager container for changes to take effect:
+
+```bash
+docker restart hiclaw-manager
+```
+
+**Method 2: Let Manager learn from your existing OpenClaw config**
+
+If you already use OpenClaw with other channels (e.g., in your personal setup), you can let Manager read your existing config:
+
+- **Tell Manager where the file is**: In Element Web, tell Manager the path to your OpenClaw config file (e.g., "My OpenClaw config is at `/home/user/my-openclaw.json`"). Manager will read it directly.
+- **Send the file as attachment**: In Element Web or any Matrix client, upload your config file as an attachment and send it to Manager. Manager will receive and read it.
+
+Then ask Manager to help configure the same channels in its own config.
