@@ -106,6 +106,28 @@ http://<局域网IP>:18080
 
 ## 如何切换 Manager 的模型
 
+**为什么让 Manager 切换而不是手动改配置？**
+
+OpenClaw 需要在配置中设置模型的上下文窗口大小（`contextWindow`）。HiClaw 默认使用 qwen3.5-plus 的 1M token 窗口。如果切换到窗口更小的模型但没有更新这个设置，当对话接近窗口上限时，OpenClaw 不知道何时压缩上下文，可能导致 session 无法使用。
+
+为此，HiClaw 给 Manager 配备了**模型切换技能**，会根据模型名自动修改 OpenClaw 配置中的 `contextWindow` 和 `maxTokens`。
+
+**切换步骤**
+
+在 Higress 控制台配置好模型供应商后，直接告诉 Manager 模型名即可：
+> "切换到 `claude-3-5-sonnet`"
+
+Manager 会使用模型切换技能完成配置更新。
+
+**如果切换没有成功？**
+
+可能是 Manager 没有自动调用模型切换技能。可以主动告诉它：
+> "用模型切换技能帮我切换到 `claude-3-5-sonnet`"
+
+---
+
+**Higress 控制台配置**
+
 **单供应商情况**
 
 在 Higress 控制台，将 `default-ai-route` 这个路由配置到你的模型供应商。然后直接告诉 Manager 你想使用的具体模型名（例如 `qwen3.5-plus`）。Manager 会先用该模型名发起一次联通测试，测试通过后自动完成切换。

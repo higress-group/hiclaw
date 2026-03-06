@@ -106,15 +106,33 @@ Alternatively, you can click the Worker's avatar and open a **direct message** (
 
 ## How to switch the Manager's model
 
-**Single provider**
+**Why use Manager instead of manual config?**
 
-In the Higress console, configure the `default-ai-route` route to point to your LLM provider. Then tell Manager the exact model name you want to use (e.g. `qwen3.5-plus`). Manager will run a connectivity test with that model name first — if it passes, the switch is applied automatically.
+OpenClaw requires setting the model's context window size (`contextWindow`) in its config. HiClaw defaults to qwen3.5-plus's 1M token window. If you switch to a model with a smaller window without updating this setting, the session may fail when approaching the window limit — OpenClaw won't know when to compress context.
 
-**Multiple providers**
+Manager has a built-in **model-switch skill** that:
+1. Looks up the correct `contextWindow` and `maxTokens` for the target model
+2. Updates OpenClaw's config accordingly
+3. Tests connectivity before applying the change
 
-In the Higress console, create multiple AI routes — each with a different model name matching rule (prefix or regex) pointing to the corresponding provider. After that, the process is the same as the single-provider case — just tell Manager the model name and it handles the rest.
+**Step 1: Configure Higress AI Route**
+
+In the Higress console, configure the AI route to point to your LLM provider:
+
+- **Single provider**: Set up `default-ai-route` to route requests to your provider.
+- **Multiple providers**: Create multiple AI routes with different model name matching rules (prefix or regex) pointing to each provider.
 
 Reference: [Higress AI Quick Start — Console Configuration](https://higress.ai/en/docs/ai/quick-start#console-configuration)
+
+**Step 2: Tell Manager to switch**
+
+Simply tell Manager the model name, e.g.:
+> "Switch to `claude-3-5-sonnet`"
+
+Manager will use the model-switch skill to update the config and verify connectivity.
+
+**Troubleshooting**: If the switch doesn't seem to work, Manager may not have invoked the model-switch skill. Explicitly ask it to use the skill:
+> "Use the model-switch skill to switch to `claude-3-5-sonnet`"
 
 ---
 
