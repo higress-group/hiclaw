@@ -269,7 +269,7 @@ make help  # All available targets
 - WeChat Group — scan to join:
 
 <p align="center">
-  <img src="https://img.alicdn.com/imgextra/i2/O1CN01iCufka1CYBZ1RiRv4_!!6000000000092-2-tps-762-724.png" width="200" alt="WeChat Group" />
+  <img src="https://img.alicdn.com/imgextra/i2/O1CN01VLTVcr1yegkClmRiP_!!6000000006604-2-tps-782-736.png" width="200" alt="WeChat Group" />
 </p>
 
 ## License
