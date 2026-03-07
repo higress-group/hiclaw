@@ -136,12 +136,20 @@ fi
 if [ -n "${HICLAW_LLM_API_KEY}" ]; then
 
     # 5a. Create/update LLM provider (GET → PUT if exists, POST if not)
+    # IMPORTANT: Only update if the configuration has actually changed to avoid
+    # overwriting user modifications made via Higress Console.
     case "${LLM_PROVIDER}" in
         qwen)
             PROVIDER_BODY='{"type":"qwen","name":"qwen","tokens":["'"${HICLAW_LLM_API_KEY}"'"],"protocol":"openai/v1","tokenFailoverConfig":{"enabled":false},"rawConfigs":{"qwenEnableSearch":false,"qwenEnableCompatible":true,"qwenFileIds":[]}}'
             existing_provider=$(higress_get /v1/ai/providers/qwen)
             if [ -n "${existing_provider}" ]; then
-                higress_api PUT /v1/ai/providers/qwen "Updating LLM provider (qwen)" "${PROVIDER_BODY}"
+                # Check if API key is already correct - skip update if unchanged
+                existing_key=$(echo "${existing_provider}" | jq -r '.tokens[0]' 2>/dev/null)
+                if [ "${existing_key}" = "${HICLAW_LLM_API_KEY}" ]; then
+                    log "LLM provider (qwen) already configured with current API key, skipping update"
+                else
+                    higress_api PUT /v1/ai/providers/qwen "Updating LLM provider (qwen)" "${PROVIDER_BODY}"
+                fi
             else
                 higress_api POST /v1/ai/providers "Creating LLM provider (qwen)" "${PROVIDER_BODY}"
             fi
@@ -172,7 +180,14 @@ if [ -n "${HICLAW_LLM_API_KEY}" ]; then
                 PROVIDER_BODY='{"type":"openai","name":"openai-compat","tokens":["'"${HICLAW_LLM_API_KEY}"'"],"version":0,"protocol":"openai/v1","tokenFailoverConfig":{"enabled":false},"rawConfigs":{"openaiCustomUrl":"'"${OPENAI_BASE_URL}"'","openaiCustomServiceName":"openai-compat.dns","openaiCustomServicePort":'"${OC_PORT}"'}}'
                 existing_provider=$(higress_get /v1/ai/providers/openai-compat)
                 if [ -n "${existing_provider}" ]; then
-                    higress_api PUT /v1/ai/providers/openai-compat "Updating LLM provider (openai-compat)" "${PROVIDER_BODY}"
+                    # Check if both API key and URL are already correct - skip update if unchanged
+                    existing_key=$(echo "${existing_provider}" | jq -r '.tokens[0]' 2>/dev/null)
+                    existing_url=$(echo "${existing_provider}" | jq -r '.rawConfigs.openaiCustomUrl' 2>/dev/null)
+                    if [ "${existing_key}" = "${HICLAW_LLM_API_KEY}" ] && [ "${existing_url}" = "${OPENAI_BASE_URL}" ]; then
+                        log "LLM provider (openai-compat) already configured with current API key and URL, skipping update"
+                    else
+                        higress_api PUT /v1/ai/providers/openai-compat "Updating LLM provider (openai-compat)" "${PROVIDER_BODY}"
+                    fi
                 else
                     higress_api POST /v1/ai/providers "Creating LLM provider (openai-compat)" "${PROVIDER_BODY}"
                 fi
@@ -184,7 +199,13 @@ if [ -n "${HICLAW_LLM_API_KEY}" ]; then
             PROVIDER_BODY="${PROVIDER_BODY}"'}'
             existing_provider=$(higress_get /v1/ai/providers/"${LLM_PROVIDER}")
             if [ -n "${existing_provider}" ]; then
-                higress_api PUT /v1/ai/providers/"${LLM_PROVIDER}" "Updating LLM provider (${LLM_PROVIDER})" "${PROVIDER_BODY}"
+                # Check if API key is already correct - skip update if unchanged
+                existing_key=$(echo "${existing_provider}" | jq -r '.tokens[0]' 2>/dev/null)
+                if [ "${existing_key}" = "${HICLAW_LLM_API_KEY}" ]; then
+                    log "LLM provider (${LLM_PROVIDER}) already configured with current API key, skipping update"
+                else
+                    higress_api PUT /v1/ai/providers/"${LLM_PROVIDER}" "Updating LLM provider (${LLM_PROVIDER})" "${PROVIDER_BODY}"
+                fi
             else
                 higress_api POST /v1/ai/providers "Creating LLM provider (${LLM_PROVIDER})" "${PROVIDER_BODY}"
             fi
