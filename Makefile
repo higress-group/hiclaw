@@ -62,6 +62,13 @@ MULTIARCH_PLATFORMS ?= linux/amd64,linux/arm64
 # Buildx builder name (auto-created if not exists)
 BUILDX_BUILDER     ?= hiclaw-multiarch
 
+# Pre-release version detection
+# Pre-release versions (containing -rc, -beta, -alpha, etc.) should NOT push :latest tag
+# This allows testing specific versions without affecting the latest stable image
+IS_PRERELEASE := $(shell echo "$(VERSION)" | grep -qiE -- '-(rc|beta|alpha|pre|preview|dev|snapshot)(\.[0-9]+)?$$' && echo 1 || echo 0)
+# Whether to push :latest tag (push for stable releases, skip for latest and pre-releases)
+PUSH_LATEST := $(if $(filter latest,$(VERSION)),,$(if $(filter 1,$(IS_PRERELEASE)),,yes))
+
 # Test flags
 SKIP_BUILD     ?=
 TEST_FILTER    ?=
@@ -113,12 +120,12 @@ build-worker: ## Build Worker image
 tag: build ## Tag images for registry push
 	docker tag $(LOCAL_MANAGER) $(MANAGER_TAG)
 	docker tag $(LOCAL_WORKER) $(WORKER_TAG)
-ifeq ($(VERSION),latest)
-	@echo "==> Images tagged as $(VERSION)"
-else
+ifeq ($(PUSH_LATEST),yes)
 	docker tag $(LOCAL_MANAGER) $(MANAGER_IMAGE):latest
 	docker tag $(LOCAL_WORKER) $(WORKER_IMAGE):latest
 	@echo "==> Images tagged as $(VERSION) and latest"
+else
+	@echo "==> Images tagged as $(VERSION) (latest not pushed for pre-release)"
 endif
 
 # ---------- Push (multi-arch, default) ----------
@@ -157,15 +164,16 @@ ifeq ($(IS_PODMAN),1)
 			--manifest $(OPENCLAW_BASE_TAG) \
 			./openclaw-base/ && ) true
 	podman manifest push --all $(OPENCLAW_BASE_TAG) docker://$(OPENCLAW_BASE_TAG)
-	$(if $(filter-out latest,$(VERSION)), \
-		podman manifest push --all $(OPENCLAW_BASE_TAG) docker://$(OPENCLAW_BASE_IMAGE):latest)
+	$(if $(PUSH_LATEST), \
+		podman manifest push --all $(OPENCLAW_BASE_TAG) docker://$(OPENCLAW_BASE_IMAGE):latest && \
+		echo "  -> Also pushed :latest tag")
 else
 	docker buildx build \
 		--builder $(BUILDX_BUILDER) \
 		--platform $(MULTIARCH_PLATFORMS) \
 		$(REGISTRY_ARG) $(DOCKER_BUILD_ARGS) \
 		-t $(OPENCLAW_BASE_TAG) \
-		$(if $(filter-out latest,$(VERSION)),-t $(OPENCLAW_BASE_IMAGE):latest) \
+		$(if $(PUSH_LATEST),-t $(OPENCLAW_BASE_IMAGE):latest) \
 		--push \
 		./openclaw-base/
 endif
@@ -182,15 +190,16 @@ ifeq ($(IS_PODMAN),1)
 			--manifest $(MANAGER_TAG) \
 			./manager/ && ) true
 	podman manifest push --all $(MANAGER_TAG) docker://$(MANAGER_TAG)
-	$(if $(filter-out latest,$(VERSION)), \
-		podman manifest push --all $(MANAGER_TAG) docker://$(MANAGER_IMAGE):latest)
+	$(if $(PUSH_LATEST), \
+		podman manifest push --all $(MANAGER_TAG) docker://$(MANAGER_IMAGE):latest && \
+		echo "  -> Also pushed :latest tag")
 else
 	docker buildx build \
 		--builder $(BUILDX_BUILDER) \
 		--platform $(MULTIARCH_PLATFORMS) \
 		$(REGISTRY_ARG) $(BUILTIN_VERSION_ARG) $(OPENCLAW_BASE_PUSH_ARG) $(DOCKER_BUILD_ARGS) \
 		-t $(MANAGER_TAG) \
-		$(if $(filter-out latest,$(VERSION)),-t $(MANAGER_IMAGE):latest) \
+		$(if $(PUSH_LATEST),-t $(MANAGER_IMAGE):latest) \
 		--push \
 		./manager/
 endif
@@ -207,15 +216,16 @@ ifeq ($(IS_PODMAN),1)
 			--manifest $(WORKER_TAG) \
 			./worker/ && ) true
 	podman manifest push --all $(WORKER_TAG) docker://$(WORKER_TAG)
-	$(if $(filter-out latest,$(VERSION)), \
-		podman manifest push --all $(WORKER_TAG) docker://$(WORKER_IMAGE):latest)
+	$(if $(PUSH_LATEST), \
+		podman manifest push --all $(WORKER_TAG) docker://$(WORKER_IMAGE):latest && \
+		echo "  -> Also pushed :latest tag")
 else
 	docker buildx build \
 		--builder $(BUILDX_BUILDER) \
 		--platform $(MULTIARCH_PLATFORMS) \
 		$(REGISTRY_ARG) $(OPENCLAW_BASE_PUSH_ARG) $(DOCKER_BUILD_ARGS) \
 		-t $(WORKER_TAG) \
-		$(if $(filter-out latest,$(VERSION)),-t $(WORKER_IMAGE):latest) \
+		$(if $(PUSH_LATEST),-t $(WORKER_IMAGE):latest) \
 		--push \
 		./worker/
 endif
@@ -230,7 +240,7 @@ push-native: tag ## Push native-arch images (dev only, overwrites multi-arch!)
 	docker push $(MANAGER_TAG)
 	@echo "==> Pushing Worker: $(WORKER_TAG)"
 	docker push $(WORKER_TAG)
-ifneq ($(VERSION),latest)
+ifeq ($(PUSH_LATEST),yes)
 	docker push $(MANAGER_IMAGE):latest
 	docker push $(WORKER_IMAGE):latest
 endif

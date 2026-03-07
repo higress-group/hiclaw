@@ -27,6 +27,10 @@ export TEST_MINIO_URL="http://${TEST_MANAGER_HOST}:${TEST_MINIO_PORT}"
 # Example: TEST_MATRIX_EXTRA_HEADERS="Host: matrix-local.hiclaw.io:9080"
 export TEST_MATRIX_EXTRA_HEADERS="${TEST_MATRIX_EXTRA_HEADERS:-}"
 
+# Matrix domain (used for user IDs like @manager:domain)
+# If not set, will be auto-detected from Manager container
+export TEST_MATRIX_DOMAIN="${TEST_MATRIX_DOMAIN:-}"
+
 # Test state
 TESTS_PASSED=0
 TESTS_FAILED=0
@@ -227,12 +231,58 @@ wait_for_manager_agent_ready() {
 }
 
 # ============================================================
+# Config Detection
+# ============================================================
+
+# Auto-detect configuration from Manager container
+# This reads HICLAW_* environment variables from the container and sets
+# TEST_* variables accordingly. Call this after the container is running.
+detect_manager_config() {
+    local container="${TEST_MANAGER_CONTAINER:-hiclaw-manager}"
+    
+    # Skip if container is not running
+    if ! docker ps --format '{{.Names}}' | grep -q "^${container}$"; then
+        return 0
+    fi
+    
+    # Read config from container environment
+    local detected_domain detected_gateway_port detected_console_port
+    detected_domain=$(docker exec "${container}" printenv HICLAW_MATRIX_DOMAIN 2>/dev/null) || true
+    detected_gateway_port=$(docker exec "${container}" printenv HICLAW_PORT_GATEWAY 2>/dev/null) || true
+    detected_console_port=$(docker exec "${container}" printenv HICLAW_PORT_CONSOLE 2>/dev/null) || true
+    
+    # Override defaults with detected values (only if not explicitly set by user)
+    if [ -n "${detected_gateway_port}" ] && [ -z "${TEST_GATEWAY_PORT_SET:-}" ]; then
+        export TEST_GATEWAY_PORT="${detected_gateway_port}"
+        export TEST_MATRIX_URL="http://${TEST_MANAGER_HOST}:${TEST_GATEWAY_PORT}"
+        export TEST_MINIO_URL="http://${TEST_MANAGER_HOST}:${TEST_GATEWAY_PORT}"
+    fi
+    
+    if [ -n "${detected_console_port}" ] && [ -z "${TEST_CONSOLE_PORT_SET:-}" ]; then
+        export TEST_CONSOLE_PORT="${detected_console_port}"
+        export TEST_CONSOLE_URL="http://${TEST_MANAGER_HOST}:${TEST_CONSOLE_PORT}"
+    fi
+    
+    if [ -n "${detected_domain}" ] && [ -z "${TEST_MATRIX_DOMAIN}" ]; then
+        export TEST_MATRIX_DOMAIN="${detected_domain}"
+    fi
+    
+    # If TEST_MATRIX_DOMAIN is still not set, derive from gateway port
+    if [ -z "${TEST_MATRIX_DOMAIN}" ]; then
+        export TEST_MATRIX_DOMAIN="matrix-local.hiclaw.io:${TEST_GATEWAY_PORT}"
+    fi
+}
+
+# ============================================================
 # Test Lifecycle
 # ============================================================
 
 test_setup() {
     local test_name="$1"
     log_section "Starting: ${test_name}"
+    
+    # Auto-detect configuration from Manager container
+    detect_manager_config
 }
 
 test_teardown() {

@@ -264,12 +264,12 @@ make help  # All available targets
 
 ## Community
 
-- [Discord](https://discord.gg/n6mV8xEYUF)
+- [Discord](https://discord.gg/NVjNA4BAVw)
 - [DingTalk Group](https://qr.dingtalk.com/action/joingroup?code=v1,k1,0etR5l8fxeb/6/mzE5hRE1uy4tkiwxvPV9+TdBv7sEM=&_dt_no_comment=1&origin=11)
 - WeChat Group — scan to join:
 
 <p align="center">
-  <img src="https://img.alicdn.com/imgextra/i2/O1CN01VLTVcr1yegkClmRiP_!!6000000006604-2-tps-782-736.png" width="200" alt="WeChat Group" />
+  <img src="https://img.alicdn.com/imgextra/i4/O1CN01OcQaeW22jxljbSKrs_!!6000000007157-2-tps-748-730.png" width="200" alt="WeChat Group" />
 </p>
 
 ## License

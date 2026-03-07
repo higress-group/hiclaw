@@ -168,6 +168,8 @@ matrix_find_dm_room() {
     local token="$1"
     local other_user="$2"
 
+    log_info "Looking for DM room with user: ${other_user}"
+
     local rooms
     rooms=$(matrix_joined_rooms "${token}" | jq -r '.joined_rooms[]')
 

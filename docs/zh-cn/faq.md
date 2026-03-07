@@ -3,7 +3,7 @@
 - [如何查看当前 HiClaw 版本](#如何查看当前-hiclaw-版本)
 - [如何对接飞书/钉钉/企业微信/Discord/Telegram](#如何对接飞书钉钉企业微信discordtelegram)
 - [Windows 下执行安装脚本闪退](#windows-下执行安装脚本闪退)
-- [Manager Agent 启动超时](#manager-agent-启动超时)
+- [Manager Agent 启动超时或失败](#manager-agent-启动超时或失败)
 - [局域网其他电脑如何访问 Web 端](#局域网其他电脑如何访问-web-端)
 - [本地访问 Matrix 服务器不通](#本地访问-matrix-服务器不通)
 - [如何主动指挥 Worker](#如何主动指挥-worker)
@@ -38,11 +38,10 @@ HICLAW_VERSION=0.1.0 bash <(curl -sSL https://higress.ai/hiclaw/install.sh)
 
 ---
 
-## Manager Agent 启动超时
+## Manager Agent 启动超时或失败
 
-安装完成后如果 Manager Agent 迟迟没有响应，进容器查看日志：
-
-```bash
+安装完成后如果 Manager Agent 迟迟没有响应，或启动失败
+，进容器查看日志：```bash
 docker exec -it hiclaw-manager cat /var/log/hiclaw/manager-agent.log
 ```
 
@@ -59,6 +58,14 @@ bash <(curl -sSL https://higress.ai/hiclaw/install.sh)
 ```
 
 安装脚本检测到已有安装时会询问处理方式，选择删除后重装即可清除脏数据。
+
+**情况三：Mac M 系列芯片 + 低版本 Docker**
+
+如果你使用的是搭载 Apple M 系列芯片（M1/M2/M3/M4）的 Mac，且 Docker Desktop 版本低于 4.39.0，Manager Agent 可能无法正常启动。
+
+**解决方案：** 升级 Docker Desktop 到 4.39.0 或更高版本。
+
+如果你使用的是 Podman，则不受此问题影响。
 
 ---
 
