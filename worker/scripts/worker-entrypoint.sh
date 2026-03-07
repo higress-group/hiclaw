@@ -17,6 +17,15 @@ log() {
     echo "[hiclaw-worker $(date '+%Y-%m-%d %H:%M:%S')] $1"
 }
 
+# ============================================================
+# Step 0: Set timezone from TZ env var
+# ============================================================
+if [ -n "${TZ}" ] && [ -f "/usr/share/zoneinfo/${TZ}" ]; then
+    ln -sf "/usr/share/zoneinfo/${TZ}" /etc/localtime
+    echo "${TZ}" > /etc/timezone
+    log "Timezone set to ${TZ}"
+fi
+
 # Use absolute path because HOME is set to the workspace directory via docker run
 HICLAW_ROOT="/root/hiclaw-fs"
 WORKSPACE="${HICLAW_ROOT}/agents/${WORKER_NAME}"

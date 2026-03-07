@@ -6,6 +6,15 @@
 
 source /opt/hiclaw/scripts/lib/base.sh
 
+# ============================================================
+# Set timezone from TZ env var
+# ============================================================
+if [ -n "${TZ}" ] && [ -f "/usr/share/zoneinfo/${TZ}" ]; then
+    ln -sf "/usr/share/zoneinfo/${TZ}" /etc/localtime
+    echo "${TZ}" > /etc/timezone
+    log "Timezone set to ${TZ}"
+fi
+
 MATRIX_DOMAIN="${HICLAW_MATRIX_DOMAIN:-matrix-local.hiclaw.io:8080}"
 AI_GATEWAY_DOMAIN="${HICLAW_AI_GATEWAY_DOMAIN:-aigw-local.hiclaw.io}"
 

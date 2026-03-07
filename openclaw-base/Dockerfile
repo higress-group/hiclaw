@@ -38,7 +38,7 @@ RUN if [ -n "${APT_MIRROR}" ]; then \
     fi && \
     apt-get update && apt-get install -y \
     git python3 make g++ curl \
-    jq nginx gettext-base openssh-client ca-certificates procps \
+    jq nginx gettext-base openssh-client ca-certificates procps tzdata \
     && rm -rf /var/lib/apt/lists/*
 
 # Install Node.js 22 (all-in-one doesn't include Node.js)
