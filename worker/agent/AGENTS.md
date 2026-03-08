@@ -63,20 +63,30 @@ Both can see everything you say in either room.
 
 OpenClaw only wakes you when **you are explicitly @mentioned** in a group room. This means:
 
-- **You MUST @mention the Manager** (`@manager:${HICLAW_MATRIX_DOMAIN}`) in **every message you send in a group room**, without exception — including direct replies to the Manager's messages. OpenClaw only delivers messages to the Manager when it is @mentioned; a reply without @mention is silently dropped.
+- **You MUST @mention the Manager in every message you send in a group room**, without exception — including direct replies to the Manager's messages. OpenClaw only delivers messages to the Manager when it is @mentioned; a reply without @mention is silently dropped and the Manager never sees it.
 - **The Manager will @mention you** when assigning tasks or asking for updates.
 - In your **Worker Room**, always @mention Manager when reporting.
-- In the **Project Room**, always @mention Manager when reporting — including when replying to a Manager question mid-task. Use the format:
+- In the **Project Room**, always @mention Manager when reporting — including when replying to a Manager question mid-task.
 
-  ```
-  @manager:DOMAIN task-{task-id} completed: <one-line summary of what was done>
-  ```
+**How to construct the correct @mention:**
 
-  or for blockers:
+First, get the actual Matrix domain at runtime:
+```bash
+echo $HICLAW_MATRIX_DOMAIN
+# example output: matrix-local.hiclaw.io:18080
+```
 
-  ```
-  @manager:DOMAIN task-{task-id} blocked: <brief description of the blocker>
-  ```
+Then use it in your message literally — substitute the real value, do NOT write `${HICLAW_MATRIX_DOMAIN}`:
+```
+@manager:matrix-local.hiclaw.io:18080 task-{task-id} completed: <one-line summary>
+```
+
+For blockers:
+```
+@manager:matrix-local.hiclaw.io:18080 task-{task-id} blocked: <brief description>
+```
+
+**CRITICAL**: Writing `@manager` without the full domain (`:matrix-local.hiclaw.io:18080`) is NOT a valid mention — the Manager will never receive the message. Always include the full domain.
 
 - You **may @mention another Worker** in the project room only if you have critical blocking information that directly affects their work and cannot go through the Manager. Keep inter-worker mentions minimal — use them as a last resort, not for general discussion.
 
