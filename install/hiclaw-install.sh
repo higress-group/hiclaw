@@ -432,12 +432,16 @@ msg() {
         "llm.openai.test.testing.en") text="Testing API connectivity..." ;;
         "llm.openai.test.ok.zh") text="✅ API 联通性测试通过" ;;
         "llm.openai.test.ok.en") text="✅ API connectivity test passed" ;;
-        "llm.openai.test.fail.zh") text="⚠️  API 联通性测试失败（HTTP %s）。响应内容:\n%s\n请根据以上错误信息联系您的模型服务商解决。安装将继续，但 Agent 可能无法正常工作。" ;;
-        "llm.openai.test.fail.en") text="⚠️  API connectivity test failed (HTTP %s). Response body:\n%s\nPlease contact your model provider to resolve the issue. Installation will continue, but the Agent may not work correctly." ;;
+        "llm.openai.test.fail.zh") text="⚠️  API 联通性测试失败（HTTP %s）。响应内容:\n%s\n请根据以上错误信息联系您的模型服务商解决。" ;;
+        "llm.openai.test.fail.en") text="⚠️  API connectivity test failed (HTTP %s). Response body:\n%s\nPlease contact your model provider to resolve the issue." ;;
         "llm.openai.test.fail.codingplan.zh") text="⚠️  提示: 请确认您的 API Key 已开通阿里云百炼 CodingPlan 服务。开通地址: https://www.aliyun.com/benefit/scene/codingplan" ;;
         "llm.openai.test.fail.codingplan.en") text="⚠️  Hint: Please verify that your API Key has CodingPlan service enabled on Alibaba Cloud Bailian. Enable at: https://www.aliyun.com/benefit/scene/codingplan" ;;
         "llm.openai.test.no_curl.zh") text="⚠️  未找到 curl，跳过 API 联通性测试" ;;
         "llm.openai.test.no_curl.en") text="⚠️  curl not found, skipping API connectivity test" ;;
+        "llm.openai.test.confirm.zh") text="是否仍要继续安装？[y/N] " ;;
+        "llm.openai.test.confirm.en") text="Continue with installation anyway? [y/N] " ;;
+        "llm.openai.test.aborted.zh") text="安装已中止。" ;;
+        "llm.openai.test.aborted.en") text="Installation aborted." ;;
         # --- OpenAI-compatible provider creation ---
         "install.openai_compat.missing.zh") text="警告: OpenAI Base URL 或 API Key 未设置，跳过提供商创建" ;;
         "install.openai_compat.missing.en") text="WARNING: OpenAI Base URL or API Key not set, skipping provider creation" ;;
@@ -1767,6 +1771,14 @@ test_llm_connectivity() {
         echo -e "\033[33m$(msg llm.openai.test.fail "${_http_code}" "${_body}")\033[0m"
         if [ -n "${hint}" ]; then
             echo -e "\033[33m${hint}\033[0m"
+        fi
+        if [ "${HICLAW_NON_INTERACTIVE}" != "1" ]; then
+            local _confirm
+            read -p "$(msg llm.openai.test.confirm)" _confirm
+            if [ "${_confirm}" != "y" ] && [ "${_confirm}" != "Y" ]; then
+                log "$(msg llm.openai.test.aborted)"
+                exit 1
+            fi
         fi
     fi
 }
