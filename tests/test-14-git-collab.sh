@@ -139,10 +139,19 @@ else
     log_info "No explicit acknowledgment (Manager may have started processing directly)"
 fi
 
-log_section "Wait for Workflow Completion (up to 12 minutes)"
+log_section "Wait for Workflow Completion (up to 30 minutes)"
 
-log_info "Waiting for all 4 phases to complete..."
-sleep 720
+log_info "Waiting for Manager to report all 4 phases complete (timeout: 1800s)..."
+COMPLETION_MSG=$(matrix_wait_for_message_containing \
+    "${ADMIN_TOKEN}" "${DM_ROOM}" "@manager" \
+    "PHASE4_DONE\|all.*phase.*done\|all 4 phase\|全部完成\|所有阶段" 1800) || true
+
+if [ -n "${COMPLETION_MSG}" ]; then
+    log_pass "Manager reported workflow completion"
+    log_info "Completion message: $(echo "${COMPLETION_MSG}" | head -c 300)"
+else
+    log_info "Completion signal not detected (timed out or keyword mismatch); proceeding with git verification"
+fi
 
 MESSAGES=$(matrix_read_messages "${ADMIN_TOKEN}" "${DM_ROOM}" 100)
 MSG_BODIES=$(echo "${MESSAGES}" | jq -r '[.chunk[].content.body] | join("\n---\n")' 2>/dev/null)

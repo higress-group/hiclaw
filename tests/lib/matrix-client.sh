@@ -151,6 +151,51 @@ matrix_wait_for_reply() {
     return 1
 }
 
+# Wait for a message containing a specific keyword from a user
+# Usage: matrix_wait_for_message_containing <token> <room_id> <from_user_prefix> <keyword> [timeout_seconds]
+# Returns: the matching message body, or empty string on timeout
+# <keyword> is passed to grep -qi (supports regex like "done\|完成")
+matrix_wait_for_message_containing() {
+    local token="$1"
+    local room_id="$2"
+    local from_user="$3"
+    local keyword="$4"
+    local timeout="${5:-1800}"
+    local elapsed=0
+
+    # Snapshot the latest known event_id to avoid returning stale messages
+    local baseline_event
+    baseline_event=$(matrix_read_messages "${token}" "${room_id}" 5 2>/dev/null | \
+        jq -r --arg user "${from_user}" \
+        '[.chunk[] | select(.sender | startswith($user)) | .event_id] | first // ""' 2>/dev/null)
+
+    while [ "${elapsed}" -lt "${timeout}" ]; do
+        sleep 15
+        elapsed=$((elapsed + 15))
+
+        local messages all_bodies
+        messages=$(matrix_read_messages "${token}" "${room_id}" 20 2>/dev/null) || continue
+
+        # Check if there's any new message from the target user containing the keyword
+        local latest_event
+        latest_event=$(echo "${messages}" | jq -r --arg user "${from_user}" \
+            '[.chunk[] | select(.sender | startswith($user)) | .event_id] | first // ""' 2>/dev/null)
+
+        if [ "${latest_event}" != "${baseline_event}" ]; then
+            # There are new messages; check if any match the keyword
+            local matching_body
+            matching_body=$(echo "${messages}" | jq -r --arg user "${from_user}" \
+                '[.chunk[] | select(.sender | startswith($user)) | .content.body] | join("\n")' 2>/dev/null)
+            if echo "${matching_body}" | grep -qi "${keyword}"; then
+                echo "${matching_body}"
+                return 0
+            fi
+        fi
+    done
+
+    return 1
+}
+
 # Create a DM room with another user
 # Usage: matrix_create_dm_room <access_token> <other_user_id>
 # Returns: room_id
