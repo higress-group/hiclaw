@@ -94,33 +94,46 @@ TASK_DESCRIPTION="Please coordinate a 4-phase git collaboration workflow to test
 Git repo URL (reachable from all worker containers): ${GIT_REPO_URL}
 The repo has a 'main' branch with an initial commit.
 
+IMPORTANT: You MUST use the EXACT branch names and file paths specified below. Do not rename, substitute, or simplify them. The verification system checks these exact names.
+
 Ensure workers alice, bob, and charlie exist with the git-delegation skill. Run the phases strictly in order, waiting for each phase's report before starting the next.
 
 **Phase 1 — alice**:
-- Clone ${GIT_REPO_URL}, create branch '${FEATURE_BRANCH}' from main
-- Create file 'doc/proposal.md' with exactly this content:
-  '# Project Proposal\n\n## Background\nThis project aims to improve team collaboration.\n\n## Goals\n- Faster delivery\n- Better quality'
-- Commit with message 'feat: add proposal' and push branch to ${GIT_REPO_URL}
+- Clone ${GIT_REPO_URL}
+- Create branch named EXACTLY '${FEATURE_BRANCH}' from main (do not use any other name)
+- Create file at path EXACTLY 'doc/proposal.md' with this content:
+  # Project Proposal
+
+  ## Background
+  This project aims to improve team collaboration.
+
+  ## Goals
+  - Faster delivery
+  - Better quality
+- Commit with message 'feat: add proposal' and push branch '${FEATURE_BRANCH}' to ${GIT_REPO_URL}
 - Report PHASE1_DONE
 
 **Phase 2 — bob** (only after alice reports PHASE1_DONE):
-- Clone ${GIT_REPO_URL}, check out '${FEATURE_BRANCH}', read doc/proposal.md
-- Create branch '${REVIEW_BRANCH}' from '${FEATURE_BRANCH}'
-- Create file 'reviews/proposal-review.md' with exactly this content:
-  '# Review\n\nThe proposal looks good. Please add a ## Summary section at the top that briefly describes the project in one sentence.'
-- Commit 'review: request summary section' and push to ${GIT_REPO_URL}
+- Clone ${GIT_REPO_URL}, check out branch '${FEATURE_BRANCH}', read doc/proposal.md
+- Create branch named EXACTLY '${REVIEW_BRANCH}' from '${FEATURE_BRANCH}' (do not use any other name)
+- Create file at path EXACTLY 'reviews/proposal-review.md' with this content:
+  # Review
+
+  The proposal looks good. Please add a ## Summary section at the top that briefly describes the project in one sentence.
+- Commit 'review: request summary section' and push branch '${REVIEW_BRANCH}' to ${GIT_REPO_URL}
 - Report REVISION_NEEDED
 
 **Phase 3 — alice** (only after bob reports REVISION_NEEDED):
-- Check out '${FEATURE_BRANCH}', read bob's review at reviews/proposal-review.md on branch '${REVIEW_BRANCH}'
-- Add a '## Summary' section at the top of doc/proposal.md (after the title) with one sentence describing the project
-- Commit 'fix: add summary section per review' and push to ${GIT_REPO_URL}
+- Work on branch '${FEATURE_BRANCH}' (not a new branch)
+- Read bob's review file at path 'reviews/proposal-review.md' on branch '${REVIEW_BRANCH}'
+- Edit 'doc/proposal.md' on branch '${FEATURE_BRANCH}': add a '## Summary' section immediately after the '# Project Proposal' title line, with one sentence describing the project
+- Commit 'fix: add summary section per review' and push branch '${FEATURE_BRANCH}' to ${GIT_REPO_URL}
 - Report PHASE3_DONE
 
 **Phase 4 — charlie** (only after alice reports PHASE3_DONE):
-- Clone ${GIT_REPO_URL}, create branch '${TEST_BRANCH}' from '${FEATURE_BRANCH}'
-- Create file 'verify/checklist.md' confirming: (1) proposal.md has a Summary section, (2) Goals section is present, (3) review was addressed
-- Commit 'verify: proposal review checklist' and push to ${GIT_REPO_URL}
+- Clone ${GIT_REPO_URL}, create branch named EXACTLY '${TEST_BRANCH}' from '${FEATURE_BRANCH}' (do not use any other name)
+- Create file at path EXACTLY 'verify/checklist.md' confirming: (1) proposal.md has a Summary section, (2) Goals section is present, (3) review was addressed
+- Commit 'verify: proposal review checklist' and push branch '${TEST_BRANCH}' to ${GIT_REPO_URL}
 - Report PHASE4_DONE
 
 When all 4 phases are done, post a final summary in the project room."
