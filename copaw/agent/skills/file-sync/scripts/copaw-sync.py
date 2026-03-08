@@ -17,11 +17,25 @@ import os
 import sys
 from pathlib import Path
 
-# Add copaw_worker to path if running from source
-sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent / "src"))
-
-from copaw_worker.sync import FileSync
-from copaw_worker.bridge import bridge_openclaw_to_copaw
+# Try to import copaw_worker - it should be installed via pip
+try:
+    from copaw_worker.sync import FileSync
+    from copaw_worker.bridge import bridge_openclaw_to_copaw
+except ImportError:
+    # If not installed, try to add source path (for development)
+    src_path = Path(__file__).parent.parent.parent.parent / "src"
+    if src_path.exists():
+        sys.path.insert(0, str(src_path))
+        try:
+            from copaw_worker.sync import FileSync
+            from copaw_worker.bridge import bridge_openclaw_to_copaw
+        except ImportError as e:
+            print(f"Error: copaw-worker package not found. Please install it with: pip install copaw-worker", file=sys.stderr)
+            print(f"Import error: {e}", file=sys.stderr)
+            sys.exit(1)
+    else:
+        print(f"Error: copaw-worker package not found. Please install it with: pip install copaw-worker", file=sys.stderr)
+        sys.exit(1)
 
 
 def main():
