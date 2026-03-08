@@ -8,7 +8,7 @@ description: Sync files with centralized storage. Use when Manager or another Wo
 When the Manager or another Worker notifies you that files have been updated in centralized storage (e.g., config changes, task briefs, shared data, collaboration artifacts), trigger an immediate sync:
 
 ```bash
-python3 /opt/hiclaw/copaw/agent/skills/file-sync/scripts/copaw-sync.py
+python3 /opt/hiclaw/agent/copaw-worker-agent/skills/file-sync/scripts/copaw-sync.py
 ```
 
 This pulls the latest files from MinIO and re-bridges the config. CoPaw automatically hot-reloads config changes within ~2 seconds.

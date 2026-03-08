@@ -13,3 +13,5 @@ Record image-affecting changes to `manager/`, `worker/`, `openclaw-base/` here b
 - feat(copaw): add optional `--console-port` to copaw-worker; headless mode saves ~500MB RAM; startup prints memory tip in both cases; SKILL.md and create-worker.sh updated accordingly
 - fix(copaw): fix MatrixChannel not mentioning sender in replies (missing `sender_id` in meta payload caused manager to ignore worker replies)
 - feat(copaw): sync skills from MinIO on startup (`_sync_skills`)
+- feat(copaw): rewrite `sync.py` to use mc CLI for all MinIO operations (mc cat, mc ls, mc alias set); remove httpx + AWS Signature V4 implementation
+- feat(copaw): add CoPaw-specific file-sync skill (`manager/agent/copaw-worker-agent/skills/file-sync/`) with `copaw-sync.py` script for manual sync trigger; `create-worker.sh` selects runtime-specific file-sync skill from `/opt/hiclaw/agent/copaw-worker-agent/` for copaw runtime

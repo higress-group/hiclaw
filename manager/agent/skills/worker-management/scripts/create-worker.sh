@@ -413,7 +413,7 @@ log "  MinIO sync verified"
 # Push Worker agent files from Manager image (AGENTS.md + file-sync skill)
 # Use runtime-specific file-sync skill for copaw workers
 if [ "${WORKER_RUNTIME}" = "copaw" ]; then
-    WORKER_AGENT_SRC="/opt/hiclaw/copaw/agent"
+    WORKER_AGENT_SRC="/opt/hiclaw/agent/copaw-worker-agent"
     FILESYNC_SRC="${WORKER_AGENT_SRC}/skills/file-sync"
 else
     WORKER_AGENT_SRC="/opt/hiclaw/agent/worker-agent"
