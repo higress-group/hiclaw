@@ -114,6 +114,13 @@ _worker_has_finite_tasks() {
     [ "$count" -gt 0 ]
 }
 
+# Get the runtime for a worker from workers-registry.json
+# Returns "openclaw" (default) or "copaw"
+_get_worker_runtime() {
+    local worker="$1"
+    jq -r --arg w "$worker" '.workers[$w].runtime // "openclaw"' "$REGISTRY_FILE" 2>/dev/null
+}
+
 # ─── Actions ─────────────────────────────────────────────────────────────────
 
 # Sync container status from Docker API into lifecycle file
@@ -140,6 +147,14 @@ action_sync_status() {
 
     for worker in $workers; do
         _ensure_worker_entry "$worker"
+        # copaw runtime workers are pip-installed processes, not containers — mark as remote
+        local runtime
+        runtime=$(_get_worker_runtime "$worker")
+        if [ "$runtime" = "copaw" ]; then
+            _log "Worker $worker: runtime=copaw, marking as remote (not container-managed)"
+            _set_worker_field "$worker" "container_status" "remote"
+            continue
+        fi
         local status
         status=$(container_status_worker "$worker")
         _log "Worker $worker: container_status=$status"
@@ -175,7 +190,7 @@ action_check_idle() {
         local container_status
         container_status=$(_get_worker_field "$worker" "container_status")
 
-        # Skip remote workers and non-running containers
+        # Skip remote/copaw workers and non-running containers
         if [ "$container_status" = "remote" ] || [ "$container_status" = "not_found" ]; then
             continue
         fi
@@ -230,6 +245,13 @@ action_stop() {
     local worker="$1"
     _init_lifecycle_file
     _ensure_worker_entry "$worker"
+
+    local runtime
+    runtime=$(_get_worker_runtime "$worker")
+    if [ "$runtime" = "copaw" ]; then
+        _log "Worker $worker uses copaw runtime — not container-managed, skipping stop"
+        return 0
+    fi
 
     if ! container_api_available; then
         _log "ERROR: Container API not available"
@@ -407,6 +429,14 @@ action_start() {
     local worker="$1"
     _init_lifecycle_file
     _ensure_worker_entry "$worker"
+
+    local runtime
+    runtime=$(_get_worker_runtime "$worker")
+    if [ "$runtime" = "copaw" ]; then
+        _log "Worker $worker uses copaw runtime — not container-managed, skipping start"
+        _log "To start a copaw worker, run 'copaw-worker run --name $worker ...' on the target machine"
+        return 0
+    fi
 
     if ! container_api_available; then
         _log "ERROR: Container API not available"

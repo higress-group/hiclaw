@@ -44,6 +44,16 @@ HIGRESS_REGISTRY  ?= higress-registry.cn-hangzhou.cr.aliyuncs.com
 # Build flags
 DOCKER_BUILD_ARGS ?=
 DOCKER_PLATFORM   ?=
+
+# Proxy support: set HTTP_PROXY / HTTPS_PROXY to pass proxy into docker build
+# Example: make build HTTP_PROXY=http://127.0.0.1:1087
+ifdef HTTP_PROXY
+  PROXY_BUILD_ARGS = --build-arg HTTP_PROXY=$(HTTP_PROXY) --build-arg HTTPS_PROXY=$(HTTP_PROXY) --build-arg http_proxy=$(HTTP_PROXY) --build-arg https_proxy=$(HTTP_PROXY)
+else ifdef HTTPS_PROXY
+  PROXY_BUILD_ARGS = --build-arg HTTP_PROXY=$(HTTPS_PROXY) --build-arg HTTPS_PROXY=$(HTTPS_PROXY) --build-arg http_proxy=$(HTTPS_PROXY) --build-arg https_proxy=$(HTTPS_PROXY)
+else
+  PROXY_BUILD_ARGS =
+endif
 # Makefile helper: comma literal for $(subst)
 comma := ,
 
@@ -93,7 +103,7 @@ build: build-manager build-worker ## Build all images (base image pulled from re
 
 build-openclaw-base: ## Build OpenClaw base image
 	@echo "==> Building OpenClaw base image: $(LOCAL_OPENCLAW_BASE) (registry: $(HIGRESS_REGISTRY))"
-	docker build $(PLATFORM_FLAG) $(REGISTRY_ARG) $(DOCKER_BUILD_ARGS) \
+	docker build $(PLATFORM_FLAG) $(REGISTRY_ARG) $(PROXY_BUILD_ARGS) $(DOCKER_BUILD_ARGS) \
 		-t $(LOCAL_OPENCLAW_BASE) \
 		./openclaw-base/
 
@@ -105,13 +115,13 @@ OPENCLAW_BASE_PUSH_ARG  = --build-arg OPENCLAW_BASE_IMAGE=$(OPENCLAW_BASE_IMAGE)
 
 build-manager: ## Build Manager image
 	@echo "==> Building Manager image: $(LOCAL_MANAGER) (registry: $(HIGRESS_REGISTRY))"
-	docker build $(PLATFORM_FLAG) $(REGISTRY_ARG) $(BUILTIN_VERSION_ARG) $(OPENCLAW_BASE_BUILD_ARG) $(DOCKER_BUILD_ARGS) \
+	docker build $(PLATFORM_FLAG) $(REGISTRY_ARG) $(BUILTIN_VERSION_ARG) $(OPENCLAW_BASE_BUILD_ARG) $(PROXY_BUILD_ARGS) $(DOCKER_BUILD_ARGS) \
 		-t $(LOCAL_MANAGER) \
 		./manager/
 
 build-worker: ## Build Worker image
 	@echo "==> Building Worker image: $(LOCAL_WORKER) (registry: $(HIGRESS_REGISTRY))"
-	docker build $(PLATFORM_FLAG) $(REGISTRY_ARG) $(OPENCLAW_BASE_BUILD_ARG) $(DOCKER_BUILD_ARGS) \
+	docker build $(PLATFORM_FLAG) $(REGISTRY_ARG) $(OPENCLAW_BASE_BUILD_ARG) $(PROXY_BUILD_ARGS) $(DOCKER_BUILD_ARGS) \
 		-t $(LOCAL_WORKER) \
 		./worker/
 

@@ -27,6 +27,7 @@ WORKER_SKILLS="file-sync"
 REMOTE_MODE=false
 ENABLE_FIND_SKILLS=false
 SKILLS_API_URL=""
+WORKER_RUNTIME="openclaw"   # openclaw (default) | copaw
 
 while [ $# -gt 0 ]; do
     case "$1" in
@@ -37,13 +38,19 @@ while [ $# -gt 0 ]; do
         --find-skills) ENABLE_FIND_SKILLS=true; shift ;;
         --skills-api-url) SKILLS_API_URL="$2"; shift 2 ;;
         --remote)     REMOTE_MODE=true; shift ;;
+        --runtime)    WORKER_RUNTIME="$2"; shift 2 ;;
         *) echo "Unknown option: $1"; exit 1 ;;
     esac
 done
 
 if [ -z "${WORKER_NAME}" ]; then
-    echo "Usage: create-worker.sh --name <NAME> [--model <MODEL_ID>] [--mcp-servers s1,s2] [--skills s1,s2] [--find-skills] [--skills-api-url <URL>] [--remote]"
+    echo "Usage: create-worker.sh --name <NAME> [--model <MODEL_ID>] [--mcp-servers s1,s2] [--skills s1,s2] [--find-skills] [--skills-api-url <URL>] [--remote] [--runtime openclaw|copaw]"
     exit 1
+fi
+
+# copaw runtime is always remote (pip-installed process, not a container)
+if [ "${WORKER_RUNTIME}" = "copaw" ]; then
+    REMOTE_MODE=true
 fi
 
 # If find-skills is enabled, add it to the skills list
@@ -508,10 +515,12 @@ jq --arg w "${WORKER_NAME}" \
    --arg uid "${WORKER_MATRIX_USER_ID}" \
    --arg rid "${ROOM_ID}" \
    --arg ts "${NOW_TS}" \
+   --arg runtime "${WORKER_RUNTIME}" \
    --argjson skills "${SKILLS_JSON}" \
    '.workers[$w] = {
      "matrix_user_id": $uid,
      "room_id": $rid,
+     "runtime": $runtime,
      "skills": $skills,
      "created_at": (if .workers[$w].created_at? then .workers[$w].created_at else $ts end),
      "skills_updated_at": $ts
@@ -537,13 +546,27 @@ WORKER_STATUS="pending_install"
 source /opt/hiclaw/scripts/lib/container-api.sh
 
 _build_install_cmd() {
-    local manager_ip
-    manager_ip=$(container_get_manager_ip 2>/dev/null || hostname -I 2>/dev/null | awk '{print $1}')
-    local fs_endpoint="http://${HICLAW_FS_DOMAIN:-fs-local.hiclaw.io}:8080"
+    # copaw workers run on the host, so use the externally-exposed gateway port.
+    # openclaw workers run inside a container, so use the internal port 8080.
+    local fs_domain="${HICLAW_FS_DOMAIN:-fs-local.hiclaw.io}"
+    local fs_internal_endpoint="http://${fs_domain}:8080"
+    local fs_external_port="${HICLAW_PORT_GATEWAY:-18080}"
+    local fs_external_endpoint="http://${fs_domain}:${fs_external_port}"
     local fs_access_key="${WORKER_NAME}"
     local fs_secret_key="${WORKER_MINIO_PASSWORD}"
 
-    local cmd="bash hiclaw-install.sh worker --name ${WORKER_NAME} --fs ${fs_endpoint} --fs-key ${fs_access_key} --fs-secret ${fs_secret_key}"
+    if [ "${WORKER_RUNTIME}" = "copaw" ]; then
+        # copaw-worker is a pip package running on the host; use external port
+        local cmd="pip install copaw-worker && copaw-worker"
+        cmd="${cmd} --name ${WORKER_NAME}"
+        cmd="${cmd} --fs ${fs_external_endpoint}"
+        cmd="${cmd} --fs-key ${fs_access_key}"
+        cmd="${cmd} --fs-secret ${fs_secret_key}"
+        echo "${cmd}"
+        return
+    fi
+
+    local cmd="bash hiclaw-install.sh worker --name ${WORKER_NAME} --fs ${fs_internal_endpoint} --fs-key ${fs_access_key} --fs-secret ${fs_secret_key}"
 
     # Add find-skills related options if enabled
     if [ "${ENABLE_FIND_SKILLS}" = true ]; then
@@ -601,6 +624,7 @@ RESULT=$(jq -n \
     --arg room_id "${ROOM_ID}" \
     --arg consumer "${CONSUMER_NAME}" \
     --arg mode "${DEPLOY_MODE}" \
+    --arg runtime "${WORKER_RUNTIME}" \
     --arg container_id "${CONTAINER_ID}" \
     --arg status "${WORKER_STATUS}" \
     --arg install_cmd "${INSTALL_CMD:-}" \
@@ -610,6 +634,7 @@ RESULT=$(jq -n \
         matrix_user_id: $user_id,
         room_id: $room_id,
         consumer: $consumer,
+        runtime: $runtime,
         skills: $skills,
         mode: $mode,
         container_id: $container_id,

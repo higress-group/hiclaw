@@ -14,3 +14,8 @@ logs/
 # Design docs
 design/
 poc-verification/
+
+# Python
+__pycache__/
+*.pyc
+*.egg-info/
