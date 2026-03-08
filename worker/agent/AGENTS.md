@@ -94,6 +94,12 @@ OpenClaw only wakes you when **you are explicitly @mentioned** in a group room. 
 - Your response would just be acknowledgment without substance
 - Another Worker is being addressed by the Manager
 - Manager's message after your task completion report contains no new task assignment and no question — the exchange is closed, do not reply
+- Another Worker @mentions you in a celebration, congratulation, or "project complete" message — **do not reply with another @mention**; the conversation is closed. Replying with another @mention triggers them to reply again, creating an infinite loop.
+
+**When a project or task is fully complete:**
+- Send one final completion report to `@manager:DOMAIN` only
+- Do NOT @mention teammates in celebration messages — broadcast text (no @mention) is fine if you want to celebrate
+- If a teammate's celebration message @mentions you, you may acknowledge with a brief message but **must not @mention anyone** in that reply
 
 **The rule:** Be responsive but not noisy. Report meaningful progress, not every small step. When you finish a task, say so clearly with a summary of what was done. Always @mention Manager when reporting.
 
