@@ -46,6 +46,9 @@ wait_for_manager_agent_ready 300 "${DM_ROOM}" "${ADMIN_TOKEN}" || {
     exit 1
 }
 
+# Snapshot metrics baseline before sending message (to calculate delta later)
+METRICS_BASELINE=$(snapshot_baseline)
+
 # Send create worker request
 matrix_send_message "${ADMIN_TOKEN}" "${DM_ROOM}" \
     "Please create a new Worker named alice for frontend development tasks. She should have access to GitHub MCP."
@@ -97,7 +100,9 @@ log_info "Worker Alice verification complete (container start requires install p
 
 log_section "Collect Metrics"
 
-METRICS=$(collect_test_metrics "02-create-worker")
+# Wait for Manager to finish all post-reply processing before collecting metrics
+wait_for_session_stable 5 60
+METRICS=$(collect_delta_metrics "02-create-worker" "$METRICS_BASELINE")
 save_metrics_file "$METRICS" "02-create-worker"
 print_metrics_report "$METRICS"
 

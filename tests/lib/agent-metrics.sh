@@ -147,155 +147,231 @@ get_latest_session() {
     docker exec "$container" sh -c "ls -t '${session_dir}'/*.jsonl 2>/dev/null | head -1" 2>/dev/null
 }
 
+# Wait for the latest session file to stop growing (agent has finished processing)
+# Usage: wait_for_session_stable [stable_seconds] [max_wait_seconds]
+# Polls the manager's latest session file until its size is unchanged for stable_seconds.
+wait_for_session_stable() {
+    local stable_seconds="${1:-5}"
+    local max_wait="${2:-60}"
+    local manager_container="${TEST_MANAGER_CONTAINER:-hiclaw-manager}"
+    local manager_session_dir="/root/manager-workspace/.openclaw/agents/main/sessions"
+
+    log_info "Waiting for Manager session to stabilize (up to ${max_wait}s)..." >&2
+
+    local elapsed=0
+    local last_size=-1
+    local stable_for=0
+
+    while [ "$elapsed" -lt "$max_wait" ]; do
+        local session
+        session=$(get_latest_session "$manager_container" "$manager_session_dir")
+        local size=0
+        if [ -n "$session" ]; then
+            size=$(docker exec "$manager_container" sh -c "wc -c < '${session}' 2>/dev/null || echo 0")
+        fi
+
+        if [ "$size" -eq "$last_size" ]; then
+            stable_for=$((stable_for + 2))
+            if [ "$stable_for" -ge "$stable_seconds" ]; then
+                log_info "Session stable after ${elapsed}s (size=${size})" >&2
+                return 0
+            fi
+        else
+            stable_for=0
+            last_size="$size"
+        fi
+
+        sleep 2
+        elapsed=$((elapsed + 2))
+    done
+
+    log_info "Session did not stabilize within ${max_wait}s, proceeding anyway" >&2
+    return 0
+}
+
 # ============================================================
 # Baseline & Delta Metrics (for per-test metrics)
 # ============================================================
 
-# Snapshot current session metrics as baseline for later delta calculation
+# Snapshot all session file byte offsets as baseline for accurate delta calculation.
 # Usage: METRICS_BASELINE=$(snapshot_baseline "worker1" "worker2" ...)
-# Returns: JSON with current cumulative metrics for all agents
+# Returns: JSON with per-agent map of {file -> byte_offset} for all existing session files.
 snapshot_baseline() {
     local workers=("$@")
-    
+
     local manager_container="${TEST_MANAGER_CONTAINER:-hiclaw-manager}"
     local manager_session_dir="/root/manager-workspace/.openclaw/agents/main/sessions"
-    
-    local snapshot_result='{"agents": {}}'
-    
-    # Collect Manager baseline
-    local manager_session
-    manager_session=$(get_latest_session "$manager_container" "$manager_session_dir")
-    
-    if [ -n "$manager_session" ]; then
-        local manager_metrics
-        manager_metrics=$(docker exec "$manager_container" cat "$manager_session" 2>/dev/null | parse_session_metrics_inline)
-        if [ -n "$manager_metrics" ]; then
-            snapshot_result=$(echo "$snapshot_result" | jq --argjson m "$manager_metrics" '.agents.manager = $m')
-        fi
+
+    local snapshot_result='{"offsets": {}}'
+
+    # Snapshot all Manager session files
+    local manager_files
+    manager_files=$(docker exec "$manager_container" \
+        sh -c "ls '${manager_session_dir}'/*.jsonl 2>/dev/null" 2>/dev/null)
+    if [ -n "$manager_files" ]; then
+        local manager_offsets='{}'
+        while IFS= read -r f; do
+            local sz
+            sz=$(docker exec "$manager_container" sh -c "wc -c < '$f' 2>/dev/null || echo 0")
+            manager_offsets=$(echo "$manager_offsets" | jq --arg f "$f" --argjson s "$sz" '.[$f] = $s')
+        done <<< "$manager_files"
+        snapshot_result=$(echo "$snapshot_result" | jq --argjson o "$manager_offsets" '.offsets.manager = $o')
     fi
-    
-    # Collect Worker baselines
+
+    # Snapshot all Worker session files
     for worker in "${workers[@]}"; do
         local worker_container="hiclaw-worker-${worker}"
         local worker_session_dir="/root/hiclaw-fs/agents/${worker}/.openclaw/agents/main/sessions"
-        
+
         if ! docker ps --format '{{.Names}}' 2>/dev/null | grep -q "^${worker_container}$"; then
             continue
         fi
-        
-        local worker_session
-        worker_session=$(get_latest_session "$worker_container" "$worker_session_dir")
-        
-        if [ -n "$worker_session" ]; then
-            local worker_metrics
-            worker_metrics=$(docker exec "$worker_container" cat "$worker_session" 2>/dev/null | parse_session_metrics_inline)
-            if [ -n "$worker_metrics" ]; then
-                snapshot_result=$(echo "$snapshot_result" | jq --arg w "$worker" --argjson m "$worker_metrics" '.agents[$w] = $m')
-            fi
+
+        local worker_files
+        worker_files=$(docker exec "$worker_container" \
+            sh -c "ls '${worker_session_dir}'/*.jsonl 2>/dev/null" 2>/dev/null)
+        if [ -n "$worker_files" ]; then
+            local worker_offsets='{}'
+            while IFS= read -r f; do
+                local sz
+                sz=$(docker exec "$worker_container" sh -c "wc -c < '$f' 2>/dev/null || echo 0")
+                worker_offsets=$(echo "$worker_offsets" | jq --arg f "$f" --argjson s "$sz" '.[$f] = $s')
+            done <<< "$worker_files"
+            snapshot_result=$(echo "$snapshot_result" | jq --arg w "$worker" --argjson o "$worker_offsets" '.offsets[$w] = $o')
         fi
     done
-    
+
     echo "$snapshot_result"
 }
 
-# Collect delta metrics (difference from baseline) - metrics consumed during THIS test only
+# Parse metrics from new bytes only (bytes after offset) in a container's session file.
+# Usage: _parse_agent_delta <container> <file> <offset>
+_parse_agent_delta() {
+    local container="$1"
+    local file="$2"
+    local offset="$3"
+    # tail -c +N reads from byte N (1-indexed), so +$(offset+1) skips the first $offset bytes
+    docker exec "$container" sh -c "tail -c +$((offset + 1)) '$file' 2>/dev/null" \
+        | parse_session_metrics_inline
+}
+
+# Accumulate metrics from all session files of a container, reading only new bytes.
+# Usage: _collect_agent_delta <container> <session_dir> <offsets_json>
+# offsets_json: {"file": byte_offset, ...} from snapshot_baseline
+_collect_agent_delta() {
+    local container="$1"
+    local session_dir="$2"
+    local offsets_json="$3"
+
+    local current_files
+    current_files=$(docker exec "$container" \
+        sh -c "ls '${session_dir}'/*.jsonl 2>/dev/null" 2>/dev/null)
+    [ -z "$current_files" ] && return 0
+
+    local llm_calls=0 input=0 output=0 cache_read=0 cache_write=0
+    local first_ts="" last_ts=""
+
+    while IFS= read -r f; do
+        local offset=0
+        if [ -n "$offsets_json" ]; then
+            local stored
+            stored=$(echo "$offsets_json" | jq -r --arg f "$f" '.[$f] // 0')
+            offset="${stored:-0}"
+        fi
+
+        local metrics
+        metrics=$(_parse_agent_delta "$container" "$f" "$offset")
+        [ -z "$metrics" ] && continue
+
+        local calls
+        calls=$(echo "$metrics" | jq -r '.llm_calls // 0')
+        [ "$calls" -eq 0 ] 2>/dev/null && continue
+
+        llm_calls=$((llm_calls + calls))
+        input=$((input + $(echo "$metrics" | jq -r '.tokens.input // 0')))
+        output=$((output + $(echo "$metrics" | jq -r '.tokens.output // 0')))
+        cache_read=$((cache_read + $(echo "$metrics" | jq -r '.tokens.cache_read // 0')))
+        cache_write=$((cache_write + $(echo "$metrics" | jq -r '.tokens.cache_write // 0')))
+
+        local ts_start ts_end
+        ts_start=$(echo "$metrics" | jq -r '.timing.start // empty')
+        ts_end=$(echo "$metrics" | jq -r '.timing.end // empty')
+        if [ -n "$ts_start" ]; then
+            if [ -z "$first_ts" ] || [[ "$ts_start" < "$first_ts" ]]; then first_ts="$ts_start"; fi
+        fi
+        if [ -n "$ts_end" ]; then
+            if [ -z "$last_ts" ] || [[ "$ts_end" > "$last_ts" ]]; then last_ts="$ts_end"; fi
+        fi
+    done <<< "$current_files"
+
+    local total=$((input + output))
+    local duration
+    duration=$(calculate_duration_seconds "$first_ts" "$last_ts")
+    cat <<EOF
+{
+  "llm_calls": ${llm_calls},
+  "tokens": {
+    "input": ${input},
+    "output": ${output},
+    "cache_read": ${cache_read},
+    "cache_write": ${cache_write},
+    "total": ${total}
+  },
+  "timing": {
+    "start": "${first_ts}",
+    "end": "${last_ts}",
+    "duration_seconds": ${duration}
+  }
+}
+EOF
+}
+
+# Collect delta metrics (new bytes only across all session files since baseline snapshot).
 # Usage: METRICS=$(collect_delta_metrics <test_name> "$METRICS_BASELINE" "worker1" "worker2" ...)
 collect_delta_metrics() {
     local test_name="$1"
     local baseline="$2"
     shift 2
     local workers=("$@")
-    
+
     local manager_container="${TEST_MANAGER_CONTAINER:-hiclaw-manager}"
     local manager_session_dir="/root/manager-workspace/.openclaw/agents/main/sessions"
-    
+
     # Initialize result structure
     local delta_result='{"test_name": "'"${test_name}"'", "timestamp": "'"$(date -Iseconds)"'", "agents": {}, "totals": {"llm_calls": 0, "tokens": {"input": 0, "output": 0, "cache_read": 0, "cache_write": 0, "total": 0}, "timing": {"duration_seconds": 0}}}'
-    
-    # Collect Manager delta
+
+    # Collect Manager delta using byte-offset approach across all session files
     log_info "Collecting Manager delta metrics..." >&2
-    local manager_session
-    manager_session=$(get_latest_session "$manager_container" "$manager_session_dir")
-    
-    if [ -n "$manager_session" ]; then
-        local current_manager
-        current_manager=$(docker exec "$manager_container" cat "$manager_session" 2>/dev/null | parse_session_metrics_inline)
-        if [ -n "$current_manager" ]; then
-            local baseline_manager=$(echo "$baseline" | jq -r '.agents.manager // empty')
-            local manager_delta
-            
-            if [ -n "$baseline_manager" ] && [ "$baseline_manager" != "null" ] && [ "$baseline_manager" != "" ]; then
-                # Calculate delta
-                manager_delta=$(echo "$current_manager" | jq --argjson base "$baseline_manager" '
-                    {
-                        llm_calls: (.llm_calls - $base.llm_calls),
-                        tokens: {
-                            input: (.tokens.input - $base.tokens.input),
-                            output: (.tokens.output - $base.tokens.output),
-                            cache_read: (.tokens.cache_read - $base.tokens.cache_read),
-                            cache_write: (.tokens.cache_write - $base.tokens.cache_write),
-                            total: ((.tokens.input - $base.tokens.input) + (.tokens.output - $base.tokens.output))
-                        },
-                        timing: .timing
-                    }
-                ')
-            else
-                # No baseline, use current as-is
-                manager_delta="$current_manager"
-            fi
-            
-            delta_result=$(echo "$delta_result" | jq --argjson m "$manager_delta" '.agents.manager = $m')
-            log_info "Manager delta: $(echo "$manager_delta" | jq -r '.llm_calls') LLM calls, $(echo "$manager_delta" | jq -r '.tokens.total') tokens" >&2
-        fi
+    local manager_offsets
+    manager_offsets=$(echo "$baseline" | jq -r '.offsets.manager // empty')
+    local manager_delta
+    manager_delta=$(_collect_agent_delta "$manager_container" "$manager_session_dir" "$manager_offsets")
+    if [ -n "$manager_delta" ]; then
+        delta_result=$(echo "$delta_result" | jq --argjson m "$manager_delta" '.agents.manager = $m')
+        log_info "Manager delta: $(echo "$manager_delta" | jq -r '.llm_calls') LLM calls, $(echo "$manager_delta" | jq -r '.tokens.total') tokens" >&2
     fi
-    
+
     # Collect Worker deltas
     for worker in "${workers[@]}"; do
         local worker_container="hiclaw-worker-${worker}"
         local worker_session_dir="/root/hiclaw-fs/agents/${worker}/.openclaw/agents/main/sessions"
-        
+
         log_info "Collecting Worker '${worker}' delta metrics..." >&2
-        
+
         if ! docker ps --format '{{.Names}}' 2>/dev/null | grep -q "^${worker_container}$"; then
             log_info "Worker '${worker}' container not running, skipping" >&2
             continue
         fi
-        
-        local worker_session
-        worker_session=$(get_latest_session "$worker_container" "$worker_session_dir")
-        
-        if [ -n "$worker_session" ]; then
-            local current_worker
-            current_worker=$(docker exec "$worker_container" cat "$worker_session" 2>/dev/null | parse_session_metrics_inline)
-            if [ -n "$current_worker" ]; then
-                local baseline_worker=$(echo "$baseline" | jq -r --arg w "$worker" '.agents[$w] // empty')
-                local worker_delta
-                
-                if [ -n "$baseline_worker" ] && [ "$baseline_worker" != "null" ] && [ "$baseline_worker" != "" ]; then
-                    # Calculate delta
-                    worker_delta=$(echo "$current_worker" | jq --argjson base "$baseline_worker" '
-                        {
-                            llm_calls: (.llm_calls - $base.llm_calls),
-                            tokens: {
-                                input: (.tokens.input - $base.tokens.input),
-                                output: (.tokens.output - $base.tokens.output),
-                                cache_read: (.tokens.cache_read - $base.tokens.cache_read),
-                                cache_write: (.tokens.cache_write - $base.tokens.cache_write),
-                                total: ((.tokens.input - $base.tokens.input) + (.tokens.output - $base.tokens.output))
-                            },
-                            timing: .timing
-                        }
-                    ')
-                else
-                    # No baseline, use current as-is
-                    worker_delta="$current_worker"
-                fi
-                
-                delta_result=$(echo "$delta_result" | jq --arg w "$worker" --argjson m "$worker_delta" '.agents[$w] = $m')
-                log_info "Worker '${worker}' delta: $(echo "$worker_delta" | jq -r '.llm_calls') LLM calls, $(echo "$worker_delta" | jq -r '.tokens.total') tokens" >&2
-            fi
+
+        local worker_offsets
+        worker_offsets=$(echo "$baseline" | jq -r --arg w "$worker" '.offsets[$w] // empty')
+        local worker_delta
+        worker_delta=$(_collect_agent_delta "$worker_container" "$worker_session_dir" "$worker_offsets")
+        if [ -n "$worker_delta" ]; then
+            delta_result=$(echo "$delta_result" | jq --arg w "$worker" --argjson m "$worker_delta" '.agents[$w] = $m')
+            log_info "Worker '${worker}' delta: $(echo "$worker_delta" | jq -r '.llm_calls') LLM calls, $(echo "$worker_delta" | jq -r '.tokens.total') tokens" >&2
         else
-            log_info "No session found for Worker '${worker}'" >&2
+            log_info "No new session data for Worker '${worker}'" >&2
         fi
     done
     
