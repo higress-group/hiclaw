@@ -278,7 +278,6 @@ class MatrixChannel(BaseChannel):
                 "is_dm": is_dm,
                 "worker_name": worker_name,
                 "event_id": event.event_id,
-                "sender_id": sender_id,
             },
         }
 

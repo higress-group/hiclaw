@@ -25,4 +25,4 @@ class WorkerConfig:
         self.minio_secure = minio_secure
         self.sync_interval = sync_interval
         self.install_dir = install_dir or Path.home() / ".copaw-worker"
-        self.console_port = console_port  # None = no HTTP console
+        self.console_port = console_port

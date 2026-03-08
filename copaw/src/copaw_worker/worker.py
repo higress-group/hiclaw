@@ -11,7 +11,10 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
+import platform
 import shutil
+import stat
 from pathlib import Path
 from typing import Optional
 
@@ -76,7 +79,10 @@ class Worker:
             )
         )
 
-        # 1. Init file sync
+        # 1. Ensure mc (MinIO Client) is available
+        self._ensure_mc()
+
+        # 2. Init file sync
         self.sync = FileSync(
             endpoint=self.config.minio_endpoint,
             access_key=self.config.minio_access_key,
@@ -121,7 +127,7 @@ class Worker:
         # 6. Sync skills from MinIO into CoPaw's active_skills dir
         self._sync_skills()
 
-        # 6. Start background MinIO sync
+        # 7. Start background MinIO sync
         asyncio.create_task(
             sync_loop(
                 self.sync,
@@ -215,6 +221,49 @@ class Worker:
             # Clear refs so stop() doesn't double-call
             self._channel_manager = None
             self._runner = None
+
+    # ------------------------------------------------------------------
+    # mc (MinIO Client) auto-install
+    # ------------------------------------------------------------------
+
+    def _ensure_mc(self) -> None:
+        """Ensure mc (MinIO Client) binary is available on PATH.
+
+        If not found, downloads the latest release from dl.min.io and installs
+        it to ~/.local/bin/mc (created if needed, added to PATH for this process).
+        """
+        if shutil.which("mc"):
+            logger.debug("mc already available")
+            return
+
+        system = platform.system().lower()   # linux / darwin
+        machine = platform.machine().lower() # x86_64 / aarch64 / arm64
+
+        arch_map = {"x86_64": "amd64", "aarch64": "arm64", "arm64": "arm64"}
+        arch = arch_map.get(machine, machine)
+
+        if system not in ("linux", "darwin"):
+            console.print(f"[yellow]mc auto-install not supported on {system}, please install mc manually[/yellow]")
+            return
+
+        url = f"https://dl.min.io/client/mc/release/{system}-{arch}/mc"
+        install_dir = Path.home() / ".local" / "bin"
+        install_dir.mkdir(parents=True, exist_ok=True)
+        dest = install_dir / "mc"
+
+        console.print(f"[yellow]mc not found, downloading from {url}...[/yellow]")
+        try:
+            import httpx
+            with httpx.stream("GET", url, follow_redirects=True, timeout=60) as resp:
+                resp.raise_for_status()
+                with open(dest, "wb") as f:
+                    for chunk in resp.iter_bytes(chunk_size=65536):
+                        f.write(chunk)
+            dest.chmod(dest.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
+            os.environ["PATH"] = str(install_dir) + os.pathsep + os.environ.get("PATH", "")
+            console.print(f"[green]mc installed to {dest}[/green]")
+        except Exception as exc:
+            console.print(f"[yellow]mc auto-install failed: {exc}. Please install mc manually.[/yellow]")
 
     # ------------------------------------------------------------------
     # Skills sync
