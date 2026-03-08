@@ -53,19 +53,10 @@ docker exec "${TEST_MANAGER_CONTAINER}" bash -c "
 }
 log_pass "Bare git repo initialized at ${REPO_PATH}.git"
 
-# Start git daemon so worker containers can access the repo via git:// protocol
-MANAGER_IP=$(docker inspect "${TEST_MANAGER_CONTAINER}" \
-    --format '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' 2>/dev/null | head -1)
-docker exec "${TEST_MANAGER_CONTAINER}" bash -c "
-    git daemon --base-path=/root/git-repos \
-        --export-all --enable=receive-pack \
-        --reuseaddr --port=9418 \
-        --pid-file=/tmp/git-daemon.pid \
-        --detach 2>/dev/null || true
-"
-sleep 2
-GIT_REPO_URL="git://${MANAGER_IP}/collab-test-${TEST_RUN_ID}"
-log_info "Git daemon started; repo URL for workers: ${GIT_REPO_URL}"
+# All git operations are delegated to the Manager, which runs them locally
+# inside the manager container — no network protocol needed, use local path directly.
+GIT_REPO_URL="${REPO_PATH}.git"
+log_info "Git repo local path (used by Manager for all operations): ${GIT_REPO_URL}"
 
 log_section "Setup: Find or Create DM Room"
 
@@ -251,15 +242,8 @@ print_metrics_report "$METRICS"
 
 log_section "Cleanup"
 
-# Stop git daemon
-docker exec "${TEST_MANAGER_CONTAINER}" bash -c "
-    if [ -f /tmp/git-daemon.pid ]; then
-        kill \$(cat /tmp/git-daemon.pid) 2>/dev/null || true
-        rm -f /tmp/git-daemon.pid
-    fi
-" 2>/dev/null || true
 docker exec "${TEST_MANAGER_CONTAINER}" rm -rf "${REPO_PATH}.git" 2>/dev/null || true
-log_info "Removed bare git repo and stopped git daemon"
+log_info "Removed bare git repo"
 
 test_teardown "14-git-collab"
 test_summary
