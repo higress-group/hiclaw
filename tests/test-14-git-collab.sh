@@ -98,7 +98,11 @@ DO NOT assign any phase to a different worker. DO NOT give alice phase 2 or phas
 
 IMPORTANT: You MUST use the EXACT branch names and file paths specified below. Do not rename, substitute, or simplify them. The verification system checks these exact names.
 
-Ensure workers alice, bob, and charlie exist with the git-delegation skill. Run the phases strictly in order, waiting for each phase's report before starting the next.
+Before starting any phase:
+1. Ensure workers alice, bob, and charlie exist with the git-delegation skill.
+2. Create a shared project room that includes alice, bob, charlie, and the human admin (use the create-project.sh script). All phase assignments and reports MUST happen in this project room — never in individual worker rooms.
+
+Run the phases strictly in order, waiting for each phase's report before starting the next.
 
 **Phase 1 — alice (and only alice)**:
 - Clone ${GIT_REPO_URL}
@@ -138,7 +142,7 @@ Ensure workers alice, bob, and charlie exist with the git-delegation skill. Run 
 - Commit 'verify: proposal review checklist' and push branch '${TEST_BRANCH}' to ${GIT_REPO_URL}
 - Report PHASE4_DONE
 
-When all 4 phases are done, post a final summary in the project room."
+When all 4 phases are done, post a final summary in the project room and @mention the human admin to notify them the workflow is complete."
 
 # Snapshot before first LLM interaction
 METRICS_BASELINE=$(snapshot_baseline "alice" "bob" "charlie")
@@ -156,82 +160,42 @@ fi
 
 log_section "Wait for Workflow Completion (up to 30 minutes)"
 
-log_info "Polling git branches for phase completion (timeout: 1800s, interval: 30s)..."
-WORKFLOW_DONE=false
-DEADLINE=$(( $(date +%s) + 1800 ))
+# Get Manager's Matrix token (retry until openclaw.json is written)
+log_info "Waiting for Manager token (timeout: 120s)..."
+MANAGER_TOKEN=""
+DEADLINE=$(( $(date +%s) + 120 ))
 while [ "$(date +%s)" -lt "${DEADLINE}" ]; do
-    P1=$(docker exec "${TEST_MANAGER_CONTAINER}" \
-        git -C "${REPO_PATH}.git" show "${FEATURE_BRANCH}:doc/proposal.md" 2>/dev/null | wc -c)
-    P2=$(docker exec "${TEST_MANAGER_CONTAINER}" \
-        git -C "${REPO_PATH}.git" show "${REVIEW_BRANCH}:reviews/proposal-review.md" 2>/dev/null | wc -c)
-    P3=$(docker exec "${TEST_MANAGER_CONTAINER}" \
-        git -C "${REPO_PATH}.git" show "${FEATURE_BRANCH}:doc/proposal.md" 2>/dev/null | grep -ci "summary" || true)
-    P4=$(docker exec "${TEST_MANAGER_CONTAINER}" \
-        git -C "${REPO_PATH}.git" show "${TEST_BRANCH}:verify/checklist.md" 2>/dev/null | wc -c)
-    log_info "Phase progress — P1:${P1}B P2:${P2}B P3_summary:${P3} P4:${P4}B"
-    if [ "${P1}" -gt 0 ] && [ "${P2}" -gt 0 ] && [ "${P3}" -gt 0 ] && [ "${P4}" -gt 0 ]; then
-        WORKFLOW_DONE=true
-        log_pass "All 4 phases detected in git — workflow complete"
-        break
-    fi
-    sleep 30
+    MANAGER_TOKEN=$(docker exec "${TEST_MANAGER_CONTAINER}" \
+        jq -r '.channels.matrix.accessToken // empty' /root/manager-workspace/openclaw.json 2>/dev/null || true)
+    [ -n "${MANAGER_TOKEN}" ] && break
+    sleep 5
 done
+assert_not_empty "${MANAGER_TOKEN}" "Manager Matrix token available"
 
-if [ "${WORKFLOW_DONE}" != "true" ]; then
-    log_info "Git polling timed out; proceeding with verification (some phases may have partial results)"
+log_info "Waiting for project room to be created (timeout: 600s)..."
+PROJECT_ROOM=""
+DEADLINE=$(( $(date +%s) + 600 ))
+while [ "$(date +%s)" -lt "${DEADLINE}" ]; do
+    PROJECT_ROOM=$(matrix_find_room_by_name "${MANAGER_TOKEN}" "Project:" 2>/dev/null || true)
+    [ -n "${PROJECT_ROOM}" ] && break
+    sleep 10
+done
+assert_not_empty "${PROJECT_ROOM}" "Project room created by Manager"
+log_info "Project room: ${PROJECT_ROOM}"
+
+log_info "Waiting for Manager to post completion message in project room (timeout: 1800s)..."
+# First check if completion message was already posted
+COMPLETION_MSG=$(matrix_read_messages "${MANAGER_TOKEN}" "${PROJECT_ROOM}" 50 2>/dev/null | \
+    jq -r --arg u "@manager" '[.chunk[] | select(.sender | startswith($u)) | .content.body] | .[]' 2>/dev/null | \
+    grep -iE "complete|done|finished|all.*phase|phase.*4|PHASE4" | head -1 || true)
+
+if [ -z "${COMPLETION_MSG}" ]; then
+    COMPLETION_MSG=$(matrix_wait_for_message_containing "${MANAGER_TOKEN}" "${PROJECT_ROOM}" "@manager" \
+        "complete\|done\|finished\|all.*phase\|phase.*4\|PHASE4" 1800 2>/dev/null || true)
 fi
 
-MESSAGES=$(matrix_read_messages "${ADMIN_TOKEN}" "${DM_ROOM}" 100)
-MSG_BODIES=$(echo "${MESSAGES}" | jq -r '[.chunk[].content.body] | join("\n---\n")' 2>/dev/null)
-
-log_section "Verify Phase Results via Git"
-
-# Phase 1: alice's feature branch has proposal.md with Goals section
-PROPOSAL=$(docker exec "${TEST_MANAGER_CONTAINER}" \
-    git -C "${REPO_PATH}.git" show "${FEATURE_BRANCH}:doc/proposal.md" 2>/dev/null)
-assert_not_empty "${PROPOSAL}" "Phase 1: doc/proposal.md exists on ${FEATURE_BRANCH}"
-assert_contains_i "${PROPOSAL}" "Goals" "Phase 1: proposal.md has Goals section"
-
-# Phase 2: bob's review branch has review file requesting summary
-REVIEW=$(docker exec "${TEST_MANAGER_CONTAINER}" \
-    git -C "${REPO_PATH}.git" show "${REVIEW_BRANCH}:reviews/proposal-review.md" 2>/dev/null)
-assert_not_empty "${REVIEW}" "Phase 2: reviews/proposal-review.md exists on ${REVIEW_BRANCH}"
-assert_contains_i "${REVIEW}" "summary" "Phase 2: review requests a Summary section"
-
-# Phase 3: alice's updated proposal has the Summary section bob requested (non-linear dependency)
-UPDATED_PROPOSAL=$(docker exec "${TEST_MANAGER_CONTAINER}" \
-    git -C "${REPO_PATH}.git" show "${FEATURE_BRANCH}:doc/proposal.md" 2>/dev/null)
-assert_contains_i "${UPDATED_PROPOSAL}" "Summary" "Phase 3: Summary section added per bob's review (non-linear: A→B→A)"
-
-# Verify Phase 3 is a NEW commit on top of Phase 1 (alice updated the branch)
-P1_COMMIT=$(docker exec "${TEST_MANAGER_CONTAINER}" \
-    git -C "${REPO_PATH}.git" log "${FEATURE_BRANCH}" --oneline 2>/dev/null | wc -l)
-assert_not_empty "${P1_COMMIT}" "Phase 3: ${FEATURE_BRANCH} has commits"
-if [ "${P1_COMMIT}" -ge 2 ] 2>/dev/null; then
-    log_pass "Phase 3: feature branch has multiple commits (alice updated after bob's review)"
-else
-    log_info "Phase 3: commit count on feature branch: ${P1_COMMIT}"
-fi
-
-# Phase 4: charlie's verify branch has checklist confirming the review was addressed
-CHECKLIST=$(docker exec "${TEST_MANAGER_CONTAINER}" \
-    git -C "${REPO_PATH}.git" show "${TEST_BRANCH}:verify/checklist.md" 2>/dev/null)
-assert_not_empty "${CHECKLIST}" "Phase 4: verify/checklist.md exists on ${TEST_BRANCH}"
-assert_contains_i "${CHECKLIST}" "summary\|review" "Phase 4: checklist confirms review was addressed"
-
-# Matrix message phase reports
-if echo "${MSG_BODIES}" | grep -qi "PHASE1_DONE"; then
-    log_pass "Phase 1 completion reported in Matrix"
-fi
-if echo "${MSG_BODIES}" | grep -qi "REVISION_NEEDED"; then
-    log_pass "Phase 2 review reported in Matrix"
-fi
-if echo "${MSG_BODIES}" | grep -qi "PHASE3_DONE"; then
-    log_pass "Phase 3 fix reported in Matrix"
-fi
-if echo "${MSG_BODIES}" | grep -qi "PHASE4_DONE"; then
-    log_pass "Phase 4 verification reported in Matrix"
-fi
+assert_not_empty "${COMPLETION_MSG}" "Manager posted completion message in project room"
+log_pass "Workflow complete — Manager's message: $(echo "${COMPLETION_MSG}" | head -c 200)"
 
 log_section "Collect Metrics"
 

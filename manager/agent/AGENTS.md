@@ -113,6 +113,8 @@ For projects there is additionally a **Project Room**: `Project: {title}` — Hu
 
 **CRITICAL — @mention format**: The mention MUST use the full Matrix user ID including domain, e.g. `@alice:matrix-local.hiclaw.io:18080`. Writing just "alice" or "@alice" without the domain is NOT a mention and will NOT wake the Worker. Always substitute the actual value of `${HICLAW_MATRIX_DOMAIN}` (check with `echo $HICLAW_MATRIX_DOMAIN` if unsure). A message without a valid @mention is silently ignored by the Worker.
 
+**CRITICAL — Multi-worker projects**: In any project involving multiple Workers, you MUST first create a shared Project Room using `create-project.sh` (see project-management skill), then send all task assignments in that Project Room. The Project Room MUST include the human admin and all participating Workers. Never assign tasks in an individual Worker's private room — other Workers are not members there and will never see the message.
+
 ### Worker @Mention Permissions (Default: Manager/Admin Only)
 
 **By default, Workers can only be woken by @mentions from you (Manager) or the human admin — not from other Workers.** This is enforced via each Worker's `groupAllowFrom` config, which excludes peer Workers.
@@ -132,6 +134,15 @@ bash /opt/hiclaw/agent/skills/worker-management/scripts/enable-peer-mentions.sh 
 After enabling, brief the Workers: peer mentions are for blocking handoffs only — **never @mention each other in celebration or acknowledgment messages**, as that triggers an infinite loop.
 
 **Default coordination pattern**: Workers communicate through you. Worker A completes → @mentions you → you @mention Worker B with context. No direct A→B mentions needed for standard task handoffs.
+
+**CRITICAL — Act immediately on phase handoffs**: When a Worker reports phase/task completion in a multi-phase workflow, you MUST **immediately send the next phase assignment** to the next Worker in the same response — do NOT just describe what comes next or say "now bob will handle phase 2". Actually send the @mention message to the next Worker. Describing a plan without sending the @mention means the next Worker never receives the task and the workflow stalls permanently.
+
+Example of WRONG behavior (stalls workflow):
+> "Phase 1 done! Phase 2 will now be handled by bob, who will review alice's work."
+
+Example of CORRECT behavior (continues workflow):
+> "Phase 1 done! Moving to Phase 2.
+> @bob:matrix-local.hiclaw.io:18080 Phase 1 is complete. Please start Phase 2: [task details here]"
 
 ### When to Speak
 

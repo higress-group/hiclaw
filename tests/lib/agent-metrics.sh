@@ -469,52 +469,98 @@ collect_test_metrics() {
 # Metrics Reporting
 # ============================================================
 
-# Print a formatted metrics report to stdout
+# Print a formatted metrics report to stdout, comparing with previous saved run.
 # Usage: print_metrics_report <metrics_json>
+# Automatically loads the previously saved metrics file for this test as baseline.
 print_metrics_report() {
     local metrics="$1"
-    
+    local test_name
+    test_name=$(echo "$metrics" | jq -r '.test_name // empty')
+    local baseline=""
+    if [ -n "$test_name" ]; then
+        local prev_file="${TEST_OUTPUT_DIR}/metrics-${test_name}.json"
+        [ -f "$prev_file" ] && baseline=$(cat "$prev_file" 2>/dev/null) || true
+    fi
+
     echo ""
     echo "========================================"
     echo "  Agent Metrics Report"
     echo "========================================"
     echo "  Test: $(echo "$metrics" | jq -r '.test_name')"
     echo "  Time: $(echo "$metrics" | jq -r '.timestamp')"
+    [ -n "$baseline" ] && echo "  Mode: vs previous baseline"
     echo "========================================"
-    
+
     # Print each agent's metrics
     local agent_names
     agent_names=$(echo "$metrics" | jq -r '.agents | keys[]' 2>/dev/null)
-    
+
     for agent in $agent_names; do
-        local agent_data
-        agent_data=$(echo "$metrics" | jq -c ".agents[\"$agent\"]")
-        
+        local d b
+        d=$(echo "$metrics"  | jq -c ".agents[\"$agent\"]")
+        b=$(echo "$baseline" | jq -c ".agents[\"$agent\"] // {}" 2>/dev/null)
+
+        local b_calls b_in b_out b_cr b_cw b_total b_dur
+        b_calls=$(echo "$b" | jq -r '.llm_calls // 0')
+        b_in=$(   echo "$b" | jq -r '.tokens.input // 0')
+        b_out=$(  echo "$b" | jq -r '.tokens.output // 0')
+        b_cr=$(   echo "$b" | jq -r '.tokens.cache_read // 0')
+        b_cw=$(   echo "$b" | jq -r '.tokens.cache_write // 0')
+        b_total=$(echo "$b" | jq -r '.tokens.total // 0')
+        b_dur=$(  echo "$b" | jq -r '.timing.duration_seconds // 0')
+
         echo ""
         echo "  [$agent]"
-        echo "    LLM Calls:    $(echo "$agent_data" | jq -r '.llm_calls')"
-        echo "    Input Tokens: $(echo "$agent_data" | jq -r '.tokens.input')"
-        echo "    Output Tokens: $(echo "$agent_data" | jq -r '.tokens.output')"
-        echo "    Cache Read:   $(echo "$agent_data" | jq -r '.tokens.cache_read')"
-        echo "    Cache Write:  $(echo "$agent_data" | jq -r '.tokens.cache_write')"
-        echo "    Total Tokens: $(echo "$agent_data" | jq -r '.tokens.total')"
-        echo "    Duration:     $(echo "$agent_data" | jq -r '.timing.duration_seconds')s"
-        echo "    Start:        $(echo "$agent_data" | jq -r '.timing.start')"
-        echo "    End:          $(echo "$agent_data" | jq -r '.timing.end')"
+        _print_metric "LLM Calls"     "$(echo "$d" | jq -r '.llm_calls')"          "$b_calls"  "$baseline"
+        _print_metric "Input Tokens"  "$(echo "$d" | jq -r '.tokens.input')"        "$b_in"     "$baseline"
+        _print_metric "Output Tokens" "$(echo "$d" | jq -r '.tokens.output')"       "$b_out"    "$baseline"
+        _print_metric "Cache Read"    "$(echo "$d" | jq -r '.tokens.cache_read')"   "$b_cr"     "$baseline"
+        _print_metric "Cache Write"   "$(echo "$d" | jq -r '.tokens.cache_write')"  "$b_cw"     "$baseline"
+        _print_metric "Total Tokens"  "$(echo "$d" | jq -r '.tokens.total')"        "$b_total"  "$baseline"
+        _print_metric "Duration"      "$(echo "$d" | jq -r '.timing.duration_seconds')s" "${b_dur}s" "$baseline"
     done
-    
+
     echo ""
     echo "----------------------------------------"
     echo "  TOTALS"
     echo "----------------------------------------"
-    echo "    LLM Calls:    $(echo "$metrics" | jq -r '.totals.llm_calls')"
-    echo "    Input Tokens: $(echo "$metrics" | jq -r '.totals.tokens.input')"
-    echo "    Output Tokens: $(echo "$metrics" | jq -r '.totals.tokens.output')"
-    echo "    Cache Read:   $(echo "$metrics" | jq -r '.totals.tokens.cache_read')"
-    echo "    Cache Write:  $(echo "$metrics" | jq -r '.totals.tokens.cache_write')"
-    echo "    Total Tokens: $(echo "$metrics" | jq -r '.totals.tokens.total')"
-    echo "    Duration:     $(echo "$metrics" | jq -r '.totals.timing.duration_seconds')s"
+    local bt_calls bt_in bt_out bt_cr bt_cw bt_total bt_dur
+    bt_calls=$(echo "$baseline" | jq -r '.totals.llm_calls // 0'           2>/dev/null || echo 0)
+    bt_in=$(   echo "$baseline" | jq -r '.totals.tokens.input // 0'         2>/dev/null || echo 0)
+    bt_out=$(  echo "$baseline" | jq -r '.totals.tokens.output // 0'        2>/dev/null || echo 0)
+    bt_cr=$(   echo "$baseline" | jq -r '.totals.tokens.cache_read // 0'    2>/dev/null || echo 0)
+    bt_cw=$(   echo "$baseline" | jq -r '.totals.tokens.cache_write // 0'   2>/dev/null || echo 0)
+    bt_total=$(echo "$baseline" | jq -r '.totals.tokens.total // 0'         2>/dev/null || echo 0)
+    bt_dur=$(  echo "$baseline" | jq -r '.totals.timing.duration_seconds // 0' 2>/dev/null || echo 0)
+
+    _print_metric "LLM Calls"     "$(echo "$metrics" | jq -r '.totals.llm_calls')"           "$bt_calls"  "$baseline"
+    _print_metric "Input Tokens"  "$(echo "$metrics" | jq -r '.totals.tokens.input')"         "$bt_in"     "$baseline"
+    _print_metric "Output Tokens" "$(echo "$metrics" | jq -r '.totals.tokens.output')"        "$bt_out"    "$baseline"
+    _print_metric "Cache Read"    "$(echo "$metrics" | jq -r '.totals.tokens.cache_read')"    "$bt_cr"     "$baseline"
+    _print_metric "Cache Write"   "$(echo "$metrics" | jq -r '.totals.tokens.cache_write')"   "$bt_cw"     "$baseline"
+    _print_metric "Total Tokens"  "$(echo "$metrics" | jq -r '.totals.tokens.total')"         "$bt_total"  "$baseline"
+    _print_metric "Duration"      "$(echo "$metrics" | jq -r '.totals.timing.duration_seconds')s" "${bt_dur}s" "$baseline"
     echo "========================================"
+}
+
+# Internal helper: print one metric line with optional pct comparison
+# Usage: _print_metric <label> <current> <baseline_val> <baseline_json>
+_print_metric() {
+    local label="$1"
+    local curr="$2"
+    local base_val="$3"
+    local baseline_json="$4"
+
+    if [ -n "$baseline_json" ] && [ "$baseline_json" != "{}" ] && [ "$baseline_json" != "null" ]; then
+        local curr_num base_num
+        curr_num="${curr%s}"   # strip trailing 's' for duration
+        base_num="${base_val%s}"
+        local pct
+        pct=$(_format_pct "$curr_num" "$base_num")
+        printf "    %-16s %s  (was %s  %s)\n" "${label}:" "$curr" "$base_val" "$pct"
+    else
+        printf "    %-16s %s\n" "${label}:" "$curr"
+    fi
 }
 
 # ============================================================
@@ -729,6 +775,25 @@ _format_delta() {
     fi
 }
 
+# Format percentage change with ↑/↓ indicator
+# Usage: _format_pct <current> <baseline>
+# Output: e.g. "↑ +23.4%" or "↓ -12.1%" or "— 0%"
+_format_pct() {
+    local curr="$1"
+    local base="$2"
+    if [ -z "$base" ] || [ "$base" = "0" ] || [ "$base" = "null" ]; then
+        echo "(new)"
+        return
+    fi
+    # Use awk for floating point
+    awk -v c="$curr" -v b="$base" 'BEGIN {
+        pct = (c - b) / b * 100
+        if (pct > 0.05)       printf "↑ +%.1f%%", pct
+        else if (pct < -0.05) printf "↓ %.1f%%", pct
+        else                   printf "— 0%%"
+    }'
+}
+
 # Generate a Markdown comparison report for PR comments
 # Usage: generate_comparison_markdown <comparison_json>
 # Output: Markdown formatted report
@@ -753,24 +818,30 @@ generate_comparison_markdown() {
         local curr_calls base_calls delta_calls
         local curr_in base_in delta_in
         local curr_out base_out delta_out
-        
+        local curr_total base_total delta_total
+
         curr_calls=$(echo "$comparison" | jq -r '.totals.current.llm_calls // 0')
         base_calls=$(echo "$comparison" | jq -r '.totals.baseline.llm_calls // 0')
         delta_calls=$(echo "$comparison" | jq -r '.totals.delta.llm_calls // 0')
-        
+
         curr_in=$(echo "$comparison" | jq -r '.totals.current.tokens.input // 0')
         base_in=$(echo "$comparison" | jq -r '.totals.baseline.tokens.input // 0')
         delta_in=$(echo "$comparison" | jq -r '.totals.delta.tokens_input // 0')
-        
+
         curr_out=$(echo "$comparison" | jq -r '.totals.current.tokens.output // 0')
         base_out=$(echo "$comparison" | jq -r '.totals.baseline.tokens.output // 0')
         delta_out=$(echo "$comparison" | jq -r '.totals.delta.tokens_output // 0')
-        
-        echo "| Metric | Current | Baseline | Delta |"
-        echo "|--------|---------|----------|-------|"
-        echo "| **LLM Calls** | ${curr_calls} | ${base_calls} | $(_format_delta "$delta_calls") |"
-        echo "| **Input Tokens** | ${curr_in} | ${base_in} | $(_format_delta "$delta_in") |"
-        echo "| **Output Tokens** | ${curr_out} | ${base_out} | $(_format_delta "$delta_out") |"
+
+        curr_total=$(echo "$comparison" | jq -r '.totals.current.tokens.total // 0')
+        base_total=$(echo "$comparison" | jq -r '.totals.baseline.tokens.total // 0')
+        delta_total=$(echo "$comparison" | jq -r '.totals.delta.tokens_total // 0')
+
+        echo "| Metric | Current | Baseline | Change |"
+        echo "|--------|---------|----------|--------|"
+        echo "| **LLM Calls** | ${curr_calls} | ${base_calls} | $(_format_delta "$delta_calls") $(_format_pct "$curr_calls" "$base_calls") |"
+        echo "| **Input Tokens** | ${curr_in} | ${base_in} | $(_format_delta "$delta_in") $(_format_pct "$curr_in" "$base_in") |"
+        echo "| **Output Tokens** | ${curr_out} | ${base_out} | $(_format_delta "$delta_out") $(_format_pct "$curr_out" "$base_out") |"
+        echo "| **Total Tokens** | ${curr_total} | ${base_total} | $(_format_delta "$delta_total") $(_format_pct "$curr_total" "$base_total") |"
     else
         local curr_calls curr_in curr_out
         curr_calls=$(echo "$comparison" | jq -r '.totals.current.llm_calls // .totals.llm_calls // 0')
@@ -795,21 +866,28 @@ generate_comparison_markdown() {
         echo ""
         
         if [ "$baseline_available" = "true" ]; then
-            echo "| Test | LLM Calls (Δ) | Input Tokens (Δ) | Output Tokens (Δ) | Trend |"
-            echo "|------|---------------|-----------------|-------------------|-------|"
-            
-            echo "$comparison" | jq -r '.tests[] | 
-                .test_name as $name |
-                .current.llm_calls as $calls |
-                (.delta.llm_calls // "N/A") as $calls_delta |
-                .current.tokens.input as $in |
-                (.delta.tokens_input // "N/A") as $in_delta |
-                .current.tokens.output as $out |
-                (.delta.tokens_output // "N/A") as $out_delta |
-                .trend as $trend |
-                "\($name) | \($calls) (\($calls_delta)) | \($in) (\($in_delta)) | \($out) (\($out_delta)) | \($trend)"' | while IFS= read -r line; do
-                echo "| $line |"
-            done
+            echo "| Test | LLM Calls | Δ | Total Tokens | Δ | Trend |"
+            echo "|------|-----------|---|--------------|---|-------|"
+
+            while IFS= read -r row; do
+                local name calls base_calls delta_calls total base_total delta_total trend
+                name=$(echo "$row" | jq -r '.test_name')
+                calls=$(echo "$row" | jq -r '.current.llm_calls // 0')
+                base_calls=$(echo "$row" | jq -r '.baseline.llm_calls // 0')
+                delta_calls=$(echo "$row" | jq -r '.delta.llm_calls // 0')
+                total=$(echo "$row" | jq -r '(.current.tokens.input // 0) + (.current.tokens.output // 0)')
+                base_total=$(echo "$row" | jq -r '((.baseline.tokens.input // 0) + (.baseline.tokens.output // 0))')
+                delta_total=$(echo "$row" | jq -r '.delta.tokens_total // 0')
+                trend=$(echo "$row" | jq -r '.trend')
+                local trend_icon
+                case "$trend" in
+                    improved)  trend_icon="✅ improved" ;;
+                    regressed) trend_icon="⚠️ regressed" ;;
+                    new_test)  trend_icon="🆕 new" ;;
+                    *)         trend_icon="— unchanged" ;;
+                esac
+                echo "| $name | $calls | $(_format_delta "$delta_calls") $(_format_pct "$calls" "$base_calls") | $total | $(_format_delta "$delta_total") $(_format_pct "$total" "$base_total") | $trend_icon |"
+            done < <(echo "$comparison" | jq -c '.tests[]')
         else
             echo "| Test | LLM Calls | Input Tokens | Output Tokens |"
             echo "|------|-----------|--------------|---------------|"

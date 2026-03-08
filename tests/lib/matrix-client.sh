@@ -216,6 +216,30 @@ matrix_create_dm_room() {
     echo "${result}" | jq -r '.room_id // empty'
 }
 
+# Find a room by name prefix
+# Usage: matrix_find_room_by_name <access_token> <name_pattern>
+# Returns: room_id of first matching room
+matrix_find_room_by_name() {
+    local token="$1"
+    local name_pattern="$2"
+
+    local rooms
+    rooms=$(matrix_joined_rooms "${token}" | jq -r '.joined_rooms[]')
+
+    for room_id in ${rooms}; do
+        local room_enc name
+        room_enc="$(_encode_room_id "${room_id}")"
+        name=$(exec_in_manager curl -sf "${TEST_MATRIX_DIRECT_URL}/_matrix/client/v3/rooms/${room_enc}/state/m.room.name" \
+            -H "Authorization: Bearer ${token}" 2>/dev/null | jq -r '.name // empty')
+        if echo "${name}" | grep -qi "${name_pattern}"; then
+            echo "${room_id}"
+            return 0
+        fi
+    done
+
+    return 1
+}
+
 # Find a DM room between two users
 # Usage: matrix_find_dm_room <access_token> <other_user_id>
 matrix_find_dm_room() {
