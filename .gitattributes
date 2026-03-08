@@ -1,0 +1,41 @@
+# Set default behavior to automatically handle line endings
+* text=auto
+
+# Explicitly declare source files that should always use LF line endings
+*.sh text eol=lf
+*.py text eol=lf
+*.js text eol=lf
+*.ts text eol=lf
+*.go text eol=lf
+*.rs text eol=lf
+
+# Documentation files should use LF
+*.md text eol=lf
+*.txt text eol=lf
+
+# Config files should use LF
+*.yaml text eol=lf
+*.yml text eol=lf
+*.json text eol=lf
+*.toml text eol=lf
+*.xml text eol=lf
+
+# Docker files
+Dockerfile text eol=lf
+*.dockerfile text eol=lf
+
+# Shell scripts must always use LF
+.gitattributes text eol=lf
+Makefile text eol=lf
+
+# Binary files
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.pdf binary
+*.woff binary
+*.woff2 binary
+*.ttf binary
+*.eot binary

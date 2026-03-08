@@ -62,12 +62,26 @@ detect_timezone() {
 
     # Try /etc/localtime symlink (macOS and some Linux)
     if [ -z "${tz}" ] && [ -L /etc/localtime ]; then
-        tz=$(ls -l /etc/localtime 2>/dev/null | sed 's|.*/zoneinfo/||')
+        tz=$(readlink /etc/localtime 2>/dev/null | sed 's|.*/zoneinfo/||')
     fi
 
     # Try timedatectl (systemd)
     if [ -z "${tz}" ]; then
-        tz=$(timedatectl show --value -p Timezone 2>/dev/null)
+        tz=$(timedatectl show --value -p Timezone 2>/dev/null || true)
+    fi
+
+    # Try date command (macOS fallback)
+    if [ -z "${tz}" ]; then
+        tz=$(date +%Z 2>/dev/null | tr -d '[:space:]')
+        # Map common timezone abbreviations to IANA names
+        case "${tz}" in
+            CST) tz="Asia/Shanghai" ;;
+            PST|PDT) tz="America/Los_Angeles" ;;
+            EST|EDT) tz="America/New_York" ;;
+            JST) tz="Asia/Tokyo" ;;
+            KST) tz="Asia/Seoul" ;;
+            *) tz="" ;;  # Unknown abbreviation, will prompt user
+        esac
     fi
 
     # If still not detected, warn and prompt user

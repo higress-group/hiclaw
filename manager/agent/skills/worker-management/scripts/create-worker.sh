@@ -172,7 +172,8 @@ chmod 600 "${WORKER_CREDS_FILE}"
 # ============================================================
 log "Step 1b: Creating MinIO user for ${WORKER_NAME}..."
 POLICY_NAME="worker-${WORKER_NAME}"
-POLICY_FILE=$(mktemp /tmp/minio-policy-XXXXXX.json)
+POLICY_FILE=$(mktemp "${TMPDIR:-/tmp}/minio-policy-XXXXXX.json")
+chmod 600 "${POLICY_FILE}"
 cat > "${POLICY_FILE}" <<POLICY
 {
   "Version": "2012-10-17",

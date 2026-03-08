@@ -24,9 +24,9 @@ HICLAW_VERSION="${HICLAW_VERSION:-latest}"
 
 # Test environment variables
 export TEST_ADMIN_USER="${TEST_ADMIN_USER:-admin}"
-export TEST_ADMIN_PASSWORD="${TEST_ADMIN_PASSWORD:-testpassword123}"
+export TEST_ADMIN_PASSWORD="${TEST_ADMIN_PASSWORD:-$(openssl rand -hex 12)}"
 export TEST_MINIO_USER="${TEST_MINIO_USER:-${TEST_ADMIN_USER}}"
-export TEST_MINIO_PASSWORD="${TEST_MINIO_PASSWORD:-${TEST_ADMIN_PASSWORD}}"
+export TEST_MINIO_PASSWORD="${TEST_MINIO_PASSWORD:-$(openssl rand -hex 12)}"
 export TEST_REGISTRATION_TOKEN="${TEST_REGISTRATION_TOKEN:-test-reg-token-$(openssl rand -hex 8)}"
 export TEST_MATRIX_DOMAIN="${TEST_MATRIX_DOMAIN:-matrix-local.hiclaw.io:18080}"
 export TEST_MANAGER_HOST="${TEST_MANAGER_HOST:-127.0.0.1}"
