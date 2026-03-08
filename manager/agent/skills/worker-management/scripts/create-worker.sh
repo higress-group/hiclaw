@@ -411,17 +411,31 @@ mc stat "hiclaw/hiclaw-storage/agents/${WORKER_NAME}/openclaw.json" > /dev/null 
 log "  MinIO sync verified"
 
 # Push Worker agent files from Manager image (AGENTS.md + file-sync skill)
-WORKER_AGENT_SRC="/opt/hiclaw/agent/worker-agent"
+# Use runtime-specific file-sync skill for copaw workers
+if [ "${WORKER_RUNTIME}" = "copaw" ]; then
+    WORKER_AGENT_SRC="/opt/hiclaw/copaw/agent"
+    FILESYNC_SRC="${WORKER_AGENT_SRC}/skills/file-sync"
+else
+    WORKER_AGENT_SRC="/opt/hiclaw/agent/worker-agent"
+    FILESYNC_SRC="${WORKER_AGENT_SRC}/skills/file-sync"
+fi
+
 if [ -d "${WORKER_AGENT_SRC}" ]; then
     log "  Pushing AGENTS.md (with builtin markers) to worker MinIO..."
-    mc cp "${WORKER_AGENT_SRC}/AGENTS.md" \
+    # Use OpenClaw AGENTS.md for both runtimes (contains builtin markers)
+    mc cp "/opt/hiclaw/agent/worker-agent/AGENTS.md" \
         "hiclaw/hiclaw-storage/agents/${WORKER_NAME}/AGENTS.md" \
         || log "  WARNING: Failed to push AGENTS.md"
-    log "  Pushing file-sync skill to worker MinIO..."
-    mc mirror "${WORKER_AGENT_SRC}/skills/file-sync/" \
-        "hiclaw/hiclaw-storage/agents/${WORKER_NAME}/skills/file-sync/" --overwrite \
-        || log "  WARNING: Failed to push file-sync skill"
-    log "  Worker agent files pushed"
+    
+    if [ -d "${FILESYNC_SRC}" ]; then
+        log "  Pushing file-sync skill (${WORKER_RUNTIME}) to worker MinIO..."
+        mc mirror "${FILESYNC_SRC}/" \
+            "hiclaw/hiclaw-storage/agents/${WORKER_NAME}/skills/file-sync/" --overwrite \
+            || log "  WARNING: Failed to push file-sync skill"
+        log "  Worker agent files pushed"
+    else
+        log "  WARNING: file-sync skill not found at ${FILESYNC_SRC}"
+    fi
 else
     log "  WARNING: worker-agent directory not found at ${WORKER_AGENT_SRC}"
 fi
