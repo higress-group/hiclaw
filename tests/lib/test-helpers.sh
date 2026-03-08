@@ -260,16 +260,27 @@ detect_manager_config() {
     detected_console_port=$(  _cenv HICLAW_PORT_CONSOLE)
     detected_element_port=$(  _cenv HICLAW_PORT_ELEMENT_WEB)
 
-    [ -n "${detected_gateway_port}" ] && export TEST_GATEWAY_PORT="${detected_gateway_port}"
-    [ -n "${detected_console_port}" ] && export TEST_CONSOLE_PORT="${detected_console_port}"
+    # Override defaults with detected values (only if not explicitly set by user)
+    if [ -n "${detected_gateway_port}" ] && [ -z "${TEST_GATEWAY_PORT_SET:-}" ]; then
+        export TEST_GATEWAY_PORT="${detected_gateway_port}"
+        export TEST_MATRIX_URL="http://${TEST_MANAGER_HOST}:${TEST_GATEWAY_PORT}"
+        # Note: TEST_MINIO_URL is NOT updated here. MinIO runs on the fixed internal port 9000
+        # inside the container; mc commands use exec_in_manager so no host port is needed.
+    fi
+
+    if [ -n "${detected_console_port}" ] && [ -z "${TEST_CONSOLE_PORT_SET:-}" ]; then
+        export TEST_CONSOLE_PORT="${detected_console_port}"
+        export TEST_CONSOLE_URL="http://${TEST_MANAGER_HOST}:${TEST_CONSOLE_PORT}"
+    fi
+
     [ -n "${detected_element_port}" ] && export TEST_ELEMENT_PORT="${detected_element_port}"
 
-    # Rebuild derived URLs after port detection
-    export TEST_CONSOLE_URL="http://${TEST_MANAGER_HOST}:${TEST_CONSOLE_PORT}"
-
-    if [ -n "${detected_domain}" ]; then
+    if [ -n "${detected_domain}" ] && [ -z "${TEST_MATRIX_DOMAIN}" ]; then
         export TEST_MATRIX_DOMAIN="${detected_domain}"
-    elif [ -z "${TEST_MATRIX_DOMAIN}" ]; then
+    fi
+
+    # If TEST_MATRIX_DOMAIN is still not set, derive from gateway port
+    if [ -z "${TEST_MATRIX_DOMAIN}" ]; then
         export TEST_MATRIX_DOMAIN="matrix-local.hiclaw.io:${TEST_GATEWAY_PORT}"
     fi
 
@@ -280,6 +291,7 @@ detect_manager_config() {
     [ -z "${TEST_MINIO_PASSWORD}" ]      && export TEST_MINIO_PASSWORD="$(        _cenv HICLAW_MINIO_PASSWORD)"
     [ -z "${TEST_REGISTRATION_TOKEN}" ]  && export TEST_REGISTRATION_TOKEN="$(    _cenv HICLAW_REGISTRATION_TOKEN)"
     [ -z "${HICLAW_LLM_API_KEY}" ]       && export HICLAW_LLM_API_KEY="$(         _cenv HICLAW_LLM_API_KEY)"
+    [ -z "${TEST_MANAGER_GATEWAY_KEY}" ] && export TEST_MANAGER_GATEWAY_KEY="$(   _cenv HICLAW_MANAGER_GATEWAY_KEY)"
 }
 
 # ============================================================
