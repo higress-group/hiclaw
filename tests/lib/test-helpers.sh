@@ -17,8 +17,7 @@ if [ -z "${TEST_MANAGER_CONTAINER}" ]; then
 fi
 
 # Host where the Manager container's exposed ports are reachable
-export TEST_MANAGER_HOST="${TEST_MANAGER_HOST:-127.0.0.1}"
-export TEST_MATRIX_PORT="${TEST_MATRIX_PORT:-6167}"
+export TEST_MANAGER_HOST="127.0.0.1"
 
 # External host ports — auto-detected from container env in detect_manager_config()
 export TEST_GATEWAY_PORT="${TEST_GATEWAY_PORT:-18080}"
@@ -32,8 +31,7 @@ export TEST_MINIO_URL="http://127.0.0.1:9000"
 # Derived external URLs — rebuilt by detect_manager_config() after port detection
 export TEST_CONSOLE_URL="http://${TEST_MANAGER_HOST}:${TEST_CONSOLE_PORT}"
 
-# Matrix domain (used for user IDs like @manager:domain)
-# If not set, will be auto-detected from Manager container
+# Matrix domain — auto-detected from container env in detect_manager_config()
 export TEST_MATRIX_DOMAIN="${TEST_MATRIX_DOMAIN:-}"
 
 # Test state
@@ -262,27 +260,16 @@ detect_manager_config() {
     detected_console_port=$(  _cenv HICLAW_PORT_CONSOLE)
     detected_element_port=$(  _cenv HICLAW_PORT_ELEMENT_WEB)
 
-    # Override defaults with detected values (only if not explicitly set by user)
-    if [ -n "${detected_gateway_port}" ] && [ -z "${TEST_GATEWAY_PORT_SET:-}" ]; then
-        export TEST_GATEWAY_PORT="${detected_gateway_port}"
-        export TEST_MATRIX_URL="http://${TEST_MANAGER_HOST}:${TEST_GATEWAY_PORT}"
-        # Note: TEST_MINIO_URL is NOT updated here. MinIO runs on the fixed internal port 9000
-        # inside the container; mc commands use exec_in_manager so no host port is needed.
-    fi
-
-    if [ -n "${detected_console_port}" ] && [ -z "${TEST_CONSOLE_PORT_SET:-}" ]; then
-        export TEST_CONSOLE_PORT="${detected_console_port}"
-        export TEST_CONSOLE_URL="http://${TEST_MANAGER_HOST}:${TEST_CONSOLE_PORT}"
-    fi
-
+    [ -n "${detected_gateway_port}" ] && export TEST_GATEWAY_PORT="${detected_gateway_port}"
+    [ -n "${detected_console_port}" ] && export TEST_CONSOLE_PORT="${detected_console_port}"
     [ -n "${detected_element_port}" ] && export TEST_ELEMENT_PORT="${detected_element_port}"
+
+    # Rebuild derived URLs after port detection
+    export TEST_CONSOLE_URL="http://${TEST_MANAGER_HOST}:${TEST_CONSOLE_PORT}"
 
     if [ -n "${detected_domain}" ] && [ -z "${TEST_MATRIX_DOMAIN}" ]; then
         export TEST_MATRIX_DOMAIN="${detected_domain}"
-    fi
-
-    # If TEST_MATRIX_DOMAIN is still not set, derive from gateway port
-    if [ -z "${TEST_MATRIX_DOMAIN}" ]; then
+    elif [ -z "${TEST_MATRIX_DOMAIN}" ]; then
         export TEST_MATRIX_DOMAIN="matrix-local.hiclaw.io:${TEST_GATEWAY_PORT}"
     fi
 
