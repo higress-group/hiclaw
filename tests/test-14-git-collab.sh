@@ -94,11 +94,22 @@ TASK_DESCRIPTION="Please coordinate a 4-phase git collaboration workflow to test
 Git repo URL (reachable from all worker containers): ${GIT_REPO_URL}
 The repo has a 'main' branch with an initial commit.
 
+⚠️ CRITICAL WORKER ASSIGNMENT TABLE — MUST FOLLOW EXACTLY, NO EXCEPTIONS:
+
+| Phase | Assigned Worker | Trigger condition                     |
+|-------|-----------------|---------------------------------------|
+| 1     | alice           | start immediately                     |
+| 2     | bob             | ONLY after alice reports PHASE1_DONE  |
+| 3     | alice           | ONLY after bob reports REVISION_NEEDED|
+| 4     | charlie         | ONLY after alice reports PHASE3_DONE  |
+
+DO NOT assign any phase to a different worker. DO NOT give alice phase 2 or phase 4. DO NOT give bob phase 1 or phase 3. DO NOT give charlie any phase except phase 4. Each phase must be done by the worker listed above and no one else.
+
 IMPORTANT: You MUST use the EXACT branch names and file paths specified below. Do not rename, substitute, or simplify them. The verification system checks these exact names.
 
 Ensure workers alice, bob, and charlie exist with the git-delegation skill. Run the phases strictly in order, waiting for each phase's report before starting the next.
 
-**Phase 1 — alice**:
+**Phase 1 — alice (and only alice)**:
 - Clone ${GIT_REPO_URL}
 - Create branch named EXACTLY '${FEATURE_BRANCH}' from main (do not use any other name)
 - Create file at path EXACTLY 'doc/proposal.md' with this content:
@@ -113,7 +124,7 @@ Ensure workers alice, bob, and charlie exist with the git-delegation skill. Run 
 - Commit with message 'feat: add proposal' and push branch '${FEATURE_BRANCH}' to ${GIT_REPO_URL}
 - Report PHASE1_DONE
 
-**Phase 2 — bob** (only after alice reports PHASE1_DONE):
+**Phase 2 — bob and only bob** (assign to bob, NOT alice, only after alice reports PHASE1_DONE):
 - Clone ${GIT_REPO_URL}, check out branch '${FEATURE_BRANCH}', read doc/proposal.md
 - Create branch named EXACTLY '${REVIEW_BRANCH}' from '${FEATURE_BRANCH}' (do not use any other name)
 - Create file at path EXACTLY 'reviews/proposal-review.md' with this content:
@@ -123,14 +134,14 @@ Ensure workers alice, bob, and charlie exist with the git-delegation skill. Run 
 - Commit 'review: request summary section' and push branch '${REVIEW_BRANCH}' to ${GIT_REPO_URL}
 - Report REVISION_NEEDED
 
-**Phase 3 — alice** (only after bob reports REVISION_NEEDED):
+**Phase 3 — alice and only alice** (assign back to alice, NOT bob, only after bob reports REVISION_NEEDED):
 - Work on branch '${FEATURE_BRANCH}' (not a new branch)
 - Read bob's review file at path 'reviews/proposal-review.md' on branch '${REVIEW_BRANCH}'
 - Edit 'doc/proposal.md' on branch '${FEATURE_BRANCH}': add a '## Summary' section immediately after the '# Project Proposal' title line, with one sentence describing the project
 - Commit 'fix: add summary section per review' and push branch '${FEATURE_BRANCH}' to ${GIT_REPO_URL}
 - Report PHASE3_DONE
 
-**Phase 4 — charlie** (only after alice reports PHASE3_DONE):
+**Phase 4 — charlie and only charlie** (assign to charlie, NOT alice or bob, only after alice reports PHASE3_DONE):
 - Clone ${GIT_REPO_URL}, create branch named EXACTLY '${TEST_BRANCH}' from '${FEATURE_BRANCH}' (do not use any other name)
 - Create file at path EXACTLY 'verify/checklist.md' confirming: (1) proposal.md has a Summary section, (2) Goals section is present, (3) review was addressed
 - Commit 'verify: proposal review checklist' and push branch '${TEST_BRANCH}' to ${GIT_REPO_URL}
