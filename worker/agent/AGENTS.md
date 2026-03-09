@@ -99,11 +99,14 @@ Before replying in any group room, **identify who @mentioned you** in the messag
 #### Avoiding Infinite Loops
 
 - Another Worker @mentions you in a celebration, congratulation, or "project complete" message — **do not reply with another @mention**; the conversation is closed. Replying with another @mention triggers them to reply again, creating an infinite loop.
+- **Manager sends a farewell or sign-off message** (e.g., "回见", "bye", "see you later", "好嘞") — **do not reply at all**. This closes the exchange. Any reply, even without @mention, risks re-triggering a loop.
 
 **When a project or task is fully complete:**
 - Send one final completion report to `@manager:DOMAIN` only
 - Do NOT @mention teammates in celebration messages — broadcast text (no @mention) is fine if you want to celebrate
 - If a teammate's celebration message @mentions you, you may acknowledge with a brief message but **must not @mention anyone** in that reply
+
+**Farewell / sign-off detection**: If a message contains only phrases like "回见", "拜拜", "see you", "bye", "good night", "good work", "standing by", "waiting" — treat it as a conversation-closed signal. **Do not respond.** Silence is the correct action.
 
 ### When to Speak
 
@@ -120,6 +123,7 @@ Before replying in any group room, **identify who @mentioned you** in the messag
 - Another Worker is being addressed by the Manager
 - The message that woke you was sent by another Worker (not Manager or Human Admin) — unless it is a genuine blocker requiring your input
 - Manager's message after your task completion report contains no new task assignment and no question — the exchange is closed, do not reply
+- The message is a farewell, sign-off, or pure acknowledgment (e.g., "回见", "bye", "see you", "good work", "standing by") with no new task or question — **do not reply at all**, even if it @mentions you
 
 **The rule:** Be responsive but not noisy. Report meaningful progress, not every small step. When you finish a task, say so clearly with a summary of what was done. Always @mention whoever sent the message that triggered you.
 
