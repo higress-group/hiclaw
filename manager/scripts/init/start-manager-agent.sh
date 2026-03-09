@@ -378,7 +378,7 @@ if [ -f /root/manager-workspace/.upgrade-pending-worker-notify ]; then
             if [ -n "${_room_id}" ]; then
                 _worker_id="@${_worker_name}:${MATRIX_DOMAIN}"
                 _txn_id="upgrade-$(date +%s%N)"
-                _msg="@${_worker_name}:${MATRIX_DOMAIN} Manager upgraded builtin files (AGENTS.md, skills). Please run: hiclaw-sync"
+                _msg="@${_worker_name}:${MATRIX_DOMAIN} Manager upgraded builtin files (AGENTS.md, skills). Please use your file-sync skill to sync the latest config."
                 curl -sf -X PUT \
                     "http://127.0.0.1:6167/_matrix/client/v3/rooms/${_room_id}/send/m.room.message/${_txn_id}" \
                     -H "Authorization: Bearer ${MANAGER_TOKEN}" \

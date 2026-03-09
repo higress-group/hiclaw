@@ -1,0 +1,202 @@
+"""MinIO file sync for copaw-worker.
+
+All MinIO operations use the `mc` CLI (MinIO Client).
+Pulls openclaw.json, SOUL.md, AGENTS.md, and skills from MinIO bucket.
+Runs a background loop that re-pulls on interval and calls on_pull callback.
+"""
+from __future__ import annotations
+
+import asyncio
+import json
+import logging
+import shutil
+import subprocess
+from pathlib import Path
+from typing import Any, Callable, Coroutine, Optional
+
+logger = logging.getLogger(__name__)
+
+# mc alias name used for this worker session
+_MC_ALIAS = "hiclaw"
+
+
+def _mc(*args: str, check: bool = True) -> subprocess.CompletedProcess:
+    """Run an mc command and return the result."""
+    mc_bin = shutil.which("mc")
+    if not mc_bin:
+        raise RuntimeError("mc binary not found on PATH. Please install mc first.")
+    cmd = [mc_bin, *args]
+    logger.debug("mc cmd: %s", " ".join(cmd))
+    return subprocess.run(cmd, capture_output=True, text=True, check=check)
+
+
+class FileSync:
+    """MinIO file sync using mc CLI."""
+
+    def __init__(
+        self,
+        endpoint: str,
+        access_key: str,
+        secret_key: str,
+        bucket: str,
+        worker_name: str,
+        secure: bool = False,
+        local_dir: Optional[Path] = None,
+    ) -> None:
+        self.endpoint = endpoint.rstrip("/")
+        self.access_key = access_key
+        self.secret_key = secret_key
+        self.bucket = bucket
+        self.worker_name = worker_name
+        self._secure = secure
+        self.local_dir = local_dir or Path.home() / ".copaw-worker" / worker_name
+        self.local_dir.mkdir(parents=True, exist_ok=True)
+        self._prefix = f"agents/{worker_name}"
+        self._alias_set = False
+
+    # ------------------------------------------------------------------
+    # mc alias management
+    # ------------------------------------------------------------------
+
+    def _ensure_alias(self) -> None:
+        """Set up mc alias (idempotent)."""
+        if self._alias_set:
+            return
+        # endpoint may already include scheme
+        if self.endpoint.startswith("http"):
+            url = self.endpoint
+        else:
+            scheme = "https" if self._secure else "http"
+            url = f"{scheme}://{self.endpoint}"
+        _mc("alias", "set", _MC_ALIAS, url, self.access_key, self.secret_key)
+        self._alias_set = True
+
+    # ------------------------------------------------------------------
+    # Internal helpers
+    # ------------------------------------------------------------------
+
+    def _object_path(self, key: str) -> str:
+        """Return full mc path: alias/bucket/key"""
+        return f"{_MC_ALIAS}/{self.bucket}/{key}"
+
+    def _cat(self, key: str) -> Optional[str]:
+        """Download object content as text using mc cat."""
+        self._ensure_alias()
+        try:
+            result = _mc("cat", self._object_path(key), check=True)
+            return result.stdout
+        except subprocess.CalledProcessError as exc:
+            logger.debug("mc cat failed for %s: %s", key, exc.stderr)
+            return None
+        except Exception as exc:
+            logger.debug("mc cat error for %s: %s", key, exc)
+            return None
+
+    def _ls(self, prefix: str) -> list[str]:
+        """List objects under prefix, return list of relative names."""
+        self._ensure_alias()
+        try:
+            result = _mc("ls", "--recursive", self._object_path(prefix), check=True)
+            names = []
+            for line in result.stdout.splitlines():
+                # mc ls output: "2024-01-01 00:00:00   1234 filename"
+                parts = line.strip().split()
+                if parts:
+                    names.append(parts[-1])
+            return names
+        except subprocess.CalledProcessError as exc:
+            logger.debug("mc ls failed for %s: %s", prefix, exc.stderr)
+            return []
+        except Exception as exc:
+            logger.debug("mc ls error for %s: %s", prefix, exc)
+            return []
+
+    # ------------------------------------------------------------------
+    # Public API
+    # ------------------------------------------------------------------
+
+    def get_config(self) -> dict[str, Any]:
+        """Pull openclaw.json and return parsed dict."""
+        text = self._cat(f"{self._prefix}/openclaw.json")
+        if not text:
+            raise RuntimeError(f"openclaw.json not found in MinIO for worker {self.worker_name}")
+        return json.loads(text)
+
+    def get_soul(self) -> Optional[str]:
+        return self._cat(f"{self._prefix}/SOUL.md")
+
+    def get_agents_md(self) -> Optional[str]:
+        return self._cat(f"{self._prefix}/AGENTS.md")
+
+    def list_skills(self) -> list[str]:
+        """Return list of skill names available in MinIO for this worker."""
+        prefix = f"{self._prefix}/skills/"
+        entries = self._ls(prefix)
+        # entries look like "skill-name/SKILL.md"
+        skill_names: list[str] = []
+        seen: set[str] = set()
+        for entry in entries:
+            parts = entry.rstrip("/").split("/")
+            if parts:
+                name = parts[0]
+                if name and name not in seen:
+                    seen.add(name)
+                    skill_names.append(name)
+        return skill_names
+
+    def get_skill_md(self, skill_name: str) -> Optional[str]:
+        """Pull SKILL.md for a given skill name."""
+        return self._cat(f"{self._prefix}/skills/{skill_name}/SKILL.md")
+
+    def pull_all(self) -> list[str]:
+        """Pull all known files; return list of filenames that changed."""
+        changed: list[str] = []
+        files = {
+            "openclaw.json": f"{self._prefix}/openclaw.json",
+            "SOUL.md": f"{self._prefix}/SOUL.md",
+            "AGENTS.md": f"{self._prefix}/AGENTS.md",
+        }
+        for name, key in files.items():
+            content = self._cat(key)
+            if content is None:
+                continue
+            local = self.local_dir / name
+            existing = local.read_text() if local.exists() else None
+            if content != existing:
+                local.write_text(content)
+                changed.append(name)
+
+        # Also check for skill changes
+        for skill_name in self.list_skills():
+            skill_md = self.get_skill_md(skill_name)
+            if skill_md is None:
+                continue
+            local = self.local_dir / "skills" / skill_name / "SKILL.md"
+            existing = local.read_text() if local.exists() else None
+            if skill_md != existing:
+                local.parent.mkdir(parents=True, exist_ok=True)
+                local.write_text(skill_md)
+                changed.append(f"skills/{skill_name}/SKILL.md")
+
+        return changed
+
+
+async def sync_loop(
+    sync: FileSync,
+    interval: int,
+    on_pull: Callable[[list[str]], Coroutine],
+) -> None:
+    """Background task: pull files every `interval` seconds."""
+    while True:
+        await asyncio.sleep(interval)
+        try:
+            changed = await asyncio.get_event_loop().run_in_executor(
+                None, sync.pull_all
+            )
+            if changed:
+                logger.info("FileSync: files changed: %s", changed)
+                await on_pull(changed)
+        except asyncio.CancelledError:
+            break
+        except Exception as exc:
+            logger.warning("FileSync: sync error: %s", exc)

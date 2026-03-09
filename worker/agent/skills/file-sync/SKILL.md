@@ -5,14 +5,21 @@ description: Sync files with centralized storage. Use when Manager or another Wo
 
 # File Sync
 
-When the Manager or another Worker notifies you that files have been updated in centralized storage (e.g., config changes, task briefs, shared data, collaboration artifacts), run:
+When the Manager or another Worker notifies you that files have been updated in centralized storage, run:
 
 ```bash
-bash /opt/hiclaw/agent/skills/file-sync/scripts/hiclaw-sync.sh
+hiclaw-sync
 ```
 
-This pulls the latest files from centralized storage to your local workspace. OpenClaw automatically detects config changes and hot-reloads within ~300ms.
+This mirrors MinIO to your local workspace:
 
-**When to use**: any time you are told that new files are available, configs have changed, or another agent has written something you need to read.
+| MinIO path | Local path |
+|---|---|
+| `hiclaw/hiclaw-storage/agents/<your-name>/` | `/root/hiclaw-fs/agents/<your-name>/` |
+| `hiclaw/hiclaw-storage/shared/` | `/root/hiclaw-fs/shared/` |
 
-Always confirm to the sender after sync completes.
+So when the Manager gives you a MinIO path like `hiclaw/hiclaw-storage/shared/tasks/{task-id}/spec.md`, after running `hiclaw-sync` you can read it at `/root/hiclaw-fs/shared/tasks/{task-id}/spec.md`.
+
+OpenClaw automatically detects config changes and hot-reloads within ~300ms.
+
+**Always confirm** to the sender after sync completes.

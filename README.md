@@ -1,4 +1,3 @@
-<a name="readme-top"></a>
 <h1 align="center">
     <img src="https://img.alicdn.com/imgextra/i3/O1CN01JLLvVU21EWyG90gbi_!!6000000006953-2-tps-2539-575.png" alt="HiClaw"  width="290" height="72.5">
   <br>
@@ -269,7 +268,7 @@ make help  # All available targets
 - WeChat Group — scan to join:
 
 <p align="center">
-  <img src="https://img.alicdn.com/imgextra/i4/O1CN01OcQaeW22jxljbSKrs_!!6000000007157-2-tps-748-730.png" width="200" alt="WeChat Group" />
+  <img src="https://img.alicdn.com/imgextra/i1/O1CN01tTIeig1tQQKXGHvHV_!!6000000005896-2-tps-738-730.png" width="200" alt="WeChat Group" />
 </p>
 
 ## License

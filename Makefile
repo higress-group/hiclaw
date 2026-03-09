@@ -308,6 +308,7 @@ ifndef SKIP_BUILD
 endif
 	@echo "==> Installing HiClaw Manager (non-interactive)..."
 	HICLAW_NON_INTERACTIVE=1 HICLAW_VERSION=$(VERSION) HICLAW_MOUNT_SOCKET=1 \
+		HICLAW_LLM_PROVIDER=qwen \
 		HICLAW_INSTALL_MANAGER_IMAGE=$(LOCAL_MANAGER) \
 		HICLAW_INSTALL_WORKER_IMAGE=$(LOCAL_WORKER) \
 		./install/hiclaw-install.sh manager

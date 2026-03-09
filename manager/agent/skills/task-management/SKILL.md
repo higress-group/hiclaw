@@ -53,7 +53,10 @@ Ask admin: enable find-skills (recommended) or disable; optionally provide custo
    }
    # spec.md — complete requirements, acceptance criteria, context
    ```
-3. Notify Worker in their Room: `@{worker}:{domain} New task [{task-id}]: {title}. Spec: /root/hiclaw-fs/shared/tasks/{task-id}/spec.md. @mention me when complete.`
+3. Notify Worker in their Room:
+   ```
+   @{worker}:{domain} New task [{task-id}]: {title}. Use your file-sync skill to pull the spec: hiclaw/hiclaw-storage/shared/tasks/{task-id}/spec.md. @mention me when complete.
+   ```
    - If Worker has `find-skills` skill (`test -d /root/hiclaw-fs/agents/{worker}/skills/find-skills`), add: `💡 Run \`skills find <keyword>\` if you need additional capabilities.`
 4. Add to `state.json` `active_tasks`
 5. On completion: update `meta.json` status=completed + completed_at, remove from `state.json`, log to `memory/YYYY-MM-DD.md`

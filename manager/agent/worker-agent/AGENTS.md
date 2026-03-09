@@ -63,37 +63,33 @@ Both can see everything you say in either room.
 
 ### @Mention Protocol (Critical)
 
-OpenClaw only wakes an agent when **explicitly @mentioned**. Use @mentions to trigger a response from someone — not just to inform them.
+OpenClaw only wakes an agent when **explicitly @mentioned** with the full Matrix user ID. A message without a valid @mention is silently dropped — the recipient never sees it.
 
-**The core rule: @mention someone only when you need them to act or respond. For broadcast updates (progress, status), no @mention is needed.**
-
-#### When to @mention
-
-| Situation | Who to @mention |
-|-----------|----------------|
-| Replying to the Manager's message | `@manager:${HICLAW_MATRIX_DOMAIN}` |
-| Replying to the Human admin's message | `@${HICLAW_ADMIN_USER}:${HICLAW_MATRIX_DOMAIN}` |
-| Task completed — need Manager to acknowledge | `@manager:DOMAIN` |
-| Blocked — need Manager or admin to unblock you | `@manager:DOMAIN` or `@admin:DOMAIN` |
-| Need clarification from Manager | `@manager:DOMAIN` |
-| Critical info for another Worker that blocks their work | `@worker:DOMAIN` |
-| Broadcasting progress mid-task (no response needed) | No @mention |
-
-#### Reporting formats
-
-Task completion (triggers Manager response):
-```
-@manager:DOMAIN task-{task-id} completed: <one-line summary>
+**Get the actual Matrix domain at runtime before sending any @mention:**
+```bash
+echo $HICLAW_MATRIX_DOMAIN
+# example: matrix-local.hiclaw.io:18080
 ```
 
-Blocker (triggers Manager or admin response):
-```
-@manager:DOMAIN task-{task-id} blocked: <brief description>
-```
+Substitute that real value everywhere below. **Never write `${HICLAW_MATRIX_DOMAIN}` or `DOMAIN` literally in a message** — those are not valid mentions.
 
-Progress update (no response needed — just informing the room):
+#### When to @mention Manager
+
+You MUST @mention Manager (using the full domain from `echo $HICLAW_MATRIX_DOMAIN`) in these situations:
+
+| Situation | Format |
+|-----------|--------|
+| Task or phase completed | `@manager:matrix-local.hiclaw.io:18080 PHASE1_DONE: <summary>` |
+| Blocked — need help | `@manager:matrix-local.hiclaw.io:18080 BLOCKED: <what's blocking you>` |
+| Need clarification | `@manager:matrix-local.hiclaw.io:18080 QUESTION: <your question>` |
+| Replying to Manager's message | `@manager:matrix-local.hiclaw.io:18080 <your reply>` |
+| Critical info for another Worker | `@worker-name:matrix-local.hiclaw.io:18080 <info>` |
+
+**Phase completion reports MUST always @mention Manager** — this is what triggers the Manager to proceed to the next phase. A completion message without @mention is silently dropped and the workflow stalls.
+
+Mid-task progress updates (informational only, no action needed from Manager) do not need @mention:
 ```
-task-{task-id} progress: <what you just finished, what's next>
+Progress: finished step 2, starting step 3
 ```
 
 ### When to Speak
@@ -113,7 +109,7 @@ task-{task-id} progress: <what you just finished, what's next>
 
 ### File Sync
 
-When the Manager or another Worker tells you files have been updated (configs, task briefs, shared data), run:
+When the Manager or another Worker tells you files have been updated (configs, task briefs, shared data), use your `file-sync` skill:
 
 ```bash
 hiclaw-sync
@@ -127,7 +123,7 @@ This pulls the latest files from centralized storage. OpenClaw auto-detects conf
 
 When you receive a task from the Manager:
 
-1. Sync files first: `hiclaw-sync`
+1. Sync files first: use your `file-sync` skill to pull the task directory from MinIO
 2. Read the task spec at the path provided (usually `~/hiclaw-fs/shared/tasks/{task-id}/spec.md`)
 3. **Create `plan.md` in the task directory** before starting work (see Task Directory Rules below)
 4. Execute the task using your skills and tools, keeping all intermediate artifacts in the task directory

@@ -118,7 +118,7 @@ Pass the matched skills as a comma-separated string to `--skills`, e.g. `file-sy
 The script handles everything: Matrix registration, room creation, Higress consumer, AI/MCP authorization, config generation, MinIO sync, skills push, and container startup.
 
 ```bash
-bash /opt/hiclaw/agent/skills/worker-management/scripts/create-worker.sh --name <WORKER_NAME> [--model <MODEL_ID>] [--mcp-servers s1,s2] [--skills s1,s2] [--find-skills] [--skills-api-url <URL>] [--remote]
+bash /opt/hiclaw/agent/skills/worker-management/scripts/create-worker.sh --name <WORKER_NAME> [--model <MODEL_ID>] [--mcp-servers s1,s2] [--skills s1,s2] [--find-skills] [--skills-api-url <URL>] [--remote] [--runtime openclaw|copaw]
 ```
 
 **Parameters**:
@@ -129,6 +129,16 @@ bash /opt/hiclaw/agent/skills/worker-management/scripts/create-worker.sh --name 
 - `--find-skills`: enable find-skills capability (allows Worker to discover and install skills from skills.sh or private registry)
 - `--skills-api-url`: custom skills registry URL (default: https://skills.sh). Only used when `--find-skills` is set
 - `--remote`: force output install command instead of starting container locally
+- `--runtime`: `openclaw` (default) or `copaw`. Use `copaw` for Python-based Workers that run via `pip install copaw-worker` instead of a container image
+
+**Runtime: `copaw`**
+
+When `--runtime copaw` is specified:
+- Container startup is skipped entirely (copaw workers are pip-installed processes, not containers)
+- `status` is always `"pending_install"` — the admin must run the `install_cmd` on the target machine
+- The install command does **not** include `--console-port` by default (~100MB RAM). To enable the web console, append `--console-port 8088` to the command — note this adds ~500MB RAM overhead. If port 8088 is already in use, change it to another free port.
+- The worker entry in `workers-registry.json` will have `"runtime": "copaw"`
+- Lifecycle management (auto-stop/start) is skipped for copaw workers — they are treated like remote workers
 
 **Deployment behavior** (without `--remote`):
 - If container socket is available: auto-starts Worker container locally
@@ -183,6 +193,8 @@ The Worker will greet the room. After the Worker's greeting, send a follow-up ad
 
 ```
 @${HICLAW_ADMIN_USER}:${HICLAW_MATRIX_DOMAIN} <WORKER_NAME> is ready. When giving them tasks or instructions, remember to @mention them so they see your message.
+
+Note: By default, Workers can only be @mentioned by you (Manager) and the human admin — not by other Workers. This prevents accidental mutual-mention loops between Workers. If a project requires Workers to coordinate directly with each other, that can be enabled explicitly per-project.
 ```
 
 ## Monitor Workers
@@ -263,7 +275,7 @@ The `update-model` action:
 1. Resolves the correct `contextWindow` and `maxTokens` for the given model (same mapping as Manager startup)
 2. Patches the Worker's `openclaw.json` in MinIO in-place (preserves all other config)
 3. Updates `workers-registry.json` with the new model name
-4. Sends a Matrix @mention to the Worker asking it to run `hiclaw-sync` to pick up the change
+4. Sends a Matrix @mention to the Worker asking it to use the `file-sync` skill to pick up the change
 
 If the Worker container is stopped, the config is still updated in MinIO — it will take effect on next start.
 
@@ -283,6 +295,25 @@ jq '.idle_timeout_minutes = 60' ~/worker-lifecycle.json > /tmp/lc.json && mv /tm
 | Container is stopped | `lifecycle-worker.sh --action start` | Restarts the existing container, preserving all config and mounts |
 | Container does not exist (`not_found`) | `create-worker.sh` | Rebuilds from image; full registration flow required |
 | Worker needs reset or config update | `create-worker.sh` (removes old container first) | Full rebuild; Matrix account is reused |
+| copaw runtime worker | `copaw-worker run --name <name> ...` (on target machine) | Not container-managed; lifecycle scripts skip these workers |
+
+## Enable Peer Mentions Between Workers
+
+By default, Workers can only be @mentioned by Manager and the human admin — not by each other. This prevents infinite mutual-mention loops in project rooms.
+
+When the human admin explicitly requests that certain Workers should be able to trigger each other directly (e.g., for async handoffs without Manager relay), use:
+
+```bash
+bash /opt/hiclaw/agent/skills/worker-management/scripts/enable-peer-mentions.sh \
+    --workers alice,bob,charlie
+```
+
+This script:
+1. Adds each Worker in the group to every other Worker's `groupAllowFrom`
+2. Pushes the updated `openclaw.json` to MinIO for each affected Worker
+3. Sends a Matrix @mention to each updated Worker asking them to run `hiclaw-sync`
+
+**Important**: Brief the Workers after enabling peer mentions — remind them **not to @mention each other in celebration or acknowledgment messages**, only when they have blocking information that cannot go through Manager. Uncontrolled inter-worker @mentions cause response loops.
 
 ## Reset a Worker
 
@@ -309,6 +340,7 @@ Format:
     "<worker-name>": {
       "matrix_user_id": "@<name>:<domain>",
       "room_id": "!xxx:<domain>",
+      "runtime": "openclaw",
       "skills": ["file-sync", "github-operations"],
       "created_at": "2026-01-01T00:00:00Z",
       "skills_updated_at": "2026-01-01T00:00:00Z"
@@ -316,6 +348,8 @@ Format:
   }
 }
 ```
+
+`runtime` is `"openclaw"` (default, container-based) or `"copaw"` (pip-installed Python process). Omitted field defaults to `"openclaw"` for backward compatibility.
 
 `file-sync` is the bootstrap skill (image-managed) and is always included.
 
@@ -349,7 +383,7 @@ bash /opt/hiclaw/agent/skills/worker-management/scripts/push-worker-skills.sh --
 bash /opt/hiclaw/agent/skills/worker-management/scripts/push-worker-skills.sh --worker <name> --no-notify
 ```
 
-After pushing skills, the script notifies the affected Worker(s) via Matrix @mention to run `hiclaw-sync`. Workers' periodic 5-minute sync also serves as a fallback.
+After pushing skills, the script notifies the affected Worker(s) via Matrix @mention to use the `file-sync` skill. Workers' periodic 5-minute sync also serves as a fallback.
 
 ### How to Add a New Custom Skill
 
@@ -366,6 +400,6 @@ After pushing skills, the script notifies the affected Worker(s) via Matrix @men
 - Workers are **stateless containers** -- all state is in MinIO. Resetting a Worker just means recreating its config files
 - Worker Matrix accounts persist in Tuwunel (cannot be deleted via API). Reuse same username on reset
 - OpenClaw config hot-reload: file-watch (~300ms) or `config.patch` API
-- **File sync**: after writing any file that a Worker (or another Worker) needs to read, always notify the target Worker via Matrix to run `hiclaw-sync`. This applies to config updates, task briefs, shared data, and cross-Worker collaboration artifacts. Workers have a `file-sync` skill for this. Background periodic sync (every 5 minutes) serves as fallback only
+- **File sync**: after writing any file that a Worker (or another Worker) needs to read, always notify the target Worker via Matrix to use their `file-sync` skill. This applies to config updates, task briefs, shared data, and cross-Worker collaboration artifacts. The exact sync command varies by runtime — the Worker's `file-sync` SKILL.md defines how to execute it. Background periodic sync (every 5 minutes) serves as fallback only
 - **Skills are Manager-controlled**: Workers cannot modify their own skills (local→remote sync excludes `skills/**`). Only Manager can push skill changes via `push-worker-skills.sh`
 

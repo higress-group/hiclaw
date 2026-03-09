@@ -106,13 +106,20 @@ _push_skill_to_worker() {
     local skill_dst="hiclaw/hiclaw-storage/agents/${worker}/skills/${skill}/"
 
     if [ "${skill}" = "file-sync" ]; then
-        # file-sync is now managed by Manager's worker-agent/ directory
-        local file_sync_src="/opt/hiclaw/agent/worker-agent/skills/file-sync"
+        # Use runtime-specific file-sync skill
+        local worker_runtime
+        worker_runtime=$(echo "${REGISTRY}" | jq -r --arg w "${worker}" '.workers[$w].runtime // "openclaw"')
+        local file_sync_src
+        if [ "${worker_runtime}" = "copaw" ]; then
+            file_sync_src="/opt/hiclaw/agent/copaw-worker-agent/skills/file-sync"
+        else
+            file_sync_src="/opt/hiclaw/agent/worker-agent/skills/file-sync"
+        fi
         if [ ! -d "${file_sync_src}" ]; then
             log "  WARNING: file-sync source not found: ${file_sync_src}"
             return 1
         fi
-        log "  Pushing skill 'file-sync' to worker '${worker}'..."
+        log "  Pushing skill 'file-sync' (runtime=${worker_runtime}) to worker '${worker}'..."
         mc mirror "${file_sync_src}/" "hiclaw/hiclaw-storage/agents/${worker}/skills/file-sync/" --overwrite \
             2>&1 | tail -3 || {
             log "  WARNING: Failed to push skill 'file-sync' to worker '${worker}'"
@@ -162,7 +169,7 @@ _notify_worker() {
         return 0
     fi
 
-    local msg="@${worker}:${MATRIX_DOMAIN} 我已向你的工作区推送了以下 skills 更新：[${skills_list}]。请运行以下命令同步：hiclaw-sync"
+    local msg="@${worker}:${MATRIX_DOMAIN} 我已向你的工作区推送了以下 skills 更新：[${skills_list}]。请使用 file-sync 技能同步最新文件。"
     local worker_id="@${worker}:${MATRIX_DOMAIN}"
 
     local txn_id

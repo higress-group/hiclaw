@@ -372,7 +372,7 @@ action_update_model() {
         "$REGISTRY_FILE" > "$tmp_reg" && mv "$tmp_reg" "$REGISTRY_FILE"
     _log "Registry updated: ${worker}.model = ${new_model}"
 
-    # Notify worker to run hiclaw-sync
+    # Notify worker to use file-sync skill
     local room_id
     room_id=$(jq -r --arg w "$worker" '.workers[$w].room_id // empty' "$REGISTRY_FILE" 2>/dev/null)
     local matrix_domain="${HICLAW_MATRIX_DOMAIN:-matrix-local.hiclaw.io:8080}"
@@ -391,9 +391,9 @@ action_update_model() {
             "http://127.0.0.1:6167/_matrix/client/v3/rooms/${room_id}/send/m.room.message/${txn_id}" \
             -H "Authorization: Bearer ${manager_token}" \
             -H 'Content-Type: application/json' \
-            -d "{\"msgtype\":\"m.text\",\"body\":\"@${worker}:${matrix_domain} Your model has been updated to \`${new_model}\`. Please run: hiclaw-sync\",\"m.mentions\":{\"user_ids\":[\"@${worker}:${matrix_domain}\"]}}" \
+            -d "{\"msgtype\":\"m.text\",\"body\":\"@${worker}:${matrix_domain} Your model has been updated to \`${new_model}\`. Please use your file-sync skill to sync the latest config.\",\"m.mentions\":{\"user_ids\":[\"@${worker}:${matrix_domain}\"]}}" \
             > /dev/null 2>&1 \
-            && _log "Notified @${worker} to run hiclaw-sync" \
+            && _log "Notified @${worker} to use file-sync skill" \
             || _log "WARNING: Failed to notify @${worker} (container may be stopped)"
     else
         _log "WARNING: Could not send Matrix notification (missing room_id or token)"
