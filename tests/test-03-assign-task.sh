@@ -70,9 +70,10 @@ log_info "Tasks directory contents: ${TASKS_LIST}"
 
 log_section "Collect Metrics"
 wait_for_session_stable 5 60
+PREV_METRICS=$(cat "${TEST_OUTPUT_DIR}/metrics-03-assign-task.json" 2>/dev/null || true)
 METRICS=$(collect_delta_metrics "03-assign-task" "$METRICS_BASELINE" "alice")
+print_metrics_report "$METRICS" "$PREV_METRICS"
 save_metrics_file "$METRICS" "03-assign-task"
-print_metrics_report "$METRICS"
 
 test_teardown "03-assign-task"
 test_summary

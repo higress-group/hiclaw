@@ -74,9 +74,10 @@ log_info "Shared tasks directory: ${TASKS}"
 
 log_section "Collect Metrics"
 wait_for_session_stable 5 60
+PREV_METRICS=$(cat "${TEST_OUTPUT_DIR}/metrics-06-multi-worker.json" 2>/dev/null || true)
 METRICS=$(collect_delta_metrics "06-multi-worker" "$METRICS_BASELINE" "alice" "bob")
+print_metrics_report "$METRICS" "$PREV_METRICS"
 save_metrics_file "$METRICS" "06-multi-worker"
-print_metrics_report "$METRICS"
 
 test_teardown "06-multi-worker"
 test_summary

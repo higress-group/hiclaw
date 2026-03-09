@@ -68,9 +68,10 @@ fi
 
 log_section "Collect Metrics"
 wait_for_session_stable 5 60
+PREV_METRICS=$(cat "${TEST_OUTPUT_DIR}/metrics-05-heartbeat.json" 2>/dev/null || true)
 METRICS=$(collect_delta_metrics "05-heartbeat" "$METRICS_BASELINE" "alice")
+print_metrics_report "$METRICS" "$PREV_METRICS"
 save_metrics_file "$METRICS" "05-heartbeat"
-print_metrics_report "$METRICS"
 
 test_teardown "05-heartbeat"
 test_summary

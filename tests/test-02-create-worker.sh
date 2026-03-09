@@ -102,9 +102,10 @@ log_section "Collect Metrics"
 
 # Wait for Manager to finish all post-reply processing before collecting metrics
 wait_for_session_stable 5 60
+PREV_METRICS=$(cat "${TEST_OUTPUT_DIR}/metrics-02-create-worker.json" 2>/dev/null || true)
 METRICS=$(collect_delta_metrics "02-create-worker" "$METRICS_BASELINE")
+print_metrics_report "$METRICS" "$PREV_METRICS"
 save_metrics_file "$METRICS" "02-create-worker"
-print_metrics_report "$METRICS"
 
 test_teardown "02-create-worker"
 test_summary

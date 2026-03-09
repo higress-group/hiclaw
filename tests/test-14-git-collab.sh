@@ -200,9 +200,10 @@ log_pass "Workflow complete — Manager's message: $(echo "${COMPLETION_MSG}" | 
 log_section "Collect Metrics"
 
 wait_for_session_stable 5 60
+PREV_METRICS=$(cat "${TEST_OUTPUT_DIR}/metrics-14-git-collab.json" 2>/dev/null || true)
 METRICS=$(collect_delta_metrics "14-git-collab" "$METRICS_BASELINE" "alice" "bob" "charlie")
+print_metrics_report "$METRICS" "$PREV_METRICS"
 save_metrics_file "$METRICS" "14-git-collab"
-print_metrics_report "$METRICS"
 
 log_section "Cleanup"
 

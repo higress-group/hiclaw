@@ -470,16 +470,19 @@ collect_test_metrics() {
 # ============================================================
 
 # Print a formatted metrics report to stdout, comparing with previous saved run.
-# Usage: print_metrics_report <metrics_json>
-# Automatically loads the previously saved metrics file for this test as baseline.
+# Usage: print_metrics_report <metrics_json> [baseline_json]
+# If baseline_json is omitted, loads the previously saved metrics file for this test.
+# Call BEFORE save_metrics_file to get a meaningful comparison.
 print_metrics_report() {
     local metrics="$1"
-    local test_name
-    test_name=$(echo "$metrics" | jq -r '.test_name // empty')
-    local baseline=""
-    if [ -n "$test_name" ]; then
-        local prev_file="${TEST_OUTPUT_DIR}/metrics-${test_name}.json"
-        [ -f "$prev_file" ] && baseline=$(cat "$prev_file" 2>/dev/null) || true
+    local baseline="${2:-}"
+    if [ -z "$baseline" ]; then
+        local test_name
+        test_name=$(echo "$metrics" | jq -r '.test_name // empty')
+        if [ -n "$test_name" ]; then
+            local prev_file="${TEST_OUTPUT_DIR}/metrics-${test_name}.json"
+            [ -f "$prev_file" ] && baseline=$(cat "$prev_file" 2>/dev/null) || true
+        fi
     fi
 
     echo ""
