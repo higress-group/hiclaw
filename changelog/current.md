@@ -20,3 +20,4 @@ Record image-affecting changes to `manager/`, `worker/`, `openclaw-base/` here b
 - feat(copaw): sync skills from MinIO on startup (`_sync_skills`)
 - feat(copaw): rewrite `sync.py` to use mc CLI for all MinIO operations (mc cat, mc ls, mc alias set); remove httpx + AWS Signature V4 implementation
 - feat(copaw): add CoPaw-specific file-sync skill (`manager/agent/copaw-worker-agent/skills/file-sync/`) with `copaw-sync.py` script for manual sync trigger; `create-worker.sh` selects runtime-specific file-sync skill from `/opt/hiclaw/agent/copaw-worker-agent/` for copaw runtime
+- feat(copaw): add local→MinIO change-triggered push loop (`push_loop` / `push_local` in `sync.py`); started alongside the existing remote→local sync loop in `worker.py`; mirrors openclaw worker entrypoint behavior (5s poll, excludes `.copaw/` internals)

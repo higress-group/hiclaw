@@ -22,7 +22,7 @@ from rich.console import Console
 from rich.panel import Panel
 
 from copaw_worker.config import WorkerConfig
-from copaw_worker.sync import FileSync, sync_loop
+from copaw_worker.sync import FileSync, sync_loop, push_loop
 from copaw_worker.bridge import bridge_openclaw_to_copaw
 
 console = Console()
@@ -135,6 +135,8 @@ class Worker:
                 on_pull=self._on_files_pulled,
             )
         )
+        # Local -> Remote: change-triggered push (every 5s, mirrors openclaw worker behavior)
+        asyncio.create_task(push_loop(self.sync, check_interval=5))
 
         console.print("[bold green]Worker initialized.[/bold green]")
         if self.config.console_port:
