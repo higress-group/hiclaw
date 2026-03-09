@@ -118,11 +118,11 @@ build-worker: ## Build Worker image
 # ---------- Tag ----------
 
 tag: build ## Tag images for registry push
-	docker tag $(LOCAL_MANAGER) $(MANAGER_TAG)
-	docker tag $(LOCAL_WORKER) $(WORKER_TAG)
+	docker tag $(LOCAL_MANAGER) $(MANAGER_TAG) || exit 1
+	docker tag $(LOCAL_WORKER) $(WORKER_TAG) || exit 1
 ifeq ($(PUSH_LATEST),yes)
-	docker tag $(LOCAL_MANAGER) $(MANAGER_IMAGE):latest
-	docker tag $(LOCAL_WORKER) $(WORKER_IMAGE):latest
+	docker tag $(LOCAL_MANAGER) $(MANAGER_IMAGE):latest || exit 1
+	docker tag $(LOCAL_WORKER) $(WORKER_IMAGE):latest || exit 1
 	@echo "==> Images tagged as $(VERSION) and latest"
 else
 	@echo "==> Images tagged as $(VERSION) (latest not pushed for pre-release)"
