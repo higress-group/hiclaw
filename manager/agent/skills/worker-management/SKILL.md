@@ -107,9 +107,10 @@ When `--runtime copaw` is specified:
 - The worker entry in `workers-registry.json` will have `"runtime": "copaw"`
 - Lifecycle management (auto-stop/start) is skipped for copaw workers — they are treated like remote workers
 
-**Deployment behavior** (without `--remote`):
-- If container socket is available: auto-starts Worker container locally
-- If no socket: falls back to outputting install command
+**Default behavior** (without `--remote`):
+- Starts the Worker container locally. In a standard HiClaw installation the Docker socket is always mounted — this is the expected path for all local deployments.
+
+Only use `--remote` when the admin **explicitly** requests deploying the Worker on a separate machine (e.g., "create a remote worker", "I'll run it on my laptop"). Do **NOT** use `--remote` when the admin just says "create a worker" or does not mention deployment location.
 
 The script outputs a JSON result after `---RESULT---`:
 
