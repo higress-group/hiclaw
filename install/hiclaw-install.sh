@@ -286,18 +286,6 @@ msg() {
         "llm.alibaba.model.qwen.en") text="  2) qwen general  - General purpose LLM" ;;
         "llm.alibaba.model.select.zh") text="选择模型系列 [1/2]" ;;
         "llm.alibaba.model.select.en") text="Select model series [1/2]" ;;
-        "llm.codingplan.models_title.zh") text="选择 CodingPlan 默认模型:" ;;
-        "llm.codingplan.models_title.en") text="Select CodingPlan default model:" ;;
-        "llm.codingplan.model.qwen35plus.zh") text="  1) qwen3.5-plus  - 通义千问 3.5（推荐）" ;;
-        "llm.codingplan.model.qwen35plus.en") text="  1) qwen3.5-plus  - Qwen 3.5 (recommended)" ;;
-        "llm.codingplan.model.glm5.zh") text="  2) glm-5  - 智谱 GLM-5" ;;
-        "llm.codingplan.model.glm5.en") text="  2) glm-5  - Zhipu GLM-5" ;;
-        "llm.codingplan.model.kimi.zh") text="  3) kimi-k2.5  - Moonshot Kimi K2.5" ;;
-        "llm.codingplan.model.kimi.en") text="  3) kimi-k2.5  - Moonshot Kimi K2.5" ;;
-        "llm.codingplan.model.minimax.zh") text="  4) MiniMax-M2.5  - MiniMax M2.5" ;;
-        "llm.codingplan.model.minimax.en") text="  4) MiniMax-M2.5  - MiniMax M2.5" ;;
-        "llm.codingplan.model.select.zh") text="选择模型 [1/2/3/4]" ;;
-        "llm.codingplan.model.select.en") text="Select model [1/2/3/4]" ;;
         "llm.provider.selected_codingplan.zh") text="  提供商: 阿里云百炼 CodingPlan" ;;
         "llm.provider.selected_codingplan.en") text="  Provider: Alibaba Cloud Bailian CodingPlan" ;;
         "llm.provider.selected_qwen.zh") text="  提供商: 阿里云百炼" ;;
@@ -444,16 +432,12 @@ msg() {
         "llm.openai.test.testing.en") text="Testing API connectivity..." ;;
         "llm.openai.test.ok.zh") text="✅ API 联通性测试通过" ;;
         "llm.openai.test.ok.en") text="✅ API connectivity test passed" ;;
-        "llm.openai.test.fail.zh") text="⚠️  API 联通性测试失败（HTTP %s）。响应内容:\n%s\n请根据以上错误信息联系您的模型服务商解决。" ;;
-        "llm.openai.test.fail.en") text="⚠️  API connectivity test failed (HTTP %s). Response body:\n%s\nPlease contact your model provider to resolve the issue." ;;
+        "llm.openai.test.fail.zh") text="⚠️  API 联通性测试失败（HTTP %s）。响应内容:\n%s\n请根据以上错误信息联系您的模型服务商解决。安装将继续，但 Agent 可能无法正常工作。" ;;
+        "llm.openai.test.fail.en") text="⚠️  API connectivity test failed (HTTP %s). Response body:\n%s\nPlease contact your model provider to resolve the issue. Installation will continue, but the Agent may not work correctly." ;;
         "llm.openai.test.fail.codingplan.zh") text="⚠️  提示: 请确认您的 API Key 已开通阿里云百炼 CodingPlan 服务。开通地址: https://www.aliyun.com/benefit/scene/codingplan" ;;
         "llm.openai.test.fail.codingplan.en") text="⚠️  Hint: Please verify that your API Key has CodingPlan service enabled on Alibaba Cloud Bailian. Enable at: https://www.aliyun.com/benefit/scene/codingplan" ;;
         "llm.openai.test.no_curl.zh") text="⚠️  未找到 curl，跳过 API 联通性测试" ;;
         "llm.openai.test.no_curl.en") text="⚠️  curl not found, skipping API connectivity test" ;;
-        "llm.openai.test.confirm.zh") text="是否仍要继续安装？[y/N] " ;;
-        "llm.openai.test.confirm.en") text="Continue with installation anyway? [y/N] " ;;
-        "llm.openai.test.aborted.zh") text="安装已中止。" ;;
-        "llm.openai.test.aborted.en") text="Installation aborted." ;;
         # --- OpenAI-compatible provider creation ---
         "install.openai_compat.missing.zh") text="警告: OpenAI Base URL 或 API Key 未设置，跳过提供商创建" ;;
         "install.openai_compat.missing.en") text="WARNING: OpenAI Base URL or API Key not set, skipping provider creation" ;;
@@ -598,37 +582,24 @@ msg() {
         "error.docker_not_found.en") text="docker or podman command not found. Please install Docker Desktop or Podman Desktop first:\n  Docker Desktop: https://www.docker.com/products/docker-desktop/\n  Podman Desktop: https://podman-desktop.io/" ;;
         "error.docker_not_running.zh") text="Docker 未运行。请先启动 Docker Desktop 或 Podman Desktop。" ;;
         "error.docker_not_running.en") text="Docker is not running. Please start Docker Desktop or Podman Desktop first." ;;
-        # --- API Key validation retry ---
-        "llm.apikey.retry_prompt.zh") text="请重新输入 API Key（或按 Ctrl+C 取消）：" ;;
-        "llm.apikey.retry_prompt.en") text="Please re-enter API Key (or press Ctrl+C to cancel): " ;;
-        "llm.apikey.max_retries.zh") text="已达到最大重试次数。" ;;
-        "llm.apikey.max_retries.en") text="Maximum retries reached." ;;
-        "llm.apikey.invalid.zh") text="❌ API Key 验证失败" ;;
-        "llm.apikey.invalid.en") text="❌ API Key validation failed" ;;
-        # --- API errors with solutions ---
-        "llm.error.401.zh") text="❌ API Key 无效或已过期" ;;
-        "llm.error.401.en") text="❌ API Key is invalid or expired" ;;
-        "llm.error.401.hint.zh") text="💡 解决方案：请检查您的 API Key 是否正确。您可以在服务商控制台重新生成。" ;;
-        "llm.error.401.hint.en") text="💡 Solution: Please verify your API Key is correct. You can regenerate it in your provider's console." ;;
-        "llm.error.404.zh") text="❌ API 端点不存在或服务未开通" ;;
-        "llm.error.404.en") text="❌ API endpoint not found or service not enabled" ;;
-        "llm.error.404.hint.zh") text="💡 解决方案：
-        # 在 msg 函数的 case 语句中添加（大约在第 140 行附近）
+        # --- Config command messages ---
         "config.show.title.zh") text="=== HiClaw LLM 配置 ===" ;;
         "config.show.title.en") text="=== HiClaw LLM Configuration ===" ;;
-        "config.show.provider.zh") text="  提供商: %s" ;;
+        "config.show.provider.zh") text="  提供商：%s" ;;
         "config.show.provider.en") text="  Provider: %s" ;;
-        "config.show.model.zh") text="  模型: %s" ;;
+        "config.show.model.zh") text="  模型：%s" ;;
         "config.show.model.en") text="  Model: %s" ;;
         "config.show.base_url.zh") text="  Base URL: %s" ;;
         "config.show.base_url.en") text="  Base URL: %s" ;;
+        "config.show.default.zh") text="默认" ;;
+        "config.show.default.en") text="Default" ;;
         "config.show.api_key_set.zh") text="已设置" ;;
         "config.show.api_key_set.en") text="Set" ;;
         "config.show.api_key_unset.zh") text="未设置" ;;
         "config.show.api_key_unset.en") text="Not set" ;;
         "config.error.no_api_key.zh") text="LLM API Key 未设置" ;;
         "config.error.no_api_key.en") text="LLM API Key not set" ;;
-        "config.help.usage.zh") text="用法: %s config <命令>" ;;
+        "config.help.usage.zh") text="用法：%s config <命令>" ;;
         "config.help.usage.en") text="Usage: %s config <command>" ;;
         "config.help.commands.zh") text="命令:" ;;
         "config.help.commands.en") text="Commands:" ;;
@@ -646,57 +617,6 @@ msg() {
         "config.help.example_fix.en") text="  %s config --fix-llm    # Fix API Key config" ;;
         "config.help.example_verify.zh") text="  %s config --verify     # 验证当前配置" ;;
         "config.help.example_verify.en") text="  %s config --verify     # Verify current config" ;;
-
-  1. 确认 API Key 已开通相应服务（如百炼 CodingPlan）
-  2. 如使用自定义 Base URL，请确认地址正确
-  3. CodingPlan 用户请确保已开通: https://www.aliyun.com/benefit/scene/codingplan" ;;
-        "llm.error.404.hint.en") text="💡 Solution:
-  1. Confirm your API Key has the required service enabled (e.g., Bailian CodingPlan)
-  2. If using custom Base URL, verify the address is correct
-  3. CodingPlan users: ensure service is enabled at https://www.aliyun.com/benefit/scene/codingplan" ;;
-        "llm.error.403.zh") text="❌ 访问被拒绝（可能是网络或权限问题）" ;;
-        "llm.error.403.en") text="❌ Access denied (network or permission issue)" ;;
-        "llm.error.403.hint.zh") text="💡 解决方案：
-  1. 检查网络是否可访问 API 服务
-  2. 确认 API Key 有相应权限
-  3. 如在国内使用 OpenAI，可能需要代理" ;;
-        "llm.error.403.hint.en") text="💡 Solution:
-  1. Check if network can reach the API service
-  2. Confirm API Key has required permissions
-  3. If using OpenAI in China, you may need a proxy" ;;
-        "llm.error.generic.zh") text="❌ API 调用失败 (HTTP %s)" ;;
-        "llm.error.generic.en") text="❌ API call failed (HTTP %s)" ;;
-        # --- Retry menu ---
-        "llm.retry.menu.title.zh") text="请选择下一步操作：" ;;
-        "llm.retry.menu.title.en") text="Choose next action:" ;;
-        "llm.retry.menu.retry.zh") text="重新输入 API Key" ;;
-        "llm.retry.menu.retry.en") text="Re-enter API Key" ;;
-        "llm.retry.menu.skip.zh") text="跳过验证，继续安装（不推荐）" ;;
-        "llm.retry.menu.skip.en") text="Skip validation, continue install (not recommended)" ;;
-        "llm.retry.menu.abort.zh") text="中止安装" ;;
-        "llm.retry.menu.abort.en") text="Abort installation" ;;
-        "llm.retry.menu.prompt.zh") text="请选择 [1/2/3]" ;;
-        "llm.retry.menu.prompt.en") text="Enter choice [1/2/3]" ;;
-        # --- Validation skipped ---
-        "llm.validation.skipped.zh") text="已跳过 API Key 验证" ;;
-        "llm.validation.skipped.en") text="API Key validation skipped" ;;
-        "llm.validation.skipped.warning.zh") text="⚠️  警告：Agent 可能无法正常工作。如需修复，请运行: hiclaw config --fix-llm" ;;
-        "llm.validation.skipped.warning.en") text="⚠️  Warning: Agent may not work correctly. To fix, run: hiclaw config --fix-llm" ;;
-        # --- Config fix command ---
-        "config.fix.all.title.zh") text="--- 修复所有配置 ---" ;;
-        "config.fix.all.title.en") text="--- Fix All Configuration ---" ;;
-        "config.fix.llm.title.zh") text="--- 修复 LLM 配置 ---" ;;
-        "config.fix.llm.title.en") text="--- Fix LLM Configuration ---" ;;
-        "config.fix.success.zh") text="✅ 配置已更新并保存" ;;
-        "config.fix.success.en") text="✅ Configuration updated and saved" ;;
-        "config.fix.restart_required.zh") text="⚠️  需要重启 Manager 使配置生效: docker restart hiclaw-manager" ;;
-        "config.fix.restart_required.en") text="⚠️  Restart Manager to apply changes: docker restart hiclaw-manager" ;;
-        "config.current.provider.zh") text="当前提供商: %s" ;;
-        "config.current.provider.en") text="Current provider: %s" ;;
-        "config.current.model.zh") text="当前模型: %s" ;;
-        "config.current.model.en") text="Current model: %s" ;;
-        "backup.created.zh") text="备份已创建：%s" ;;
-        "backup.created.en") text="Backup created: %s" ;;
         # --- Fallback: try English for unknown lang ---
         *)
             case "${key}.en" in
@@ -1368,41 +1288,7 @@ install_manager() {
                     *)
                         HICLAW_LLM_PROVIDER="openai-compat"
                         HICLAW_OPENAI_BASE_URL="${HICLAW_OPENAI_BASE_URL:-https://coding.dashscope.aliyuncs.com/v1}"
-
-                        # Sub-menu: Select CodingPlan model
-                        echo ""
-                        echo "$(msg llm.codingplan.models_title)"
-                        echo "$(msg llm.codingplan.model.qwen35plus)"
-                        echo "$(msg llm.codingplan.model.glm5)"
-                        echo "$(msg llm.codingplan.model.kimi)"
-                        echo "$(msg llm.codingplan.model.minimax)"
-                        echo ""
-                        if [ "${HICLAW_QUICKSTART}" = "1" ]; then
-                            read -p "$(msg llm.codingplan.model.select) [1]: " CODINGPLAN_MODEL_CHOICE
-                            CODINGPLAN_MODEL_CHOICE="${CODINGPLAN_MODEL_CHOICE:-1}"
-                        else
-                            read -p "$(msg llm.codingplan.model.select): " CODINGPLAN_MODEL_CHOICE
-                            CODINGPLAN_MODEL_CHOICE="${CODINGPLAN_MODEL_CHOICE:-1}"
-                        fi
-
-                        case "${CODINGPLAN_MODEL_CHOICE}" in
-                            1|qwen3.5-plus)
-                                HICLAW_DEFAULT_MODEL="qwen3.5-plus"
-                                ;;
-                            2|glm-5)
-                                HICLAW_DEFAULT_MODEL="glm-5"
-                                ;;
-                            3|kimi-k2.5)
-                                HICLAW_DEFAULT_MODEL="kimi-k2.5"
-                                ;;
-                            4|MiniMax-M2.5)
-                                HICLAW_DEFAULT_MODEL="MiniMax-M2.5"
-                                ;;
-                            *)
-                                HICLAW_DEFAULT_MODEL="qwen3.5-plus"
-                                ;;
-                        esac
-
+                        HICLAW_DEFAULT_MODEL="${HICLAW_DEFAULT_MODEL:-qwen3.5-plus}"
                         log "$(msg llm.provider.selected_codingplan)"
                         log "$(msg llm.model.label "${HICLAW_DEFAULT_MODEL}")"
                         ;;
@@ -1436,41 +1322,7 @@ install_manager() {
                 log "$(msg llm.provider.invalid)"
                 HICLAW_LLM_PROVIDER="openai-compat"
                 HICLAW_OPENAI_BASE_URL="${HICLAW_OPENAI_BASE_URL:-https://coding.dashscope.aliyuncs.com/v1}"
-
-                # Sub-menu: Select CodingPlan model
-                echo ""
-                echo "$(msg llm.codingplan.models_title)"
-                echo "$(msg llm.codingplan.model.qwen35plus)"
-                echo "$(msg llm.codingplan.model.glm5)"
-                echo "$(msg llm.codingplan.model.kimi)"
-                echo "$(msg llm.codingplan.model.minimax)"
-                echo ""
-                if [ "${HICLAW_QUICKSTART}" = "1" ]; then
-                    read -p "$(msg llm.codingplan.model.select) [1]: " CODINGPLAN_MODEL_CHOICE
-                    CODINGPLAN_MODEL_CHOICE="${CODINGPLAN_MODEL_CHOICE:-1}"
-                else
-                    read -p "$(msg llm.codingplan.model.select): " CODINGPLAN_MODEL_CHOICE
-                    CODINGPLAN_MODEL_CHOICE="${CODINGPLAN_MODEL_CHOICE:-1}"
-                fi
-
-                case "${CODINGPLAN_MODEL_CHOICE}" in
-                    1|qwen3.5-plus)
-                        HICLAW_DEFAULT_MODEL="qwen3.5-plus"
-                        ;;
-                    2|glm-5)
-                        HICLAW_DEFAULT_MODEL="glm-5"
-                        ;;
-                    3|kimi-k2.5)
-                        HICLAW_DEFAULT_MODEL="kimi-k2.5"
-                        ;;
-                    4|MiniMax-M2.5)
-                        HICLAW_DEFAULT_MODEL="MiniMax-M2.5"
-                        ;;
-                    *)
-                        HICLAW_DEFAULT_MODEL="qwen3.5-plus"
-                        ;;
-                esac
-
+                HICLAW_DEFAULT_MODEL="${HICLAW_DEFAULT_MODEL:-qwen3.5-plus}"
                 log "$(msg llm.provider.selected_codingplan)"
                 log "$(msg llm.model.label "${HICLAW_DEFAULT_MODEL}")"
                 log ""
@@ -1915,178 +1767,6 @@ install_worker() {
 }
 
 # ============================================================
-# Checkpoint and Rollback Mechanism
-# ============================================================
-
-# Backup directory
-BACKUP_DIR="${HOME}/.hiclaw-backups"
-INSTALL_STATE_FILE="${HOME}/.hiclaw-install-state"
-
-# Backup before installation
-backup_before_install() {
-    local timestamp
-    timestamp=$(date +%Y%m%d%H%M%S)
-    local backup_path="${BACKUP_DIR}/backup-${timestamp}"
-    local env_file="${HICLAW_ENV_FILE:-${HOME}/hiclaw-manager.env}"
-    
-    mkdir -p "${backup_path}"
-    
-    # Backup configuration file
-    if [ -f "${env_file}" ]; then
-        cp "${env_file}" "${backup_path}/hiclaw-manager.env"
-    fi
-    
-    # Save backup information
-    cat > "${INSTALL_STATE_FILE}" <<EOF
-{
-    "backup_path": "${backup_path}",
-    "timestamp": "$(date -Iseconds)",
-    "env_file": "${env_file}"
-}
-EOF
-    
-    log "$(msg backup.created "${backup_path}")"
-    echo "${backup_path}"
-}
-
-# Rollback installation
-rollback_install() {
-    if [ ! -f "${INSTALL_STATE_FILE}" ]; then
-        log "$(msg rollback.no_backup)"
-        return 1
-    fi
-    
-    # Read backup information
-    local backup_path
-    if command -v jq &>/dev/null; then
-        backup_path=$(jq -r '.backup_path // empty' "${INSTALL_STATE_FILE}" 2>/dev/null)
-    else
-        backup_path=$(grep "backup_path" "${INSTALL_STATE_FILE}" | cut -d'"' -f4)
-    fi
-    
-    if [ -z "${backup_path}" ] || [ ! -d "${backup_path}" ]; then
-        log "$(msg rollback.no_backup)"
-        return 1
-    fi
-    
-    log "$(msg rollback.start)"
-    
-    # Stop and remove containers
-    docker stop hiclaw-manager 2>/dev/null || true
-    docker rm hiclaw-manager 2>/dev/null || true
-    
-    # Remove worker containers
-    for c in $(docker ps -a --filter "name=hiclaw-worker-" --format '{{.Names}}' 2>/dev/null); do
-        docker rm -f "${c}" 2>/dev/null || true
-    done
-    
-    # Restore configuration
-    if [ -f "${backup_path}/hiclaw-manager.env" ]; then
-        cp "${backup_path}/hiclaw-manager.env" "${HOME}/"
-        log "Configuration restored"
-    fi
-    
-    # Cleanup
-    rm -rf "${backup_path}" "${INSTALL_STATE_FILE}"
-    
-    log "$(msg rollback.complete)"
-}
-
-# Check incomplete installation
-check_incomplete_install() {
-    local has_issue=false
-    
-    # Check if there's a container but invalid configuration
-    if docker ps -a --format '{{.Names}}' 2>/dev/null | grep -q "hiclaw-manager"; then
-        local env_file="${HICLAW_ENV_FILE:-${HOME}/hiclaw-manager.env}"
-        if [ ! -f "${env_file}" ]; then
-            log "$(msg cleanup.incomplete)"
-            has_issue=true
-        elif ! grep -q "^HICLAW_LLM_API_KEY=." "${env_file}" 2>/dev/null; then
-            log "$(msg cleanup.incomplete) - API Key not configured"
-            has_issue=true
-        fi
-    fi
-    
-    if [ "${has_issue}" = true ]; then
-        return 1
-    fi
-    
-    return 0
-}
-
-# Complete cleanup
-complete_cleanup() {
-    log "$(msg cleanup.start)"
-    
-    # Stop all containers
-    docker stop hiclaw-manager 2>/dev/null || true
-    docker rm hiclaw-manager 2>/dev/null || true
-    
-    # Remove all worker containers
-    for c in $(docker ps -a --filter "name=hiclaw-worker-" --format '{{.Names}}' 2>/dev/null); do
-        log "Removing: ${c}"
-        docker rm -f "${c}" 2>/dev/null || true
-    done
-    
-    # Remove data volumes
-    docker volume rm hiclaw-data 2>/dev/null || true
-    
-    # Remove configuration files
-    local env_file="${HICLAW_ENV_FILE:-${HOME}/hiclaw-manager.env}"
-    rm -f "${env_file}" 2>/dev/null || true
-    
-    # Remove checkpoints
-    rm -rf "${CHECKPOINT_DIR}" 2>/dev/null || true
-    
-    # Remove backup state
-    rm -f "${INSTALL_STATE_FILE}" 2>/dev/null || true
-    
-    # Remove old backups
-    rm -rf "${BACKUP_DIR}" 2>/dev/null || true
-    
-    log "$(msg cleanup.complete)"
-}
-
-# ============================================================
-# New Commands
-# ============================================================
-
-# Rollback command handler
-cmd_rollback() {
-    if [ "${HICLAW_NON_INTERACTIVE}" != "1" ]; then
-        echo "$(msg rollback.confirm)"
-        read -r choice
-        case "$choice" in
-            y|Y) ;;
-            *) 
-                log "Rollback cancelled"
-                return 1
-                ;;
-        esac
-    fi
-    
-    rollback_install
-}
-
-# Cleanup command handler
-cmd_cleanup() {
-    if [ "${HICLAW_NON_INTERACTIVE}" != "1" ]; then
-        echo "$(msg cleanup.confirm)"
-        read -r choice
-        case "$choice" in
-            y|Y) ;;
-            *) 
-                log "Cleanup cancelled"
-                return 1
-                ;;
-        esac
-    fi
-    
-    complete_cleanup
-}
-
-# ============================================================
 # Main
 # ============================================================
 
@@ -2101,7 +1781,7 @@ test_llm_connectivity() {
     local hint="${4:-}"  # optional: extra hint shown on failure
     if ! command -v curl >/dev/null 2>&1; then
         echo -e "\033[33m$(msg llm.openai.test.no_curl)\033[0m"
-        return 0
+        return
     fi
     log "$(msg llm.openai.test.testing)"
     local _body _http_code _tmpfile
@@ -2118,198 +1798,12 @@ test_llm_connectivity() {
     rm -f "${_tmpfile}"
     if [ "${_http_code}" = "200" ] || [ "${_http_code}" = "201" ]; then
         log "$(msg llm.openai.test.ok)"
-        LLM_TEST_HTTP_CODE="200"
-        return 0
     else
-        LLM_TEST_HTTP_CODE="${_http_code}"
-        LLM_TEST_BODY="${_body}"
         echo -e "\033[33m$(msg llm.openai.test.fail "${_http_code}" "${_body}")\033[0m"
         if [ -n "${hint}" ]; then
             echo -e "\033[33m${hint}\033[0m"
         fi
-        if [ "${HICLAW_NON_INTERACTIVE}" != "1" ]; then
-            local _confirm
-            read -p "$(msg llm.openai.test.confirm)" _confirm
-            if [ "${_confirm}" != "y" ] && [ "${_confirm}" != "Y" ]; then
-                log "$(msg llm.openai.test.aborted)"
-                exit 1
-            fi
-        fi
-        return 1
     fi
-}
-
-# Show API error with solution
-show_api_error_solution() {
-    local http_code="${LLM_TEST_HTTP_CODE}"
-    local provider="${1:-}"
-    
-    case "${http_code}" in
-        401)
-            echo -e "\033[31m$(msg llm.error.401)\033[0m"
-            echo -e "\033[33m$(msg llm.error.401.hint)\033[0m"
-            ;;
-        403)
-            echo -e "\033[31m$(msg llm.error.403)\033[0m"
-            echo -e "\033[33m$(msg llm.error.403.hint)\033[0m"
-            ;;
-        404)
-            echo -e "\033[31m$(msg llm.error.404)\033[0m"
-            echo -e "\033[33m$(msg llm.error.404.hint)\033[0m"
-            ;;
-        *)
-            echo -e "\033[31m$(msg llm.error.generic "${http_code}")\033[0m"
-            ;;
-    esac
-}
-
-# Validate LLM API Key with retry
-validate_llm_with_retry() {
-    local base_url="$1"
-    local api_key="$2"
-    local model="$3"
-    local hint="$4"
-    local max_retries=3
-    local retry=0
-    
-    while [ ${retry} -lt ${max_retries} ]; do
-        if test_llm_connectivity "${base_url}" "${HICLAW_LLM_API_KEY}" "${model}" "${hint}"; then
-            return 0
-        fi
-        
-        retry=$((retry + 1))
-        
-        if [ ${retry} -lt ${max_retries} ]; then
-            show_api_error_solution "${HICLAW_LLM_PROVIDER}"
-            echo ""
-            echo -e "\033[36m$(msg llm.apikey.retry_prompt)\033[0m"
-            read -p "> " HICLAW_LLM_API_KEY
-        fi
-    done
-    
-    # Max retries reached, show menu
-    echo ""
-    log "$(msg llm.apikey.max_retries)"
-    echo ""
-    echo "$(msg llm.retry.menu.title)"
-    echo "  1) $(msg llm.retry.menu.retry)"
-    echo "  2) $(msg llm.retry.menu.skip)"
-    echo "  3) $(msg llm.retry.menu.abort)"
-    echo ""
-    read -p "$(msg llm.retry.menu.prompt): " choice
-    
-    case "${choice}" in
-        1)
-            read -p "$(msg llm.apikey_prompt): " HICLAW_LLM_API_KEY
-            validate_llm_with_retry "${base_url}" "${HICLAW_LLM_API_KEY}" "${model}" "${hint}"
-            return $?
-            ;;
-        2)
-            log "$(msg llm.validation.skipped)"
-            echo -e "\033[33m$(msg llm.validation.skipped.warning)\033[0m"
-            return 0
-            ;;
-        3)
-            error "$(msg install.cancelled)"
-            exit 1
-            ;;
-        *)
-            validate_llm_with_retry "${base_url}" "${api_key}" "${model}" "${hint}"
-            return $?
-            ;;
-    esac
-}
-
-# ============================================================
-# Config management commands
-# ============================================================
-
-cmd_config() {
-    local action="${1:-"--help"}"
-    
-    case "${action}" in
-        --fix|--fix-llm)
-            log "$(msg config.fix.llm.title)"
-            echo ""
-            echo "$(msg config.current.provider "${HICLAW_LLM_PROVIDER:-unknown}")"
-            echo "$(msg config.current.model "${HICLAW_DEFAULT_MODEL:-unknown}")"
-            echo ""
-            
-            # Re-prompt for provider
-            log "$(msg llm.provider.title)"
-            echo "  1) $(msg llm.provider.alibaba)"
-            echo "  2) $(msg llm.provider.openai_compat)"
-            echo ""
-            read -p "$(msg llm.provider.prompt): " provider_choice
-            
-            case "${provider_choice}" in
-                1)
-                    HICLAW_LLM_PROVIDER="alibaba-cloud"
-                    HICLAW_OPENAI_BASE_URL="https://dashscope.aliyuncs.com/compatible-mode/v1"
-                    HICLAW_DEFAULT_MODEL="qwen3.5-plus"
-                    ;;
-                2)
-                    HICLAW_LLM_PROVIDER="openai-compat"
-                    read -p "$(msg llm.openai.base_url_prompt): " HICLAW_OPENAI_BASE_URL
-                    read -p "$(msg llm.openai.model_prompt): " HICLAW_DEFAULT_MODEL
-                    ;;
-            esac
-            
-            # Re-prompt for API key
-            log "$(msg llm.apikey_hint)"
-            prompt HICLAW_LLM_API_KEY "$(msg llm.apikey_prompt)" "" "true"
-            
-            # Validate
-            validate_llm_with_retry "${HICLAW_OPENAI_BASE_URL}" "${HICLAW_LLM_API_KEY}" "${HICLAW_DEFAULT_MODEL}"
-            
-            # Save config
-            local env_file="${HOME}/hiclaw-manager.env"
-            if [ -f "${env_file}" ]; then
-                # Update existing env file
-                sed -i "s|^HICLAW_LLM_PROVIDER=.*|HICLAW_LLM_PROVIDER=${HICLAW_LLM_PROVIDER}|" "${env_file}"
-                sed -i "s|^HICLAW_LLM_API_KEY=.*|HICLAW_LLM_API_KEY=${HICLAW_LLM_API_KEY}|" "${env_file}"
-                sed -i "s|^HICLAW_DEFAULT_MODEL=.*|HICLAW_DEFAULT_MODEL=${HICLAW_DEFAULT_MODEL}|" "${env_file}"
-                sed -i "s|^HICLAW_OPENAI_BASE_URL=.*|HICLAW_OPENAI_BASE_URL=${HICLAW_OPENAI_BASE_URL}|" "${env_file}"
-            fi
-            
-            log "$(msg config.fix.success)"
-            echo -e "\033[33m$(msg config.fix.restart_required)\033[0m"
-            ;;
-       --show)
-            msg "config.show.title"
-            msg "config.show.provider" "${HICLAW_LLM_PROVIDER:-$(msg config.show.api_key_unset)}"
-            msg "config.show.model" "${HICLAW_DEFAULT_MODEL:-$(msg config.show.api_key_unset)}"
-            msg "config.show.base_url" "${HICLAW_OPENAI_BASE_URL:-$(msg config.show.default)}"
-            local _api_key_status
-            if [ -n "${HICLAW_LLM_API_KEY}" ]; then
-                _api_key_status=$(msg "config.show.api_key_set")
-            else
-                _api_key_status=$(msg "config.show.api_key_unset")
-            fi
-            msg "config.show.api_key" "$_api_key_status"
-            echo ""
-            ;;
-        --verify)
-            if [ -z "${HICLAW_LLM_API_KEY}" ]; then
-                error "$(msg "config.error.no_api_key")"
-                exit 1
-            fi
-            test_llm_connectivity "${HICLAW_OPENAI_BASE_URL}" "${HICLAW_LLM_API_KEY}" "${HICLAW_DEFAULT_MODEL}"
-            ;;
-        --help|*)
-            msg "config.help.usage" "$0"
-            echo ""
-            msg "config.help.commands"
-            msg "config.help.fix_llm"
-            msg "config.help.show"
-            msg "config.help.verify"
-            msg "config.help.help"
-            echo ""
-            msg "config.help.examples"
-            msg "config.help.example_fix" "$0"
-            msg "config.help.example_verify" "$0"
-            ;;
-    esac
 }
 
 # ============================================================
@@ -2344,18 +1838,13 @@ case "${1:-}" in
         shift
         install_worker "$@"
         ;;
-    config)
-        shift
-        cmd_config "$@"
-        ;;
     *)
-        echo "Usage: $0 [manager|worker|config [options]]"
+        echo "Usage: $0 [manager|worker [options]]"
         echo ""
         echo "Commands:"
         echo "  manager              Interactive Manager installation (default)"
         echo "                       Choose Quick Start (all defaults) or Manual mode"
         echo "  worker               Worker installation (requires --name and connection params)"
-        echo "  config               Configuration management commands"
         echo ""
         echo "Quick Start (fastest):"
         echo "  $0"
@@ -2363,11 +1852,6 @@ case "${1:-}" in
         echo ""
         echo "Non-interactive (for automation):"
         echo "  HICLAW_NON_INTERACTIVE=1 HICLAW_LLM_API_KEY=sk-xxx $0"
-        echo ""
-        echo "Config Commands:"
-        echo "  config --fix-llm     Fix LLM configuration (interactive)"
-        echo "  config --show        Show current configuration"
-        echo "  config --verify      Verify configuration validity"
         echo ""
         echo "Worker Options:"
         echo "  --name <name>        Worker name (required)"
