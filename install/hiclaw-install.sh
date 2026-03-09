@@ -288,10 +288,10 @@ msg() {
         "llm.alibaba.model.select.en") text="Select model series [1/2]" ;;
         "llm.codingplan.models_title.zh") text="选择 CodingPlan 默认模型:" ;;
         "llm.codingplan.models_title.en") text="Select CodingPlan default model:" ;;
-        "llm.codingplan.model.qwen35plus.zh") text="  1) qwen3.5-plus  - 通义千问 3.5（推荐）" ;;
-        "llm.codingplan.model.qwen35plus.en") text="  1) qwen3.5-plus  - Qwen 3.5 (recommended)" ;;
-        "llm.codingplan.model.glm5.zh") text="  2) glm-5  - 智谱 GLM-5" ;;
-        "llm.codingplan.model.glm5.en") text="  2) glm-5  - Zhipu GLM-5" ;;
+        "llm.codingplan.model.qwen35plus.zh") text="  1) qwen3.5-plus  - 千问 3.5（速度最快）" ;;
+        "llm.codingplan.model.qwen35plus.en") text="  1) qwen3.5-plus  - Qwen 3.5 (fastest)" ;;
+        "llm.codingplan.model.glm5.zh") text="  2) glm-5  - 智谱 GLM-5（编程推荐）" ;;
+        "llm.codingplan.model.glm5.en") text="  2) glm-5  - Zhipu GLM-5 (recommended for coding)" ;;
         "llm.codingplan.model.kimi.zh") text="  3) kimi-k2.5  - Moonshot Kimi K2.5" ;;
         "llm.codingplan.model.kimi.en") text="  3) kimi-k2.5  - Moonshot Kimi K2.5" ;;
         "llm.codingplan.model.minimax.zh") text="  4) MiniMax-M2.5  - MiniMax M2.5" ;;
@@ -306,10 +306,12 @@ msg() {
         "llm.provider.selected_openai.en") text="  Provider: %s (OpenAI-compatible)" ;;
         "llm.provider.invalid.zh") text="无效选择，默认使用阿里云百炼 CodingPlan" ;;
         "llm.provider.invalid.en") text="Invalid choice, defaulting to Alibaba Cloud Bailian CodingPlan" ;;
+        "llm.qwen.model_prompt.zh") text="默认模型 ID [qwen3.5-plus]" ;;
+        "llm.qwen.model_prompt.en") text="Default Model ID [qwen3.5-plus]" ;;
         "llm.openai.base_url_prompt.zh") text="Base URL（例如 https://api.openai.com/v1）" ;;
         "llm.openai.base_url_prompt.en") text="Base URL (e.g., https://api.openai.com/v1)" ;;
-        "llm.openai.model_prompt.zh") text="默认模型 ID [gpt-4o]" ;;
-        "llm.openai.model_prompt.en") text="Default Model ID [gpt-4o]" ;;
+        "llm.openai.model_prompt.zh") text="默认模型 ID [gpt-5.4]" ;;
+        "llm.openai.model_prompt.en") text="Default Model ID [gpt-5.4]" ;;
         "llm.openai.base_url_label.zh") text="  Base URL: %s" ;;
         "llm.openai.base_url_label.en") text="  Base URL: %s" ;;
         # --- Admin Credentials ---
@@ -566,6 +568,12 @@ msg() {
         # --- Prompt function messages ---
         "prompt.preset.zh") text="  %s = （已通过环境变量预设）" ;;
         "prompt.preset.en") text="  %s = (pre-set via env)" ;;
+        "prompt.upgrade_keep.zh") text="  %s = %s（当前值，回车保留 / 输入新值覆盖）" ;;
+        "prompt.upgrade_keep.en") text="  %s = %s (current value, press Enter to keep / type new value to change)" ;;
+        "prompt.upgrade_keep_secret.zh") text="  %s = %s（当前值，回车保留 / 输入新值覆盖）" ;;
+        "prompt.upgrade_keep_secret.en") text="  %s = %s (current value, press Enter to keep / type new value to change)" ;;
+        "prompt.upgrade_empty.zh") text="  %s = （未设置，回车跳过 / 输入新值设置）" ;;
+        "prompt.upgrade_empty.en") text="  %s = (not set, press Enter to skip / type new value to set)" ;;
         "prompt.default.zh") text="  %s = %s（默认）" ;;
         "prompt.default.en") text="  %s = %s (default)" ;;
         "prompt.required.zh") text="%s 是必需的（在非交互模式下通过环境变量设置）" ;;
@@ -842,8 +850,33 @@ prompt() {
     local is_secret="${4:-false}"
 
     # If the variable is already set in the environment, use it silently
+    # In upgrade mode, show current value and let user change it
     eval "local current_value=\"\${${var_name}}\""
     if [ -n "${current_value}" ]; then
+        if [ "${HICLAW_UPGRADE}" = "1" ] && [ "${HICLAW_NON_INTERACTIVE}" != "1" ]; then
+            # Show masked value for secrets, full value otherwise
+            local display_value="${current_value}"
+            if [ "${is_secret}" = "true" ]; then
+                local len=${#current_value}
+                if [ "${len}" -le 8 ]; then
+                    display_value="****"
+                else
+                    display_value="${current_value:0:4}****${current_value: -4}"
+                fi
+            fi
+            log "$(msg prompt.upgrade_keep "${var_name}" "${display_value}")"
+            local new_value=""
+            if [ "${is_secret}" = "true" ]; then
+                read -s -p "${prompt_text}: " new_value
+                echo
+            else
+                read -p "${prompt_text}: " new_value
+            fi
+            if [ -n "${new_value}" ]; then
+                eval "export ${var_name}='${new_value}'"
+            fi
+            return
+        fi
         log "$(msg prompt.preset "${var_name}")"
         return
     fi
@@ -883,6 +916,7 @@ prompt() {
 
 # Prompt for an optional value (empty string is acceptable)
 # Skips prompt if variable is already defined in environment (even if empty)
+# In upgrade mode, shows current value and lets user change it.
 # In non-interactive mode, defaults to empty string.
 prompt_optional() {
     local var_name="$1"
@@ -892,6 +926,39 @@ prompt_optional() {
     # Check if variable is defined (even if set to empty string)
     eval "local _chk=\"\${${var_name}+x}\""
     if [ -n "${_chk}" ]; then
+        # In upgrade mode, show current value and let user change it
+        if [ "${HICLAW_UPGRADE}" = "1" ] && [ "${HICLAW_NON_INTERACTIVE}" != "1" ]; then
+            eval "local current_value=\"\${${var_name}}\""
+            local display_value="${current_value}"
+            if [ "${is_secret}" = "true" ] && [ -n "${current_value}" ]; then
+                local len=${#current_value}
+                if [ "${len}" -le 8 ]; then
+                    display_value="****"
+                else
+                    display_value="${current_value:0:4}****${current_value: -4}"
+                fi
+            fi
+            if [ -n "${current_value}" ]; then
+                if [ "${is_secret}" = "true" ]; then
+                    log "$(msg prompt.upgrade_keep_secret "${var_name}" "${display_value}")"
+                else
+                    log "$(msg prompt.upgrade_keep "${var_name}" "${display_value}")"
+                fi
+            else
+                log "$(msg prompt.upgrade_empty "${var_name}")"
+            fi
+            local new_value=""
+            if [ "${is_secret}" = "true" ]; then
+                read -s -p "${prompt_text}: " new_value
+                echo
+            else
+                read -p "${prompt_text}: " new_value
+            fi
+            if [ -n "${new_value}" ]; then
+                eval "export ${var_name}='${new_value}'"
+            fi
+            return
+        fi
         log "$(msg prompt.preset "${var_name}")"
         return
     fi
@@ -1082,6 +1149,7 @@ install_manager() {
 
         case "${UPGRADE_CHOICE}" in
             1|upgrade)
+                HICLAW_UPGRADE=1
                 log "$(msg install.existing.upgrading)"
 
                 # Warn about running containers
@@ -1262,6 +1330,8 @@ install_manager() {
                 case "${ALIBABA_MODEL_CHOICE}" in
                     2|qwen)
                         HICLAW_LLM_PROVIDER="qwen"
+                        echo ""
+                        read -p "$(msg llm.qwen.model_prompt): " HICLAW_DEFAULT_MODEL
                         HICLAW_DEFAULT_MODEL="${HICLAW_DEFAULT_MODEL:-qwen3.5-plus}"
                         log "$(msg llm.provider.selected_qwen)"
                         log "$(msg llm.model.label "${HICLAW_DEFAULT_MODEL}")"
@@ -1326,7 +1396,7 @@ install_manager() {
                 echo ""
                 read -p "$(msg llm.openai.base_url_prompt): " HICLAW_OPENAI_BASE_URL
                 read -p "$(msg llm.openai.model_prompt): " HICLAW_DEFAULT_MODEL
-                HICLAW_DEFAULT_MODEL="${HICLAW_DEFAULT_MODEL:-gpt-4o}"
+                HICLAW_DEFAULT_MODEL="${HICLAW_DEFAULT_MODEL:-gpt-5.4}"
                 log "$(msg llm.openai.base_url_label "${HICLAW_OPENAI_BASE_URL}")"
                 log "$(msg llm.model.label "${HICLAW_DEFAULT_MODEL}")"
                 log ""

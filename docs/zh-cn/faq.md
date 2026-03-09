@@ -190,13 +190,24 @@ docker exec -it <worker-name> ls .openclaw/agents/main/sessions/
 
 如果给 Manager 或 Worker 发送消息后没有回复，可以按以下步骤排查：
 
-### 1. 检查聊天环境
+### 1. 检查是否正在工作
+
+**如果一直不回复，且没有显示"输入中"**，绝大多数原因是 **Agent 正在工作**。
+
+OpenClaw 限制"输入中"状态最多持续 **2 分钟**，工作超过 2 分钟就不会再显示"输入中"了。
+
+**如何确认消息已入队列**：
+- 发送消息后，查看消息右边是否有一个 **m 小图标**
+- 这个图标表示 Manager 已读
+- 出现这个图标就说明消息已入队列，会在当前任务执行完后继续处理该消息
+
+### 2. 检查聊天环境
 
 **私聊 vs 群聊**：
 - 如果是**私聊**（只有你和一个 Agent），每条消息都会触发 Agent 响应
 - 如果是**2 人以上的房间**（群聊），必须 **@ Agent** 才能让它响应，没有 @ 的消息会被忽略
 
-### 2. 检查 Session 状态
+### 3. 检查 Session 状态
 
 可能是 OpenClaw session 卡住了。进入 Manager 或 Worker 容器，使用 OpenClaw TUI 查看：
 
@@ -215,7 +226,7 @@ docker exec -it <worker-name> openclaw tui
 
 如果 session 确实卡住了，可以尝试用 `/reset` 重置 session，看是否恢复正常。
 
-### 3. 检查模型配置
+### 4. 检查模型配置
 
 可能是模型的上下文窗口大小配置不正确，导致窗口耗尽前没有及时压缩。请参考 [如何切换 Manager 的模型](#如何切换-manager-的模型) 和 [如何切换 Worker 的模型](#如何切换-worker-的模型) 进行正确配置。
 

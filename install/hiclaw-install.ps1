@@ -243,8 +243,8 @@ $script:Messages = @{
     "llm.alibaba.model.qwen" = @{ zh = "  2) 百炼通用接口"; en = "  2) qwen general  - General purpose LLM" }
     "llm.alibaba.model.select" = @{ zh = "选择模型系列 [1/2]"; en = "Select model series [1/2]" }
     "llm.codingplan.models_title" = @{ zh = "选择 CodingPlan 默认模型:"; en = "Select CodingPlan default model:" }
-    "llm.codingplan.model.qwen35plus" = @{ zh = "  1) qwen3.5-plus  - 通义千问 3.5（推荐）"; en = "  1) qwen3.5-plus  - Qwen 3.5 (recommended)" }
-    "llm.codingplan.model.glm5" = @{ zh = "  2) glm-5  - 智谱 GLM-5"; en = "  2) glm-5  - Zhipu GLM-5" }
+    "llm.codingplan.model.qwen35plus" = @{ zh = "  1) qwen3.5-plus  - 千问 3.5（速度最快）"; en = "  1) qwen3.5-plus  - Qwen 3.5 (fastest)" }
+    "llm.codingplan.model.glm5" = @{ zh = "  2) glm-5  - 智谱 GLM-5（编程推荐）"; en = "  2) glm-5  - Zhipu GLM-5 (recommended for coding)" }
     "llm.codingplan.model.kimi" = @{ zh = "  3) kimi-k2.5  - Moonshot Kimi K2.5"; en = "  3) kimi-k2.5  - Moonshot Kimi K2.5" }
     "llm.codingplan.model.minimax" = @{ zh = "  4) MiniMax-M2.5  - MiniMax M2.5"; en = "  4) MiniMax-M2.5  - MiniMax M2.5" }
     "llm.codingplan.model.select" = @{ zh = "选择模型 [1/2/3/4]"; en = "Select model [1/2/3/4]" }
@@ -252,8 +252,9 @@ $script:Messages = @{
     "llm.provider.selected_qwen" = @{ zh = "  提供商: 阿里云百炼"; en = "  Provider: Alibaba Cloud Bailian" }
     "llm.provider.selected_openai" = @{ zh = "  提供商: {0}（OpenAI 兼容）"; en = "  Provider: {0} (OpenAI-compatible)" }
     "llm.provider.invalid" = @{ zh = "无效选择，默认使用阿里云百炼 CodingPlan"; en = "Invalid choice, defaulting to Alibaba Cloud Bailian CodingPlan" }
+    "llm.qwen.model_prompt" = @{ zh = "默认模型 ID [qwen3.5-plus]"; en = "Default Model ID [qwen3.5-plus]" }
     "llm.openai.base_url_prompt" = @{ zh = "Base URL（例如 https://api.openai.com/v1）"; en = "Base URL (e.g., https://api.openai.com/v1)" }
-    "llm.openai.model_prompt" = @{ zh = "默认模型 ID [gpt-4o]"; en = "Default Model ID [gpt-4o]" }
+    "llm.openai.model_prompt" = @{ zh = "默认模型 ID [gpt-5.4]"; en = "Default Model ID [gpt-5.4]" }
     "llm.openai.base_url_label" = @{ zh = "  Base URL: {0}"; en = "  Base URL: {0}" }
 
     # --- Admin Credentials ---
@@ -413,6 +414,8 @@ $script:Messages = @{
 
     # --- Prompt function messages ---
     "prompt.preset" = @{ zh = "  {0} = （已通过环境变量预设）"; en = "  {0} = (pre-set via env)" }
+    "prompt.upgrade_keep" = @{ zh = "  {0} = {1}（当前值，回车保留 / 输入新值覆盖）"; en = "  {0} = {1} (current value, press Enter to keep / type new value to change)" }
+    "prompt.upgrade_empty" = @{ zh = "  {0} = （未设置，回车跳过 / 输入新值设置）"; en = "  {0} = (not set, press Enter to skip / type new value to set)" }
     "prompt.default" = @{ zh = "  {0} = {1}（默认）"; en = "  {0} = {1} (default)" }
     "prompt.required" = @{ zh = "{0} 是必需的（在非交互模式下通过环境变量设置）"; en = "{0} is required (set via environment variable in non-interactive mode)" }
     "prompt.required_empty" = @{ zh = "{0} 是必需的"; en = "{0} is required" }
@@ -657,8 +660,50 @@ function Read-Prompt {
     # Check if already set in environment
     $envValue = [Environment]::GetEnvironmentVariable($VarName)
     if ($envValue) {
+        if ($script:HICLAW_UPGRADE -and -not $script:HICLAW_NON_INTERACTIVE) {
+            # Show current value (masked for secrets) and let user change it
+            $displayValue = $envValue
+            if ($Secret) {
+                if ($envValue.Length -le 8) {
+                    $displayValue = "****"
+                } else {
+                    $displayValue = $envValue.Substring(0, 4) + "****" + $envValue.Substring($envValue.Length - 4)
+                }
+            }
+            Write-Log (Get-Msg "prompt.upgrade_keep" -f $VarName, $displayValue)
+            $prompt = $PromptText
+            if ($Secret) {
+                $newValue = Read-Host -Prompt $prompt -AsSecureString
+                $newValue = [System.Runtime.InteropServices.Marshal]::PtrToStringAuto(
+                    [System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($newValue)
+                )
+            } else {
+                $newValue = Read-Host -Prompt $prompt
+            }
+            if ($newValue) {
+                return $newValue
+            }
+            return $envValue
+        }
         Write-Log (Get-Msg "prompt.preset" -f $VarName)
         return $envValue
+    }
+    # Upgrade mode: optional fields with empty value — let user set a new value
+    elseif ($Optional -and $script:HICLAW_UPGRADE -and -not $script:HICLAW_NON_INTERACTIVE) {
+        Write-Log (Get-Msg "prompt.upgrade_empty" -f $VarName)
+        $prompt = $PromptText
+        if ($Secret) {
+            $newValue = Read-Host -Prompt $prompt -AsSecureString
+            $newValue = [System.Runtime.InteropServices.Marshal]::PtrToStringAuto(
+                [System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($newValue)
+            )
+        } else {
+            $newValue = Read-Host -Prompt $prompt
+        }
+        if ($newValue) {
+            return $newValue
+        }
+        return ""
     }
 
     # Non-interactive or quickstart mode
@@ -1179,6 +1224,7 @@ function Install-Manager {
 
         switch -Regex ($upgradeChoice) {
             "^(1|upgrade)$" {
+                $script:HICLAW_UPGRADE = $true
                 Write-Log (Get-Msg "install.existing.upgrading")
 
                 if ($runningManager -or $runningWorkers) {
@@ -1352,7 +1398,9 @@ function Install-Manager {
 
                 if ($modelChoice -match "^(2|qwen)$") {
                     $config.LLM_PROVIDER = "qwen"
-                    $config.DEFAULT_MODEL = if ($env:HICLAW_DEFAULT_MODEL) { $env:HICLAW_DEFAULT_MODEL } else { "qwen3.5-plus" }
+                    Write-Host ""
+                    $qwenModelInput = Read-Host (Get-Msg "llm.qwen.model_prompt")
+                    $config.DEFAULT_MODEL = if ($qwenModelInput) { $qwenModelInput } elseif ($env:HICLAW_DEFAULT_MODEL) { $env:HICLAW_DEFAULT_MODEL } else { "qwen3.5-plus" }
                     $config.OPENAI_BASE_URL = ""
                     Write-Log (Get-Msg "llm.provider.selected_qwen")
                 } else {
@@ -1416,7 +1464,7 @@ function Install-Manager {
 
                 $config.OPENAI_BASE_URL = Read-Host (Get-Msg "llm.openai.base_url_prompt")
                 $modelInput = Read-Host (Get-Msg "llm.openai.model_prompt")
-                $config.DEFAULT_MODEL = if ($modelInput) { $modelInput } else { "gpt-4o" }
+                $config.DEFAULT_MODEL = if ($modelInput) { $modelInput } else { "gpt-5.4" }
 
                 Write-Log (Get-Msg "llm.openai.base_url_label" -f $config.OPENAI_BASE_URL)
                 Write-Log (Get-Msg "llm.model.label" -f $config.DEFAULT_MODEL)

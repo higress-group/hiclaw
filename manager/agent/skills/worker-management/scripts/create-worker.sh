@@ -530,7 +530,8 @@ _build_install_cmd() {
         # copaw-worker is a pip package running on the host; use external port.
         # --console-port is omitted by default (saves ~500MB RAM).
         # Add --console-port 8088 to the command if you need the web console.
-        local cmd="pip install copaw-worker && copaw-worker"
+        # Use Alibaba Cloud PyPI mirror for faster downloads in China.
+        local cmd="pip install -i https://mirrors.aliyun.com/pypi/simple/ copaw-worker && copaw-worker"
         cmd="${cmd} --name ${WORKER_NAME}"
         cmd="${cmd} --fs ${fs_external_endpoint}"
         cmd="${cmd} --fs-key ${fs_access_key}"

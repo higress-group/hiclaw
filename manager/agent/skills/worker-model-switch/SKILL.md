@@ -1,21 +1,23 @@
 ---
-name: model-switch
-description: Switch the Manager Agent's own LLM model. Use when the human admin requests changing the Manager's model.
+name: worker-model-switch
+description: Switch a Worker Agent's LLM model. Use when the human admin requests changing a Worker's model to a different one.
 ---
 
-# Model Switch
+# Worker Model Switch
 
-Switch the Manager's own LLM model. The script tests connectivity first, then hot-patches `openclaw.json` — OpenClaw reloads within ~300ms, no restart needed.
+Switch a Worker's LLM model. The script tests connectivity first, then patches the Worker's `openclaw.json` in MinIO and notifies the Worker to reload via file-sync.
 
 ## Usage
 
 ```bash
-bash /opt/hiclaw/agent/skills/model-switch/scripts/update-manager-model.sh <MODEL_ID>
+bash /opt/hiclaw/agent/skills/worker-model-switch/scripts/update-worker-model.sh \
+  --worker <WORKER_NAME> --model <MODEL_ID>
 ```
 
 Example:
 ```bash
-bash /opt/hiclaw/agent/skills/model-switch/scripts/update-manager-model.sh claude-sonnet-4-6
+bash /opt/hiclaw/agent/skills/worker-model-switch/scripts/update-worker-model.sh \
+  --worker alice --model claude-sonnet-4-6
 ```
 
 ## What the script does
@@ -23,7 +25,13 @@ bash /opt/hiclaw/agent/skills/model-switch/scripts/update-manager-model.sh claud
 1. Strips any `hiclaw-gateway/` prefix from the model name
 2. Resolves `contextWindow` and `maxTokens` for the model
 3. Tests the model via `POST /v1/chat/completions` on the AI Gateway — exits with error if unreachable
-4. Patches `openclaw.json`: updates `models[0].id/name/contextWindow/maxTokens` and `agents.defaults.model.primary`
+4. Pulls the Worker's `openclaw.json` from MinIO
+5. Patches model id, name, contextWindow, maxTokens (preserves all other config)
+6. Pushes the updated `openclaw.json` back to MinIO
+7. Updates `workers-registry.json` with the new model name
+8. Sends a Matrix @mention to the Worker asking it to use `file-sync` to pick up the change
+
+If the Worker container is stopped, the config is still updated in MinIO — it will take effect on next start.
 
 ## On failure
 
@@ -37,10 +45,6 @@ Please check the Higress Console to confirm the AI route is configured for this 
 ```
 
 No changes are made to `openclaw.json` in this case.
-
-## Important
-
-**NEVER use `session_status` tool to change the model** — that only affects the current session temporarily and does not persist. Always use this script.
 
 ## Supported models with known context windows
 

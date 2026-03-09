@@ -1,6 +1,6 @@
 ---
 name: worker-management
-description: Manage the full lifecycle of Worker Agents (create, configure, monitor, reset, update model). Use when the human admin requests creating a new worker, resetting a worker, or switching a worker's model to a different one.
+description: Manage the full lifecycle of Worker Agents (create, configure, monitor, reset). Use when the human admin requests creating a new worker, resetting a worker, or managing worker skills and lifecycle.
 ---
 
 # Worker Management
@@ -29,21 +29,29 @@ cat > ~/hiclaw-fs/agents/<NAME>/SOUL.md << 'EOF'
 EOF
 
 # Step 2: Run create script
+# For standard openclaw worker (container-based):
 bash /opt/hiclaw/agent/skills/worker-management/scripts/create-worker.sh \
   --name <NAME> \
   --skills <skill1>,<skill2>
+
+# For copaw worker (Python, pip-installed on host):
+bash /opt/hiclaw/agent/skills/worker-management/scripts/create-worker.sh \
+  --name <NAME> \
+  --skills <skill1>,<skill2> \
+  --runtime copaw
 ```
+
+> **Runtime selection:** If the admin mentions "copaw" / "Python worker" / "pip worker", always pass `--runtime copaw`. See Step 0 below for the full keyword table.
 
 ### Skills by Worker Type (quick lookup)
 
-| Worker Type | Skills |
-|-------------|--------|
-| Frontend | `coding-cli,file-sync` |
-| Backend | `coding-cli,file-sync,git-delegation` |
-| DevOps | `github-operations,git-delegation` |
-| General | `file-sync` |
+| Worker Type | Skills | Flags |
+|-------------|--------|-------|
+| Development (coding, DevOps, review) | `coding-cli,github-operations,git-delegation` | `--find-skills` |
+| Data / Analysis | `coding-cli` | `--find-skills` |
+| General Purpose | _(default)_ | `--find-skills` |
 
-> `file-sync` is auto-included. Use `--find-skills` to enable on-demand skill discovery.
+> `file-sync` is auto-included. `--find-skills` lets the Worker discover additional skills on-demand. Trim skills that clearly don't apply.
 
 ---
 
@@ -71,7 +79,21 @@ No need to set defaults - these are always available in the container environmen
 
 ## Create a Worker
 
-### Step 0: Receive configuration from AGENTS.md interaction
+### Step 0: Determine runtime
+
+Before anything else, determine which runtime to use based on the admin's request. This step is **mandatory** — never skip it.
+
+| Admin says (any of these keywords) | Runtime |
+|-------------------------------------|---------|
+| "copaw", "CoPaw", "Python worker", "pip worker", "host worker", "pip install" | `copaw` |
+| "openclaw", "container worker", "docker worker", or **none of the above** | `openclaw` (default) |
+
+**Rules:**
+- If the admin mentions "copaw" anywhere in the request (e.g., "帮我创建一个 copaw"、"create a copaw worker"), use `--runtime copaw`. Do NOT fall through to the default openclaw path.
+- If the admin does not mention any runtime keyword, default to `openclaw`.
+- When in doubt, ask the admin: "Should this be a copaw (Python, pip-installed) worker or a standard openclaw (container) worker?"
+
+### Step 0.5: Receive configuration from AGENTS.md interaction
 
 By the time you reach this skill, the admin has already confirmed:
 - Worker name, role description, and any custom model/MCP server preferences
@@ -192,7 +214,7 @@ The script outputs a JSON result after `---RESULT---`:
 - `"starting"` — Container is running but the gateway health check timed out (120 s). The Worker may still be initializing (e.g. slow MinIO sync on first boot). Report this to admin and suggest they check `container_logs_worker` after a minute.
 - `"pending_install"` — Local container runtime not available. Admin must run the `install_cmd` on the target machine.
 
-Report the result to the human admin. If `status` is `"pending_install"`, provide the `install_cmd` from the JSON output. Also remind the admin that for remote deployment, the Worker machine must be able to resolve these domains to the Manager's IP (via DNS or `/etc/hosts`):
+Report the result to the human admin. If `status` is `"pending_install"`, provide the `install_cmd` from the JSON output **verbatim in a code block** — do NOT redact, mask, or replace any parameter values (including `--fs-secret`). The command must be directly copy-pasteable by the admin. Also remind the admin that for remote deployment, the Worker machine must be able to resolve these domains to the Manager's IP (via DNS or `/etc/hosts`):
 
 - `${HICLAW_MATRIX_DOMAIN}` (Matrix homeserver, e.g. `matrix-local.hiclaw.io`)
 - `${HICLAW_AI_GATEWAY_DOMAIN}` (AI Gateway for LLM and MCP, e.g. `aigw-local.hiclaw.io`)
@@ -294,18 +316,7 @@ bash /opt/hiclaw/agent/skills/worker-management/scripts/lifecycle-worker.sh --ac
 
 # Manually wake up (start) a stopped Worker container
 bash /opt/hiclaw/agent/skills/worker-management/scripts/lifecycle-worker.sh --action start --worker <name>
-
-# Update a Worker's model (patches openclaw.json in MinIO and notifies the Worker to reload)
-bash /opt/hiclaw/agent/skills/worker-management/scripts/lifecycle-worker.sh --action update-model --worker <name> --model <model-id>
 ```
-
-The `update-model` action:
-1. Resolves the correct `contextWindow` and `maxTokens` for the given model (same mapping as Manager startup)
-2. Patches the Worker's `openclaw.json` in MinIO in-place (preserves all other config)
-3. Updates `workers-registry.json` with the new model name
-4. Sends a Matrix @mention to the Worker asking it to use the `file-sync` skill to pick up the change
-
-If the Worker container is stopped, the config is still updated in MinIO — it will take effect on next start.
 
 ### Changing the Idle Timeout
 

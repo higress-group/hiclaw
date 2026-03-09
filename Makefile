@@ -311,7 +311,7 @@ endif
 		HICLAW_LLM_PROVIDER=qwen \
 		HICLAW_INSTALL_MANAGER_IMAGE=$(LOCAL_MANAGER) \
 		HICLAW_INSTALL_WORKER_IMAGE=$(LOCAL_WORKER) \
-		./install/hiclaw-install.sh manager
+		bash ./install/hiclaw-install.sh manager
 
 install-interactive: ## Install Manager interactively (prompts for config)
 ifndef SKIP_BUILD
@@ -321,7 +321,7 @@ endif
 	HICLAW_VERSION=$(VERSION) HICLAW_MOUNT_SOCKET=1 \
 		HICLAW_INSTALL_MANAGER_IMAGE=$(LOCAL_MANAGER) \
 		HICLAW_INSTALL_WORKER_IMAGE=$(LOCAL_WORKER) \
-		./install/hiclaw-install.sh manager
+		bash ./install/hiclaw-install.sh manager
 
 uninstall: ## Stop and remove Manager + all Worker containers
 	@echo "==> Uninstalling HiClaw..."

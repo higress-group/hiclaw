@@ -11,6 +11,7 @@ import json
 import logging
 import shutil
 import subprocess
+import time
 from pathlib import Path
 from typing import Any, Callable, Coroutine, Optional
 
@@ -200,3 +201,95 @@ async def sync_loop(
             break
         except Exception as exc:
             logger.warning("FileSync: sync error: %s", exc)
+
+
+def push_local(sync: FileSync, since: float = 0) -> list[str]:
+    """Push locally-changed files back to MinIO. Returns list of pushed keys.
+
+    Mirrors the openclaw worker entrypoint behavior: only scans files whose
+    mtime > `since` (epoch seconds), then content-compares before uploading.
+    When since=0 (first run), scans all eligible files.
+
+    Excludes Manager-owned config files and internal dirs, matching the
+    exclude list in worker-entrypoint.sh's Local->Remote sync.
+    """
+    # Manager-owned files that should never be pushed back
+    _EXCLUDE_FILES = {
+        "openclaw.json",
+        "AGENTS.md",
+        "SOUL.md",
+        "mcporter-servers.json",
+    }
+    # Directory prefixes to skip (internal/cache dirs)
+    _EXCLUDE_DIRS = {
+        ".copaw",
+        ".agents",
+        ".openclaw",
+        ".cache",
+        ".npm",
+        ".local",
+        ".mc",
+    }
+
+    pushed: list[str] = []
+    local_dir = sync.local_dir
+    if not local_dir.exists():
+        return pushed
+
+    sync._ensure_alias()
+
+    for path in local_dir.rglob("*"):
+        if not path.is_file():
+            continue
+        # Quick mtime check — skip files not modified since last push
+        try:
+            if path.stat().st_mtime <= since:
+                continue
+        except OSError:
+            continue
+        rel = path.relative_to(local_dir)
+        # Skip Manager-owned config files at workspace root
+        if len(rel.parts) == 1 and rel.name in _EXCLUDE_FILES:
+            continue
+        # Skip excluded directory trees
+        if any(p in _EXCLUDE_DIRS for p in rel.parts):
+            continue
+
+        key = f"{sync._prefix}/{rel}"
+        try:
+            remote = sync._cat(key)
+            local_content = path.read_text(errors="replace")
+            if remote == local_content:
+                continue
+            dest = sync._object_path(key)
+            _mc("cp", str(path), dest, check=True)
+            pushed.append(str(rel))
+            logger.debug("Pushed %s -> %s", rel, dest)
+        except Exception as exc:
+            logger.debug("push_local: failed for %s: %s", rel, exc)
+
+    return pushed
+
+
+async def push_loop(sync: FileSync, check_interval: int = 5) -> None:
+    """Background task: push local changes to MinIO every `check_interval` seconds.
+
+    Tracks last push timestamp and only triggers push_local when files with
+    newer mtime are detected, similar to openclaw's find-newermt approach.
+    """
+    last_push_time: float = time.time()
+
+    while True:
+        await asyncio.sleep(check_interval)
+        try:
+            now = time.time()
+            pushed = await asyncio.get_event_loop().run_in_executor(
+                None, push_local, sync, last_push_time
+            )
+            last_push_time = now
+            if pushed:
+                logger.info("FileSync push: uploaded %s", pushed)
+        except asyncio.CancelledError:
+            break
+        except Exception as exc:
+            logger.warning("FileSync push error: %s", exc)

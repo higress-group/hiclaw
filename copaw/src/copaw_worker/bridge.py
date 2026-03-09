@@ -137,6 +137,8 @@ def _write_config_json(
         "group_policy": group_policy,
         "group_allow_from": group_allow_from,
         "groups": groups,
+        "filter_tool_messages": True,
+        "filter_thinking": True,
     }
 
     config_path = working_dir / "config.json"
