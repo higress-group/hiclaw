@@ -272,13 +272,32 @@ class Worker:
     # ------------------------------------------------------------------
 
     def _sync_skills(self) -> None:
-        """Pull skills from MinIO and install into CoPaw's active_skills dir."""
+        """Pull skills from MinIO and install into CoPaw's active_skills dir.
+
+        First seeds all CoPaw built-in skills (pdf, xlsx, docx, etc.) as a base
+        layer, then overlays skills pushed from MinIO by the Manager (which take
+        precedence and can override built-ins).
+        """
         active_skills_dir = self._copaw_working_dir / "active_skills"
         active_skills_dir.mkdir(parents=True, exist_ok=True)
 
+        # 1. Seed CoPaw built-in skills as base layer.
+        # bridge.py has already patched copaw.constant.ACTIVE_SKILLS_DIR to point
+        # here, so sync_skills_to_working_dir() writes to the correct directory.
+        try:
+            from copaw.agents.skills_manager import sync_skills_to_working_dir
+            synced, skipped = sync_skills_to_working_dir(skill_names=None, force=False)
+            logger.info(
+                "Seeded CoPaw built-in skills: %d installed, %d already existed",
+                synced, skipped,
+            )
+        except Exception as exc:
+            logger.warning("Failed to seed CoPaw built-in skills: %s", exc)
+
+        # 2. Overlay with Manager-pushed skills from MinIO (higher priority).
         skill_names = self.sync.list_skills()
         if not skill_names:
-            logger.info("No skills found in MinIO for worker %s", self.worker_name)
+            logger.info("No extra skills in MinIO for worker %s", self.worker_name)
             return
 
         for skill_name in skill_names:
@@ -288,7 +307,7 @@ class Worker:
             skill_dir = active_skills_dir / skill_name
             skill_dir.mkdir(parents=True, exist_ok=True)
             (skill_dir / "SKILL.md").write_text(skill_md)
-            logger.info("Installed skill: %s", skill_name)
+            logger.info("Installed MinIO skill: %s", skill_name)
 
         console.print(f"[green]Skills installed: {', '.join(skill_names)}[/green]")
 
