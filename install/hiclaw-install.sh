@@ -81,7 +81,7 @@ detect_timezone() {
             tz="Asia/Shanghai"
             log "Using default timezone: ${tz}"
         else
-            read -p "Timezone [Asia/Shanghai]: " tz
+            read -e -p "Timezone [Asia/Shanghai]: " tz
             tz="${tz:-Asia/Shanghai}"
         fi
     fi
@@ -883,7 +883,7 @@ prompt() {
                 read -s -p "${prompt_text}: " new_value
                 echo
             else
-                read -p "${prompt_text}: " new_value
+                read -e -p "${prompt_text}: " new_value
             fi
             if [ -n "${new_value}" ]; then
                 eval "export ${var_name}='${new_value}'"
@@ -916,7 +916,7 @@ prompt() {
         read -s -p "${prompt_text}: " value
         echo
     else
-        read -p "${prompt_text}: " value
+        read -e -p "${prompt_text}: " value
     fi
 
     value="${value:-${default_value}}"
@@ -965,7 +965,7 @@ prompt_optional() {
                 read -s -p "${prompt_text}: " new_value
                 echo
             else
-                read -p "${prompt_text}: " new_value
+                read -e -p "${prompt_text}: " new_value
             fi
             if [ -n "${new_value}" ]; then
                 eval "export ${var_name}='${new_value}'"
@@ -987,7 +987,7 @@ prompt_optional() {
         read -s -p "${prompt_text}: " value
         echo
     else
-        read -p "${prompt_text}: " value
+        read -e -p "${prompt_text}: " value
     fi
 
     eval "export ${var_name}='${value}'"
@@ -1079,7 +1079,7 @@ install_manager() {
         echo "$(msg lang.option_zh)"
         echo "$(msg lang.option_en)"
         echo ""
-        read -p "$(msg lang.prompt) [${lang_default_choice}]: " LANG_CHOICE
+        read -e -p "$(msg lang.prompt) [${lang_default_choice}]: " LANG_CHOICE
         LANG_CHOICE="${LANG_CHOICE:-${lang_default_choice}}"
 
         case "${LANG_CHOICE}" in
@@ -1105,7 +1105,7 @@ install_manager() {
         echo "$(msg install.mode.quickstart)"
         echo "$(msg install.mode.manual)"
         echo ""
-        read -p "$(msg install.mode.prompt): " ONBOARDING_CHOICE
+        read -e -p "$(msg install.mode.prompt): " ONBOARDING_CHOICE
         ONBOARDING_CHOICE="${ONBOARDING_CHOICE:-1}"
 
         case "${ONBOARDING_CHOICE}" in
@@ -1156,7 +1156,7 @@ install_manager() {
             echo "$(msg install.existing.reinstall)"
             echo "$(msg install.existing.cancel)"
             echo ""
-            read -p "$(msg install.existing.prompt): " UPGRADE_CHOICE
+            read -e -p "$(msg install.existing.prompt): " UPGRADE_CHOICE
             UPGRADE_CHOICE="${UPGRADE_CHOICE:-1}"
         fi
 
@@ -1174,7 +1174,7 @@ install_manager() {
                     fi
                     if [ "${HICLAW_NON_INTERACTIVE}" != "1" ]; then
                         echo ""
-                        read -p "$(msg install.existing.continue_prompt): " CONFIRM_STOP
+                        read -e -p "$(msg install.existing.continue_prompt): " CONFIRM_STOP
                         if [ "${CONFIRM_STOP}" != "y" ] && [ "${CONFIRM_STOP}" != "Y" ]; then
                             log "$(msg install.existing.cancelled)"
                             exit 0
@@ -1230,7 +1230,7 @@ install_manager() {
                 echo -e "\033[31m$(msg install.reinstall.confirm_type)\033[0m"
                 echo -e "\033[31m  ${existing_workspace}\033[0m"
                 echo ""
-                read -p "$(msg install.reinstall.confirm_path): " CONFIRM_PATH
+                read -e -p "$(msg install.reinstall.confirm_path): " CONFIRM_PATH
 
                 if [ "${CONFIRM_PATH}" != "${existing_workspace}" ]; then
                     error "$(msg install.reinstall.path_mismatch "${CONFIRM_PATH}" "${existing_workspace}")"
@@ -1317,10 +1317,10 @@ install_manager() {
         echo "$(msg llm.provider.openai_compat)"
         echo ""
         if [ "${HICLAW_QUICKSTART}" = "1" ]; then
-            read -p "$(msg llm.provider.select) [1]: " PROVIDER_CHOICE
+            read -e -p "$(msg llm.provider.select) [1]: " PROVIDER_CHOICE
             PROVIDER_CHOICE="${PROVIDER_CHOICE:-1}"
         else
-            read -p "$(msg llm.provider.select): " PROVIDER_CHOICE
+            read -e -p "$(msg llm.provider.select): " PROVIDER_CHOICE
             PROVIDER_CHOICE="${PROVIDER_CHOICE:-1}"
         fi
 
@@ -1333,10 +1333,10 @@ install_manager() {
                 echo "$(msg llm.alibaba.model.qwen)"
                 echo ""
                 if [ "${HICLAW_QUICKSTART}" = "1" ]; then
-                    read -p "$(msg llm.alibaba.model.select) [1]: " ALIBABA_MODEL_CHOICE
+                    read -e -p "$(msg llm.alibaba.model.select) [1]: " ALIBABA_MODEL_CHOICE
                     ALIBABA_MODEL_CHOICE="${ALIBABA_MODEL_CHOICE:-1}"
                 else
-                    read -p "$(msg llm.alibaba.model.select): " ALIBABA_MODEL_CHOICE
+                    read -e -p "$(msg llm.alibaba.model.select): " ALIBABA_MODEL_CHOICE
                     ALIBABA_MODEL_CHOICE="${ALIBABA_MODEL_CHOICE:-1}"
                 fi
 
@@ -1345,7 +1345,7 @@ install_manager() {
                         HICLAW_LLM_PROVIDER="qwen"
                         HICLAW_OPENAI_BASE_URL=""
                         echo ""
-                        read -p "$(msg llm.qwen.model_prompt): " HICLAW_DEFAULT_MODEL
+                        read -e -p "$(msg llm.qwen.model_prompt): " HICLAW_DEFAULT_MODEL
                         HICLAW_DEFAULT_MODEL="${HICLAW_DEFAULT_MODEL:-qwen3.5-plus}"
                         log "$(msg llm.provider.selected_qwen)"
                         log "$(msg llm.model.label "${HICLAW_DEFAULT_MODEL}")"
@@ -1363,10 +1363,10 @@ install_manager() {
                         echo "$(msg llm.codingplan.model.minimax)"
                         echo ""
                         if [ "${HICLAW_QUICKSTART}" = "1" ]; then
-                            read -p "$(msg llm.codingplan.model.select) [1]: " CODINGPLAN_MODEL_CHOICE
+                            read -e -p "$(msg llm.codingplan.model.select) [1]: " CODINGPLAN_MODEL_CHOICE
                             CODINGPLAN_MODEL_CHOICE="${CODINGPLAN_MODEL_CHOICE:-1}"
                         else
-                            read -p "$(msg llm.codingplan.model.select): " CODINGPLAN_MODEL_CHOICE
+                            read -e -p "$(msg llm.codingplan.model.select): " CODINGPLAN_MODEL_CHOICE
                             CODINGPLAN_MODEL_CHOICE="${CODINGPLAN_MODEL_CHOICE:-1}"
                         fi
 
@@ -1408,8 +1408,8 @@ install_manager() {
                 HICLAW_LLM_PROVIDER="openai-compat"
                 log "$(msg llm.provider.selected_openai "${HICLAW_LLM_PROVIDER}")"
                 echo ""
-                read -p "$(msg llm.openai.base_url_prompt): " HICLAW_OPENAI_BASE_URL
-                read -p "$(msg llm.openai.model_prompt): " HICLAW_DEFAULT_MODEL
+                read -e -p "$(msg llm.openai.base_url_prompt): " HICLAW_OPENAI_BASE_URL
+                read -e -p "$(msg llm.openai.model_prompt): " HICLAW_DEFAULT_MODEL
                 HICLAW_DEFAULT_MODEL="${HICLAW_DEFAULT_MODEL:-gpt-5.4}"
                 log "$(msg llm.openai.base_url_label "${HICLAW_OPENAI_BASE_URL}")"
                 log "$(msg llm.model.label "${HICLAW_DEFAULT_MODEL}")"
@@ -1454,7 +1454,7 @@ install_manager() {
     if [ "${HICLAW_NON_INTERACTIVE}" = "1" ]; then
         HICLAW_LOCAL_ONLY="${HICLAW_LOCAL_ONLY:-1}"
     elif [ -z "${HICLAW_LOCAL_ONLY+x}" ]; then
-        read -p "$(msg port.local_only.choice): " _local_choice
+        read -e -p "$(msg port.local_only.choice): " _local_choice
         _local_choice="${_local_choice:-1}"
         case "${_local_choice}" in
             2|n|N|no|NO) HICLAW_LOCAL_ONLY="0" ;;
@@ -1502,7 +1502,7 @@ install_manager() {
     # Data persistence
     log "$(msg data.title)"
     if [ "${HICLAW_NON_INTERACTIVE}" != "1" ] && [ "${HICLAW_QUICKSTART}" != "1" ] && [ -z "${HICLAW_DATA_DIR+x}" ]; then
-        read -p "$(msg data.volume_prompt): " HICLAW_DATA_DIR
+        read -e -p "$(msg data.volume_prompt): " HICLAW_DATA_DIR
         HICLAW_DATA_DIR="${HICLAW_DATA_DIR:-hiclaw-data}"
         export HICLAW_DATA_DIR
     fi
@@ -1512,7 +1512,7 @@ install_manager() {
     # Manager workspace directory (skills, memory, state — host-editable)
     log "$(msg workspace.title)"
     if [ "${HICLAW_NON_INTERACTIVE}" != "1" ] && [ "${HICLAW_QUICKSTART}" != "1" ] && [ -z "${HICLAW_WORKSPACE_DIR+x}" ]; then
-        read -p "$(msg workspace.dir_prompt "${HOME}/hiclaw-manager"): " HICLAW_WORKSPACE_DIR
+        read -e -p "$(msg workspace.dir_prompt "${HOME}/hiclaw-manager"): " HICLAW_WORKSPACE_DIR
         HICLAW_WORKSPACE_DIR="${HICLAW_WORKSPACE_DIR:-${HOME}/hiclaw-manager}"
         export HICLAW_WORKSPACE_DIR
     elif [ -z "${HICLAW_WORKSPACE_DIR+x}" ]; then
@@ -1533,7 +1533,7 @@ install_manager() {
         HICLAW_DEFAULT_WORKER_RUNTIME="${HICLAW_DEFAULT_WORKER_RUNTIME:-openclaw}"
     elif [ "${HICLAW_UPGRADE}" = "1" ] && [ -n "${HICLAW_DEFAULT_WORKER_RUNTIME}" ]; then
         log "$(msg prompt.upgrade_keep "HICLAW_DEFAULT_WORKER_RUNTIME" "${HICLAW_DEFAULT_WORKER_RUNTIME}")"
-        read -p "$(msg worker_runtime.choice): " _runtime_choice
+        read -e -p "$(msg worker_runtime.choice): " _runtime_choice
         if [ -n "${_runtime_choice}" ]; then
             case "${_runtime_choice}" in
                 2) HICLAW_DEFAULT_WORKER_RUNTIME="copaw" ;;
@@ -1542,7 +1542,7 @@ install_manager() {
         fi
         unset _runtime_choice
     elif [ -z "${HICLAW_DEFAULT_WORKER_RUNTIME+x}" ]; then
-        read -p "$(msg worker_runtime.choice): " _runtime_choice
+        read -e -p "$(msg worker_runtime.choice): " _runtime_choice
         _runtime_choice="${_runtime_choice:-1}"
         case "${_runtime_choice}" in
             2) HICLAW_DEFAULT_WORKER_RUNTIME="copaw" ;;
@@ -1666,7 +1666,7 @@ EOF
 
     # Host directory mount: for file sharing with agents (defaults to user's home)
     if [ "${HICLAW_NON_INTERACTIVE}" != "1" ] && [ -z "${HICLAW_HOST_SHARE_DIR}" ]; then
-        read -p "$(msg host_share.prompt "$HOME"): " HICLAW_HOST_SHARE_DIR
+        read -e -p "$(msg host_share.prompt "$HOME"): " HICLAW_HOST_SHARE_DIR
         HICLAW_HOST_SHARE_DIR="${HICLAW_HOST_SHARE_DIR:-$HOME}"
         export HICLAW_HOST_SHARE_DIR
     elif [ -z "${HICLAW_HOST_SHARE_DIR}" ]; then
@@ -1938,7 +1938,7 @@ test_llm_connectivity() {
         fi
         if [ "${HICLAW_NON_INTERACTIVE}" != "1" ]; then
             local _confirm
-            read -p "$(msg llm.openai.test.confirm)" _confirm
+            read -e -p "$(msg llm.openai.test.confirm)" _confirm
             if [ "${_confirm}" != "y" ] && [ "${_confirm}" != "Y" ]; then
                 log "$(msg llm.openai.test.aborted)"
                 exit 1
