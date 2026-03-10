@@ -12,17 +12,16 @@
   <a href="https://qr.dingtalk.com/action/joingroup?code=v1,k1,0etR5l8fxeb/6/mzE5hRE1uy4tkiwxvPV9+TdBv7sEM=&_dt_no_comment=1&origin=11"><img src="https://img.shields.io/badge/DingTalk-Join_Us-orange.svg" alt="DingTalk"></a>
 </p>
 
-**5 分钟部署一支 AI Agent 团队。Manager 协调 Worker，全程在 IM 里可见。**
+**HiClaw 是一个开源的多 Agent 协作系统。让多个 Agent 在 Matrix 房间中协作，人类全程可见、随时可介入。 设计了 Manager - Workers 协作架构，人类可通过 Manager Agent 可协调多个 Worker Agents，完成复杂任务，从而加速实现 OPOC（一人一公司）和企业数字员工。**
 
-HiClaw 是基于 [OpenClaw](https://github.com/nicepkg/openclaw) 的开源 Agent 团队系统。Manager Agent 是你的 AI 管家——它负责创建 Worker、分配任务、监控进度、汇报结果。你只需做决策，不用当 AI 的保姆。
+HiClaw 并不和其他 xxClaw 对标，HiClaw 是一个 Agent 协作系统。
+- 每个 Claw 支持用户自定义：可以是 OpenClaw，也可以是 Copaw、NanoClaw、ZeroClaw 或是企业自建的 Agent，目前预装的是 OpenClaw。
+- 引入了 Manger Claw 的角色：不用真人去管理每个干活的 Worker Claw，节省管理成本。
+- 使用 Element IM 客户端+Tuwunel IM 服务器（均基于 Matrix 实时通信协议），通信协议和原生的不同，节省钉钉、飞书 IM 的接入和企业内的审批成本，方便用户快速体验在 IM 的交互环境中体验模型服务的“爽感”，同时支持以 OpenClaw 原生的方式接入 IM。
+- 引入 MinIO 共享文件系统，用于 Agent 之间的信息共享，真人之间的协作，共同记忆也是基于共享文件系统。
+- 引入 Higress AI Gateway，入口和各类凭证风险降低了，减少了用户对原生龙虾在安全上的顾虑。
 
-```
-你 → Manager → Worker Alice（前端）
-            → Worker Bob（后端）
-            → Worker ...
-```
-
-所有通信都发生在 Matrix 群聊房间里。你看得到一切，随时可以介入——就像在微信群里和一支团队协作。
+![架构](https://img.alicdn.com/imgextra/i4/O1CN01c1VlDE1zYZ46EW3OA_!!6000000006726-49-tps-9895-8231.webp)
 
 ## 动态
 - **2026-03-10:** HiClaw 1.0.4 发布，支持 CoPaw Worker——内存占用降低 80%，新增本地模式可操作浏览器。了解[更多](blog/zh-cn/hiclaw-1.0.4-release.md)。
@@ -30,65 +29,86 @@ HiClaw 是基于 [OpenClaw](https://github.com/nicepkg/openclaw) 的开源 Agent
 
 ## 为什么选 HiClaw
 
-**安全设计**：Worker 永远不持有真实的 API Key 或 GitHub PAT，只有一个消费者令牌（类似"工牌"）。即使 Worker 被攻击，攻击者也拿不到任何真实凭证。
+- **企业级安全**：Worker 永远不持有真实的 API Key 或 GitHub PAT，只有一个消费者令牌（类似"工牌"）。即使 Worker 被攻击，攻击者也拿不到任何真实凭证。
+- **多 Agent 群聊网络**：Manager Agent 智能分解任务，协调多个 Worker Agent 并行执行，大幅提升复杂任务处理能力。
+- **Matrix 协议驱动**：基于开放的 Matrix IM 协议，所有 Agent 通信透明可审计，天然支持分布式部署和联邦通信。
+- **人工全程监督**：人类可随时进入任意 Matrix 房间观察 Agent 对话，实时干预或修正 Agent 行为，确保安全可控。
+- **真正开箱即用的 IM**：内置 Matrix 服务器，不需要申请飞书/钉钉机器人，不需要等待审批。浏览器打开 Element Web 就能对话，或者用手机上的 Matrix 客户端（Element、FluffyChat）随时指挥，iOS、Android、Web 全平台支持。
+- **Manager-Worker 架构**：清晰的 Manager-Worker 两层架构，职责分明，易于扩展自定义 Worker Agent 以适应不同场景，支持纳管 Copaw、NanoClaw、ZeroClaw 或是企业自建的 Agent
 
-**真正开箱即用的 IM**：内置 Matrix 服务器，不需要申请飞书/钉钉机器人，不需要等待审批。浏览器打开 Element Web 就能对话，或者用手机上的 Matrix 客户端（Element、FluffyChat）随时指挥——iOS、Android、Web 全平台支持。
+- **一条命令启动**：一个 `curl | bash` 搞定所有组件——Higress AI 网关、Matrix 服务器、文件存储、Web 客户端和 Manager Agent 本身。
 
-**一条命令启动**：一个 `curl | bash` 搞定所有组件——Higress AI 网关、Matrix 服务器、文件存储、Web 客户端和 Manager Agent 本身。
-
-**技能生态**：Worker 可以按需从 [skills.sh](https://skills.sh) 获取技能（社区已有 80,000+ 个）。因为 Worker 本身就拿不到真实凭证，所以可以放心使用公开技能库。
+- **技能生态**：Worker 可以按需从 [skills.sh](https://skills.sh) 获取技能（社区已有 80,000+ 个）。因为 Worker 本身就拿不到真实凭证，所以可以放心使用公开技能库。
 
 ## 快速开始
-
-```bash
-bash <(curl -sSL https://higress.ai/hiclaw/install.sh)
-```
-
-就这一条。脚本会询问你的 LLM API Key，然后自动完成所有配置。安装完成后：
-
-```
-=== HiClaw Manager Started! ===
-  打开：http://127.0.0.1:18088
-  登录：admin / [自动生成的密码]
-  告诉 Manager："帮我创建一个名为 alice 的前端 Worker"
-```
-
-**Windows（PowerShell 7+）：**
-
-```powershell
-Set-ExecutionPolicy Bypass -Scope Process -Force; Invoke-Expression ((New-Object System.Net.WebClient).DownloadString('https://higress.ai/hiclaw/install.ps1'))
-```
-
 **前置条件**：Docker Desktop（Windows/macOS）或 Docker Engine（Linux）。仅此而已。
 
 - [Docker Desktop](https://www.docker.com/products/docker-desktop/)（Windows / macOS）
 - [Docker Engine](https://docs.docker.com/engine/install/)（Linux）或 [Podman Desktop](https://podman-desktop.io/)（替代方案）
 
-**资源需求**：最低 2 核 CPU 和 4 GB 内存。如果希望部署较多 Worker 体验更强大的 Agent Teams 能力，**建议 4 核 8 GB 内存** —— 目前 OpenClaw 内存占用较高。Docker Desktop 用户可在 Settings → Resources 中调整。
+**资源需求**：最低 2C4GB 内存。如果希望部署较多 Worker 体验更强大的 Agent Teams 能力，建议 4C8GB 内存。目前 OpenClaw 内存占用较高。Docker Desktop 用户可在 Settings → Resources 中调整。
 
-### 升级
+![资源](https://img.alicdn.com/imgextra/i4/O1CN01c8qOlx1hPiKMjzGZQ_!!6000000004270-0-tps-2496-690.jpg)
 
-重新执行安装脚本即可原地升级，数据和配置会保留。默认升级到最新版本：
+安装步骤：
+以下我们以最简单的本地部署、本地访问来演示安装步骤，不到5分钟就能开始玩龙虾了。
+
+第一步：打开终端，Mac 系统输入以下安装命令。
 
 ```bash
 bash <(curl -sSL https://higress.ai/hiclaw/install.sh)
 ```
 
-指定版本升级：
+**Windows（要求是 PowerShell 7+）输入以下安装命令：**
+
+```powershell
+Set-ExecutionPolicy Bypass -Scope Process -Force; Invoke-Expression ((New-Object System.Net.WebClient).DownloadString('https://higress.ai/hiclaw/install.ps1'))
+```
+
+这里，输入 Mac 系统的安装命令。
+
+第二步：选择语言，选择中文。
+
+第三步：选择安装模式，快速开始请选择阿里云百炼快速安装。您也可以选择其他模型服务，手动配置。
+
+第四步：选择大模型服务商。选择百炼，您也可以接入其他支持 OpenAPI 协议的模型服务，目前 Anthropic 协议还未支持，排期中。
+
+第五步：选择模型接口。百炼 Coding Plan 和百炼通用接口有所不同，这里我们选择 Coding Plan 接口。[购买Coding Plan](https://bailian.console.aliyun.com/cn-beijing/?tab=coding-plan#/efm/index)
+
+第六步：选择模型系列。如果第五步中选择的是百炼 Coding Plan，您可以选择 qwen3.5-plus、GLM，等 Matrix room 建立起来后，还通过发送指令，让 Manager 切换其他到模型。
+
+第七步：开始测试 API 联通性，若测试成功，效果如下。
+![测试](https://img.alicdn.com/imgextra/i4/O1CN0148wFGG1lYeWKd3Uat_!!6000000004831-2-tps-1752-600.png)
+
+若测试不成功，您需要检查模粘贴的型 API Key是否完整或无空格，若再次尝试仍无法通过，建议像模型服务厂商提交服务工单。
+
+第八步：选择网络访问模式。这里我们选择仅本机使用，若允许外部访问，例如和同事建立 Matrix roon，则选择允许外部访问。选择后，按回车键即可，确定端口号、网关主机端口、Higress 控制台主机端口、Maxtrix 域名、Element Web 直接访问的主机端口、文件系统域名等，均采用默认值，无须手动配置。
+
+第九步：GitHub 集成、Skills 注册中心、数据持久化、Docker 卷、Manager 工作空间，按回车键即可，均采用默认配置，无须手动配置。
+
+第十步：等待安装。安装完成。登录密码是自动生成的。
+
+若希望通过移动端来访问和使用，则需要使用美区账号下载 FluffyChat/Element Mobile。（之所以采用这两个 IM，是因为他们是支持 Matrix 协议的）下载后，连接您的 Matrix 服务器地址，就能随时随地管理您的 Agent 团队。
+![测试](https://img.alicdn.com/imgextra/i3/O1CN01Tl4T8q29HIHtPVSJL_!!6000000008042-2-tps-2372-1282.png)
+
+第十一步：浏览器中，输入 http://127.0.0.1:18088/#/login，登录 Element，输入用户名和密码，就可以玩龙虾了，告诉 Manager 创建 Worker 并分配任务。
+![测试](https://img.alicdn.com/imgextra/i1/O1CN01C5NvV41P6msPuucrs_!!6000000001792-2-tps-2748-1224.png)
+
+## 升级
+
+每次更新新版本，您在终端执行以下命令，即可原地升级，默认升级到最新版本：
+
+```bash
+bash <(curl -sSL https://higress.ai/hiclaw/install.sh)
+```
+就地升级，数据和配置会保留；全新重新，会删除所有数据。
+
+若要升级到指定版本，请使用以下命令：
 
 ```bash
 HICLAW_VERSION=0.2.0 bash <(curl -sSL https://higress.ai/hiclaw/install.sh)
 ```
 
-### 安装完成后
-
-![安装完成](https://img.alicdn.com/imgextra/i4/O1CN01PBDwoL1sHQwIBrXEC_!!6000000005741-2-tps-784-294.png)
-
-1. 浏览器打开 `http://127.0.0.1:18088`
-2. 用安装时显示的账号密码登录
-3. 告诉 Manager 创建 Worker 并分配任务
-
-手机端：下载 Element 或 FluffyChat，连接你的 Matrix 服务器地址，随时随地管理你的 Agent 团队。
 
 ## 工作方式
 
@@ -267,7 +287,7 @@ make help  # 查看所有可用目标
 - 微信群——扫码加入：
 
 <p align="center">
-  <img src="https://img.alicdn.com/imgextra/i1/O1CN01tTIeig1tQQKXGHvHV_!!6000000005896-2-tps-738-730.png" width="200" alt="微信群" />
+  <img src="https://img.alicdn.com/imgextra/i2/O1CN01ga2NAM1QOTnByKW4l_!!6000000001966-2-tps-772-742.png" width="200" alt="微信群" />
 </p>
 
 ## 许可证
