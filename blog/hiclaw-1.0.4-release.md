@@ -262,7 +262,9 @@ Select default worker runtime:
 Enter your choice [1-2]:
 ```
 
-When upgrading, the script will automatically detect your existing installation — just select "in-place upgrade". After upgrading, the Manager will automatically support CoPaw Workers, and existing OpenClaw Workers will continue to run normally.
+When upgrading, the script will automatically detect your existing installation — just select "in-place upgrade". You'll also be prompted to choose a default Worker runtime:
+- **Existing Workers**: Unaffected, continue using their original runtime
+- **New Workers**: Will use the default runtime you selected (CoPaw or OpenClaw)
 
 ---
 

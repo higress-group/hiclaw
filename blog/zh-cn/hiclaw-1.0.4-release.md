@@ -261,7 +261,9 @@ Select default worker runtime:
 Enter your choice [1-2]:
 ```
 
-升级时，脚本会自动检测现有安装，选择"就地升级"即可。升级后，Manager 会自动支持 CoPaw Worker，现有的 OpenClaw Worker 不受影响。
+升级时，脚本会自动检测现有安装，选择"就地升级"即可。升级过程中也会询问默认 Worker 运行时，选择后：
+- **已有的 Worker**：不受影响，继续使用原有运行时
+- **新创建的 Worker**：会使用你选择的默认运行时（CoPaw 或 OpenClaw）
 
 ---
 
