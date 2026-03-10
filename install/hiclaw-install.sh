@@ -399,8 +399,8 @@ msg() {
         # --- Default worker runtime ---
         "worker_runtime.title.zh") text="--- 默认 Worker 运行时 ---" ;;
         "worker_runtime.title.en") text="--- Default Worker Runtime ---" ;;
-        "worker_runtime.openclaw.zh") text="OpenClaw（Node.js 容器，~500MB 内存，功能完整）" ;;
-        "worker_runtime.openclaw.en") text="OpenClaw (Node.js container, ~500MB RAM, full-featured)" ;;
+        "worker_runtime.openclaw.zh") text="OpenClaw（Node.js 容器，~500MB 内存）" ;;
+        "worker_runtime.openclaw.en") text="OpenClaw (Node.js container, ~500MB RAM)" ;;
         "worker_runtime.copaw.zh") text="CoPaw（Python 容器，~100MB 内存，默认关闭控制台，可跟 Manager 对话按需开启）" ;;
         "worker_runtime.copaw.en") text="CoPaw (Python container, ~100MB RAM, console off by default, enable on demand via Manager)" ;;
         "worker_runtime.choice.zh") text="请选择 [1/2]" ;;
@@ -1575,6 +1575,16 @@ install_manager() {
     echo ""
     if [ "${HICLAW_NON_INTERACTIVE}" = "1" ]; then
         HICLAW_DEFAULT_WORKER_RUNTIME="${HICLAW_DEFAULT_WORKER_RUNTIME:-openclaw}"
+    elif [ "${HICLAW_UPGRADE}" = "1" ] && [ -n "${HICLAW_DEFAULT_WORKER_RUNTIME}" ]; then
+        log "$(msg prompt.upgrade_keep "HICLAW_DEFAULT_WORKER_RUNTIME" "${HICLAW_DEFAULT_WORKER_RUNTIME}")"
+        read -p "$(msg worker_runtime.choice): " _runtime_choice
+        if [ -n "${_runtime_choice}" ]; then
+            case "${_runtime_choice}" in
+                2) HICLAW_DEFAULT_WORKER_RUNTIME="copaw" ;;
+                *) HICLAW_DEFAULT_WORKER_RUNTIME="openclaw" ;;
+            esac
+        fi
+        unset _runtime_choice
     elif [ -z "${HICLAW_DEFAULT_WORKER_RUNTIME+x}" ]; then
         read -p "$(msg worker_runtime.choice): " _runtime_choice
         _runtime_choice="${_runtime_choice:-1}"

@@ -311,7 +311,7 @@ $script:Messages = @{
 
     # --- Default worker runtime ---
     "worker_runtime.title" = @{ zh = "--- 默认 Worker 运行时 ---"; en = "--- Default Worker Runtime ---" }
-    "worker_runtime.openclaw" = @{ zh = "OpenClaw（Node.js 容器，~500MB 内存，功能完整）"; en = "OpenClaw (Node.js container, ~500MB RAM, full-featured)" }
+    "worker_runtime.openclaw" = @{ zh = "OpenClaw（Node.js 容器，~500MB 内存）"; en = "OpenClaw (Node.js container, ~500MB RAM)" }
     "worker_runtime.copaw" = @{ zh = "CoPaw（Python 容器，~100MB 内存，默认关闭控制台，可跟 Manager 对话按需开启）"; en = "CoPaw (Python container, ~100MB RAM, console off by default, enable on demand via Manager)" }
     "worker_runtime.choice" = @{ zh = "请选择 [1/2]"; en = "Enter choice [1/2]" }
     "worker_runtime.selected" = @{ zh = "默认 Worker 运行时: {0}"; en = "Default Worker runtime: {0}" }
@@ -1662,8 +1662,18 @@ function Install-Manager {
     Write-Host "  1) $(Get-Msg 'worker_runtime.openclaw')"
     Write-Host "  2) $(Get-Msg 'worker_runtime.copaw')"
     Write-Host ""
-    if ($script:HICLAW_NON_INTERACTIVE -or $env:HICLAW_DEFAULT_WORKER_RUNTIME) {
+    if ($script:HICLAW_NON_INTERACTIVE) {
         $config.DEFAULT_WORKER_RUNTIME = if ($env:HICLAW_DEFAULT_WORKER_RUNTIME) { $env:HICLAW_DEFAULT_WORKER_RUNTIME } else { "openclaw" }
+    } elseif ($script:HICLAW_UPGRADE -and $env:HICLAW_DEFAULT_WORKER_RUNTIME) {
+        Write-Log (Get-Msg "prompt.upgrade_keep" -f "HICLAW_DEFAULT_WORKER_RUNTIME", $env:HICLAW_DEFAULT_WORKER_RUNTIME)
+        $rtChoice = Read-Host (Get-Msg "worker_runtime.choice")
+        if ($rtChoice) {
+            $config.DEFAULT_WORKER_RUNTIME = if ($rtChoice -eq "2") { "copaw" } else { "openclaw" }
+        } else {
+            $config.DEFAULT_WORKER_RUNTIME = $env:HICLAW_DEFAULT_WORKER_RUNTIME
+        }
+    } elseif ($env:HICLAW_DEFAULT_WORKER_RUNTIME) {
+        $config.DEFAULT_WORKER_RUNTIME = $env:HICLAW_DEFAULT_WORKER_RUNTIME
     } else {
         $rtChoice = Read-Host (Get-Msg "worker_runtime.choice")
         $rtChoice = if ($rtChoice) { $rtChoice } else { "1" }
