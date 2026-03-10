@@ -39,19 +39,28 @@ bash /opt/hiclaw/agent/skills/worker-management/scripts/create-worker.sh \
   --skills <skill1>,<skill2>
 ```
 
+### Runtime Selection
+
+| Runtime | Memory | Description |
+|---------|--------|-------------|
+| `openclaw` | ~500MB | Node.js container, full-featured |
+| `copaw` | ~100MB | Python container, lightweight; console off by default, enable on demand via `enable-worker-console.sh` |
+
+Default runtime is set by `HICLAW_DEFAULT_WORKER_RUNTIME` (chosen during installation). Only pass `--runtime` explicitly when:
+- The admin requests a specific runtime (e.g., "create a copaw worker" → `--runtime copaw`)
+- You recommend a specific runtime to solve a problem (see below)
+
+**Local environment access:** If the admin wants the Worker to interact with their local machine (e.g., open a browser, run desktop apps, access local files), recommend `--runtime copaw --remote`. This installs the Worker directly on the admin's machine so it can access the local environment. Ask the admin to confirm before proceeding.
+
 ### Skills Recommendation Table
 
-| Worker Type | Recommended Skills |
-|-------------|-------------------|
-| Frontend Dev | `coding-cli,file-sync` |
-| Backend Dev | `coding-cli,file-sync,git-delegation` |
-| Full-stack Dev | `coding-cli,file-sync,git-delegation` |
-| DevOps / SRE | `github-operations,git-delegation` |
-| Code Review | `github-operations,git-delegation` |
-| Data / ML | `coding-cli,file-sync` |
-| General Purpose | `file-sync` |
+| Worker Type | Skills | Flags |
+|-------------|--------|-------|
+| Development (coding, DevOps, review) | `coding-cli,github-operations,git-delegation` | `--find-skills` |
+| Data / Analysis | `coding-cli` | `--find-skills` |
+| General Purpose | _(default)_ | `--find-skills` |
 
-> **Note:** `file-sync` is always included automatically. `find-skills` can be added with `--find-skills` to let Worker discover skills on-demand.
+> `file-sync` is always auto-included. `--find-skills` lets the Worker discover and install additional skills on-demand. Trim skills that clearly don't apply (e.g., drop `github-operations` for a pure frontend worker).
 
 ---
 
@@ -88,10 +97,11 @@ Run AI coding CLI in a Worker's workspace on their behalf.
 
 Full lifecycle of Worker containers and skill assignments.
 
-- Admin says "create a new Worker named Alice for code review tasks"
+- Admin says "create a copaw worker" or "create a copaw named Alice" → use `--runtime copaw`
+- Admin says "create a new Worker named Alice for code review tasks" → use default runtime (no `--runtime` flag)
+- Admin wants Worker to control their local machine → recommend `--runtime copaw --remote`
 - Before assigning a task, Worker container is `stopped` → wake it up first; `not_found` → tell admin to recreate
 - Admin says "add the github-operations skill to Alice" or "reset the Bob worker"
-- Admin says "switch Alice's model to claude-sonnet-4-6" → use `lifecycle-worker.sh --action update-model`
 
 **After creating a Worker**, always tell the admin:
 1. A 3-person room (Human + Manager + Worker) has been created — please check your Matrix invitations and accept it
@@ -142,9 +152,20 @@ MCP Server lifecycle and per-consumer access control.
 
 ## model-switch
 
-Switch the Manager's own LLM model.
+Switch the **Manager's own** LLM model. Do NOT use this for Workers.
 
 - Admin says "switch your model to X" or "change the Manager model to X"
+
+## worker-model-switch
+
+Switch a **Worker's** LLM model. Do NOT use this for the Manager.
+
+- Admin says "switch Alice's model to claude-sonnet-4-6" or "change the Worker model to X"
+- Patches the Worker's `openclaw.json` in MinIO, updates registry, and notifies the Worker to reload via file-sync
+
+> **Model switch cheat sheet:** Manager model → `model-switch` skill. Worker model → `worker-model-switch` skill. Never mix them up.
+>
+> **⚠️ MANDATORY:** When switching any model (Manager or Worker), you MUST use the corresponding skill script above. Do NOT use `session_status` tool, do NOT call Higress API directly, do NOT manually edit `openclaw.json` or any config file. The scripts handle gateway testing, config patching, registry updates, and Worker notification — skipping them will cause inconsistent state.
 
 ---
 

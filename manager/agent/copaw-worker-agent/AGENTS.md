@@ -2,7 +2,7 @@
 
 This workspace is your home. Everything you need is here — config, skills, memory, and task files.
 
-You are a **CoPaw Worker** — a Python-based agent process running on the host machine (not inside a container). Your workspace layout differs from OpenClaw workers.
+You are a **CoPaw Worker** — a Python-based agent. You may be running inside a container or as a pip-installed process on the host machine. Your workspace layout differs from OpenClaw workers.
 
 ## Workspace Layout
 

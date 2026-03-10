@@ -24,15 +24,18 @@ REPO           ?= higress
 
 MANAGER_IMAGE       ?= $(REGISTRY)/$(REPO)/hiclaw-manager
 WORKER_IMAGE        ?= $(REGISTRY)/$(REPO)/hiclaw-worker
+COPAW_WORKER_IMAGE  ?= $(REGISTRY)/$(REPO)/hiclaw-copaw-worker
 OPENCLAW_BASE_IMAGE ?= $(REGISTRY)/$(REPO)/openclaw-base
 
 MANAGER_TAG    ?= $(MANAGER_IMAGE):$(VERSION)
 WORKER_TAG     ?= $(WORKER_IMAGE):$(VERSION)
+COPAW_WORKER_TAG ?= $(COPAW_WORKER_IMAGE):$(VERSION)
 OPENCLAW_BASE_TAG ?= $(OPENCLAW_BASE_IMAGE):$(VERSION)
 
 # Local image names (no registry prefix, used by tests and install script)
 LOCAL_MANAGER       = hiclaw/manager-agent:$(VERSION)
 LOCAL_WORKER        = hiclaw/worker-agent:$(VERSION)
+LOCAL_COPAW_WORKER  = hiclaw/copaw-worker:$(VERSION)
 LOCAL_OPENCLAW_BASE = hiclaw/openclaw-base:$(VERSION)
 
 # Higress base image registry (regional mirrors auto-synced from cn-hangzhou primary)
@@ -75,9 +78,9 @@ TEST_FILTER    ?=
 
 # ---------- Phony targets ----------
 
-.PHONY: all build build-openclaw-base build-manager build-worker \
-        tag push push-openclaw-base push-manager push-worker \
-        push-native push-native-manager push-native-worker \
+.PHONY: all build build-openclaw-base build-manager build-worker build-copaw-worker \
+        tag push push-openclaw-base push-manager push-worker push-copaw-worker \
+        push-native push-native-manager push-native-worker push-native-copaw-worker \
         buildx-setup \
         test test-quick test-installed \
         install uninstall replay replay-log \
@@ -89,7 +92,7 @@ all: build
 
 # ---------- Build ----------
 
-build: build-manager build-worker ## Build all images (base image pulled from registry, not rebuilt locally)
+build: build-manager build-worker build-copaw-worker ## Build all images (base image pulled from registry, not rebuilt locally)
 
 build-openclaw-base: ## Build OpenClaw base image
 	@echo "==> Building OpenClaw base image: $(LOCAL_OPENCLAW_BASE) (registry: $(HIGRESS_REGISTRY))"
@@ -115,14 +118,22 @@ build-worker: ## Build Worker image
 		-t $(LOCAL_WORKER) \
 		./worker/
 
+build-copaw-worker: ## Build CoPaw Worker image
+	@echo "==> Building CoPaw Worker image: $(LOCAL_COPAW_WORKER) (registry: $(HIGRESS_REGISTRY))"
+	docker build $(PLATFORM_FLAG) $(REGISTRY_ARG) $(DOCKER_BUILD_ARGS) \
+		-t $(LOCAL_COPAW_WORKER) \
+		./copaw/
+
 # ---------- Tag ----------
 
 tag: build ## Tag images for registry push
 	docker tag $(LOCAL_MANAGER) $(MANAGER_TAG)
 	docker tag $(LOCAL_WORKER) $(WORKER_TAG)
+	docker tag $(LOCAL_COPAW_WORKER) $(COPAW_WORKER_TAG)
 ifeq ($(PUSH_LATEST),yes)
 	docker tag $(LOCAL_MANAGER) $(MANAGER_IMAGE):latest
 	docker tag $(LOCAL_WORKER) $(WORKER_IMAGE):latest
+	docker tag $(LOCAL_COPAW_WORKER) $(COPAW_WORKER_IMAGE):latest
 	@echo "==> Images tagged as $(VERSION) and latest"
 else
 	@echo "==> Images tagged as $(VERSION) (latest not pushed for pre-release)"
@@ -150,7 +161,7 @@ else
 	fi
 endif
 
-push: push-manager push-worker ## Build + push multi-arch images (amd64 + arm64); base image built separately via build-base.yml
+push: push-manager push-worker push-copaw-worker ## Build + push multi-arch images (amd64 + arm64); base image built separately via build-base.yml
 
 push-openclaw-base: buildx-setup ## Build + push multi-arch OpenClaw base image
 	@echo "==> Building + pushing multi-arch OpenClaw base: $(OPENCLAW_BASE_TAG) [$(MULTIARCH_PLATFORMS)]"
@@ -230,6 +241,31 @@ else
 		./worker/
 endif
 
+push-copaw-worker: buildx-setup ## Build + push multi-arch CoPaw Worker image
+	@echo "==> Building + pushing multi-arch CoPaw Worker: $(COPAW_WORKER_TAG) [$(MULTIARCH_PLATFORMS)]"
+ifeq ($(IS_PODMAN),1)
+	-podman manifest rm $(COPAW_WORKER_TAG) 2>/dev/null
+	$(foreach plat,$(subst $(comma), ,$(MULTIARCH_PLATFORMS)), \
+		echo "  -> Building CoPaw Worker for $(plat)..." && \
+		podman build --platform $(plat) \
+			$(REGISTRY_ARG) $(DOCKER_BUILD_ARGS) \
+			--manifest $(COPAW_WORKER_TAG) \
+			./copaw/ && ) true
+	podman manifest push --all $(COPAW_WORKER_TAG) docker://$(COPAW_WORKER_TAG)
+	$(if $(PUSH_LATEST), \
+		podman manifest push --all $(COPAW_WORKER_TAG) docker://$(COPAW_WORKER_IMAGE):latest && \
+		echo "  -> Also pushed :latest tag")
+else
+	docker buildx build \
+		--builder $(BUILDX_BUILDER) \
+		--platform $(MULTIARCH_PLATFORMS) \
+		$(REGISTRY_ARG) $(DOCKER_BUILD_ARGS) \
+		-t $(COPAW_WORKER_TAG) \
+		$(if $(PUSH_LATEST),-t $(COPAW_WORKER_IMAGE):latest) \
+		--push \
+		./copaw/
+endif
+
 # ---------- Push native-arch only (dev use) ----------
 # WARNING: Pushing single-arch images will overwrite multi-arch manifests.
 # Only use for local development / testing, never for release.
@@ -240,9 +276,12 @@ push-native: tag ## Push native-arch images (dev only, overwrites multi-arch!)
 	docker push $(MANAGER_TAG)
 	@echo "==> Pushing Worker: $(WORKER_TAG)"
 	docker push $(WORKER_TAG)
+	@echo "==> Pushing CoPaw Worker: $(COPAW_WORKER_TAG)"
+	docker push $(COPAW_WORKER_TAG)
 ifeq ($(PUSH_LATEST),yes)
 	docker push $(MANAGER_IMAGE):latest
 	docker push $(WORKER_IMAGE):latest
+	docker push $(COPAW_WORKER_IMAGE):latest
 endif
 
 push-native-manager: build-manager ## Push native-arch Manager only (dev)
@@ -252,6 +291,10 @@ push-native-manager: build-manager ## Push native-arch Manager only (dev)
 push-native-worker: build-worker ## Push native-arch Worker only (dev)
 	docker tag $(LOCAL_WORKER) $(WORKER_TAG)
 	docker push $(WORKER_TAG)
+
+push-native-copaw-worker: build-copaw-worker ## Push native-arch CoPaw Worker only (dev)
+	docker tag $(LOCAL_COPAW_WORKER) $(COPAW_WORKER_TAG)
+	docker push $(COPAW_WORKER_TAG)
 
 # ---------- Test ----------
 
@@ -311,6 +354,7 @@ endif
 		HICLAW_LLM_PROVIDER=qwen \
 		HICLAW_INSTALL_MANAGER_IMAGE=$(LOCAL_MANAGER) \
 		HICLAW_INSTALL_WORKER_IMAGE=$(LOCAL_WORKER) \
+		HICLAW_INSTALL_COPAW_WORKER_IMAGE=$(LOCAL_COPAW_WORKER) \
 		bash ./install/hiclaw-install.sh manager
 
 install-interactive: ## Install Manager interactively (prompts for config)
@@ -321,6 +365,7 @@ endif
 	HICLAW_VERSION=$(VERSION) HICLAW_MOUNT_SOCKET=1 \
 		HICLAW_INSTALL_MANAGER_IMAGE=$(LOCAL_MANAGER) \
 		HICLAW_INSTALL_WORKER_IMAGE=$(LOCAL_WORKER) \
+		HICLAW_INSTALL_COPAW_WORKER_IMAGE=$(LOCAL_COPAW_WORKER) \
 		bash ./install/hiclaw-install.sh manager
 
 uninstall: ## Stop and remove Manager + all Worker containers
@@ -384,6 +429,7 @@ clean: ## Remove local images and test containers
 	@echo "==> Removing local images..."
 	-docker rmi $(LOCAL_MANAGER) 2>/dev/null
 	-docker rmi $(LOCAL_WORKER) 2>/dev/null
+	-docker rmi $(LOCAL_COPAW_WORKER) 2>/dev/null
 	-docker rmi $(LOCAL_OPENCLAW_BASE) 2>/dev/null
 	@echo "==> Clean complete"
 

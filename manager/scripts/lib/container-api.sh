@@ -19,6 +19,7 @@
 CONTAINER_SOCKET="${HICLAW_CONTAINER_SOCKET:-/var/run/docker.sock}"
 CONTAINER_API_BASE="http://localhost"
 WORKER_IMAGE="${HICLAW_WORKER_IMAGE:-hiclaw/worker-agent:latest}"
+COPAW_WORKER_IMAGE="${HICLAW_COPAW_WORKER_IMAGE:-hiclaw/copaw-worker:latest}"
 WORKER_CONTAINER_PREFIX="hiclaw-worker-"
 
 _log() {
@@ -310,6 +311,204 @@ container_wait_worker_ready() {
     done
 
     _log "Worker ${worker_name} did not become ready within ${timeout}s"
+    return 1
+}
+
+# Create and start a CoPaw Worker container
+# Uses the CoPaw worker image and sets appropriate working directory.
+# Usage: container_create_copaw_worker <worker_name> [fs_access_key] [fs_secret_key] [extra_env_json]
+container_create_copaw_worker() {
+    local worker_name="$1"
+    local container_name="${WORKER_CONTAINER_PREFIX}${worker_name}"
+    local manager_ip
+    manager_ip=$(container_get_manager_ip)
+
+    if [ -z "${manager_ip}" ]; then
+        _log "ERROR: Cannot determine Manager container IP"
+        return 1
+    fi
+
+    local fs_domain="${HICLAW_FS_DOMAIN%%:*}"
+    local fs_endpoint="http://${fs_domain}:8080"
+    local fs_access_key="${2:-${HICLAW_MINIO_USER:-${HICLAW_ADMIN_USER:-admin}}}"
+    local fs_secret_key="${3:-${HICLAW_MINIO_PASSWORD:-${HICLAW_ADMIN_PASSWORD:-admin}}}"
+    local extra_env="${4:-[]}"
+
+    # Build ExtraHosts (same as openclaw workers)
+    local extra_hosts=""
+    local matrix_host="${HICLAW_MATRIX_DOMAIN%%:*}"
+    local matrix_client_host="${HICLAW_MATRIX_CLIENT_DOMAIN:-matrix-client-local.hiclaw.io}"
+    local ai_gw_host="${HICLAW_AI_GATEWAY_DOMAIN:-aigw-local.hiclaw.io}"
+    local fs_host="${HICLAW_FS_DOMAIN:-fs-local.hiclaw.io}"
+
+    for h in "${matrix_host}" "${matrix_client_host}" "${ai_gw_host}" "${fs_host}"; do
+        if [[ "${h}" == *-local.hiclaw.io ]]; then
+            extra_hosts="${extra_hosts}\"${h}:${manager_ip}\","
+        fi
+    done
+    extra_hosts="${extra_hosts%,}"
+
+    _log "Creating CoPaw Worker container: ${container_name}"
+    _log "  Image: ${COPAW_WORKER_IMAGE}"
+    _log "  FS endpoint: ${fs_endpoint}"
+    _log "  Manager IP: ${manager_ip}"
+
+    # Remove existing container with same name (if any)
+    local existing
+    existing=$(_api GET "/containers/${container_name}/json" 2>/dev/null)
+    if echo "${existing}" | grep -q '"Id"' 2>/dev/null; then
+        _log "Removing existing container: ${container_name}"
+        _api DELETE "/containers/${container_name}?force=true" > /dev/null 2>&1
+        sleep 1
+    fi
+
+    # CoPaw uses /root/.copaw-worker as install dir (not /root/hiclaw-fs/agents/<name>)
+    local base_env='["HICLAW_WORKER_NAME='"${worker_name}"'","HICLAW_FS_ENDPOINT='"${fs_endpoint}"'","HICLAW_FS_ACCESS_KEY='"${fs_access_key}"'","HICLAW_FS_SECRET_KEY='"${fs_secret_key}"'"]'
+
+    local all_env
+    if [ "${extra_env}" != "[]" ] && [ -n "${extra_env}" ]; then
+        all_env=$(echo "${base_env} ${extra_env}" | jq -s 'add')
+    else
+        all_env="${base_env}"
+    fi
+
+    # Detect HICLAW_CONSOLE_PORT in env to set up port binding
+    local console_port=""
+    console_port=$(echo "${all_env}" | jq -r '.[] | select(startswith("HICLAW_CONSOLE_PORT=")) | split("=")[1]' 2>/dev/null || true)
+
+    if [ -n "${extra_hosts}" ]; then
+        _log "  ExtraHosts: ${extra_hosts}"
+    fi
+    if [ -n "${console_port}" ]; then
+        _log "  Console port: ${console_port}"
+    fi
+
+    # ExposedPorts tells Docker which ports the container listens on
+    local exposed_ports="{}"
+    if [ -n "${console_port}" ]; then
+        exposed_ports="{\"${console_port}/tcp\":{}}"
+    fi
+
+    # Pick a random host port (10000-20000) to minimize conflicts across workers
+    local host_port="${console_port}"
+    if [ -n "${console_port}" ]; then
+        host_port=$(( (RANDOM % 10001) + 10000 ))
+        _log "  Host port: ${host_port} (random)"
+    fi
+    local max_port_retries=10
+    local port_attempt=0
+
+    while true; do
+        # Build HostConfig with ExtraHosts and optional PortBindings
+        local host_config
+        if [ -n "${console_port}" ] && [ -n "${extra_hosts}" ]; then
+            host_config="{\"ExtraHosts\":[${extra_hosts}],\"PortBindings\":{\"${console_port}/tcp\":[{\"HostPort\":\"${host_port}\"}]}}"
+        elif [ -n "${console_port}" ]; then
+            host_config="{\"PortBindings\":{\"${console_port}/tcp\":[{\"HostPort\":\"${host_port}\"}]}}"
+        elif [ -n "${extra_hosts}" ]; then
+            host_config="{\"ExtraHosts\":[${extra_hosts}]}"
+        else
+            host_config="{}"
+        fi
+
+        local create_payload
+        create_payload=$(cat <<PAYLOAD
+{
+    "Image": "${COPAW_WORKER_IMAGE}",
+    "Env": ${all_env},
+    "WorkingDir": "/root/.copaw-worker",
+    "ExposedPorts": ${exposed_ports},
+    "HostConfig": ${host_config}
+}
+PAYLOAD
+)
+
+        local create_resp
+        create_resp=$(_api POST "/containers/create?name=${container_name}" "${create_payload}")
+        local container_id
+        container_id=$(echo "${create_resp}" | jq -r '.Id // empty' 2>/dev/null)
+
+        if [ -z "${container_id}" ]; then
+            _log "ERROR: Failed to create CoPaw container. Response: ${create_resp}"
+            return 1
+        fi
+
+        _log "CoPaw container created: ${container_id:0:12}"
+
+        # Start the container — capture both HTTP status code and response body
+        local start_output
+        start_output=$(curl -s -w '\n%{http_code}' --unix-socket "${CONTAINER_SOCKET}" \
+            -X POST "${CONTAINER_API_BASE}/containers/${container_id}/start")
+        local start_code
+        start_code=$(echo "${start_output}" | tail -1)
+        local start_body
+        start_body=$(echo "${start_output}" | sed '$d')
+
+        if [ "${start_code}" = "204" ] || [ "${start_code}" = "304" ]; then
+            if [ -n "${console_port}" ]; then
+                _log "Console: container port ${console_port} -> host port ${host_port}"
+                _log "CONSOLE_HOST_PORT=${host_port}"
+            fi
+            _log "CoPaw Worker container ${container_name} started successfully"
+            echo "${container_id}"
+            return 0
+        fi
+
+        # Start failed — check if it's a port conflict we can retry
+        local err_msg
+        err_msg=$(echo "${start_body}" | jq -r '.message // empty' 2>/dev/null)
+
+        if [ -n "${console_port}" ] && echo "${err_msg}" | grep -qi "already allocated\|address already in use\|port is already" 2>/dev/null; then
+            port_attempt=$((port_attempt + 1))
+            if [ "${port_attempt}" -ge "${max_port_retries}" ]; then
+                _log "ERROR: Could not find available port after ${max_port_retries} attempts (tried ${console_port}-${host_port})"
+                return 1
+            fi
+            _log "Host port ${host_port} is in use, trying $((host_port + 1))..."
+            host_port=$((host_port + 1))
+            _api DELETE "/containers/${container_name}?force=true" > /dev/null 2>&1
+            sleep 1
+            continue
+        fi
+
+        # Non-port-conflict error — fail immediately
+        _log "ERROR: Failed to start CoPaw container (HTTP ${start_code}): ${err_msg:-${start_body}}"
+        return 1
+    done
+}
+
+# Wait for CoPaw Worker to become ready
+# CoPaw writes config.json after bridge completes; we check for that file.
+# Usage: container_wait_copaw_worker_ready <worker_name> [timeout_seconds]
+container_wait_copaw_worker_ready() {
+    local worker_name="$1"
+    local timeout="${2:-120}"
+    local elapsed=0
+    local config_file="/root/.copaw-worker/${worker_name}/.copaw/config.json"
+
+    _log "Waiting for CoPaw Worker ${worker_name} to be ready (timeout: ${timeout}s)..."
+
+    while [ "${elapsed}" -lt "${timeout}" ]; do
+        local cstatus
+        cstatus=$(container_status_worker "${worker_name}")
+        if [ "${cstatus}" != "running" ]; then
+            _log "CoPaw Worker container ${worker_name} stopped unexpectedly (status: ${cstatus})"
+            return 1
+        fi
+
+        # Check if CoPaw bridge has completed (config.json with channels key exists)
+        if container_exec_worker "${worker_name}" cat "${config_file}" 2>/dev/null \
+                | grep -q '"channels"' 2>/dev/null; then
+            _log "CoPaw Worker ${worker_name} is ready!"
+            return 0
+        fi
+
+        sleep 5
+        elapsed=$((elapsed + 5))
+        _log "Waiting for CoPaw Worker ${worker_name}... (${elapsed}s/${timeout}s)"
+    done
+
+    _log "CoPaw Worker ${worker_name} did not become ready within ${timeout}s"
     return 1
 }
 

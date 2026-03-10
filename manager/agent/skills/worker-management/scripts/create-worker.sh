@@ -27,7 +27,8 @@ WORKER_SKILLS="file-sync"
 REMOTE_MODE=false
 ENABLE_FIND_SKILLS=false
 SKILLS_API_URL=""
-WORKER_RUNTIME="openclaw"   # openclaw (default) | copaw
+WORKER_RUNTIME="${HICLAW_DEFAULT_WORKER_RUNTIME:-openclaw}"   # openclaw | copaw
+CONSOLE_PORT=""             # copaw only: web console port (e.g. 8088)
 
 while [ $# -gt 0 ]; do
     case "$1" in
@@ -39,19 +40,18 @@ while [ $# -gt 0 ]; do
         --skills-api-url) SKILLS_API_URL="$2"; shift 2 ;;
         --remote)     REMOTE_MODE=true; shift ;;
         --runtime)    WORKER_RUNTIME="$2"; shift 2 ;;
+        --console-port) CONSOLE_PORT="$2"; shift 2 ;;
         *) echo "Unknown option: $1"; exit 1 ;;
     esac
 done
 
 if [ -z "${WORKER_NAME}" ]; then
-    echo "Usage: create-worker.sh --name <NAME> [--model <MODEL_ID>] [--mcp-servers s1,s2] [--skills s1,s2] [--find-skills] [--skills-api-url <URL>] [--remote] [--runtime openclaw|copaw]"
+    echo "Usage: create-worker.sh --name <NAME> [--model <MODEL_ID>] [--mcp-servers s1,s2] [--skills s1,s2] [--find-skills] [--skills-api-url <URL>] [--remote] [--runtime openclaw|copaw] [--console-port <PORT>]"
     exit 1
 fi
 
-# copaw runtime is always remote (pip-installed process, not a container)
-if [ "${WORKER_RUNTIME}" = "copaw" ]; then
-    REMOTE_MODE=true
-fi
+# copaw runtime supports both container and pip-installed modes
+# (previously forced REMOTE_MODE=true; now containers are supported)
 
 # If find-skills is enabled, add it to the skills list
 # Fallback: if HICLAW_SKILLS_API_URL env is set and no --skills-api-url was passed, use it
@@ -528,13 +528,13 @@ _build_install_cmd() {
 
     if [ "${WORKER_RUNTIME}" = "copaw" ]; then
         # copaw-worker is a pip package running on the host; use external port.
-        # --console-port is omitted by default (saves ~500MB RAM).
-        # Add --console-port 8088 to the command if you need the web console.
-        local cmd="pip install copaw-worker && copaw-worker"
+        # Use Alibaba Cloud PyPI mirror for faster downloads in China.
+        local cmd="pip install -i https://mirrors.aliyun.com/pypi/simple/ copaw-worker && copaw-worker"
         cmd="${cmd} --name ${WORKER_NAME}"
         cmd="${cmd} --fs ${fs_external_endpoint}"
         cmd="${cmd} --fs-key ${fs_access_key}"
         cmd="${cmd} --fs-secret ${fs_secret_key}"
+        cmd="${cmd} --console-port ${CONSOLE_PORT:-8088}"
         echo "${cmd}"
         return
     fi
@@ -554,30 +554,58 @@ _build_install_cmd() {
 
 # Build extra environment variables JSON for container creation
 _build_extra_env() {
-    local extra_env="[]"
+    local items=()
     if [ "${ENABLE_FIND_SKILLS}" = true ] && [ -n "${SKILLS_API_URL}" ]; then
-        extra_env='["SKILLS_API_URL='"${SKILLS_API_URL}"'"]'
+        items+=("SKILLS_API_URL=${SKILLS_API_URL}")
     fi
-    echo "${extra_env}"
+    if [ -n "${CONSOLE_PORT}" ]; then
+        items+=("HICLAW_CONSOLE_PORT=${CONSOLE_PORT}")
+    fi
+    if [ ${#items[@]} -eq 0 ]; then
+        echo "[]"
+    else
+        printf '%s\n' "${items[@]}" | jq -R . | jq -s .
+    fi
 }
 
 if [ "${REMOTE_MODE}" = true ]; then
     log "Step 9: Remote mode requested"
     INSTALL_CMD=$(_build_install_cmd)
 elif container_api_available; then
-    log "Step 9: Starting Worker container locally..."
+    log "Step 9: Starting Worker container locally (runtime=${WORKER_RUNTIME})..."
     EXTRA_ENV_JSON=$(_build_extra_env)
-    CREATE_OUTPUT=$(container_create_worker "${WORKER_NAME}" "${WORKER_NAME}" "${WORKER_MINIO_PASSWORD}" "${EXTRA_ENV_JSON}" 2>&1) || true
+
+    if [ "${WORKER_RUNTIME}" = "copaw" ]; then
+        CREATE_OUTPUT=$(container_create_copaw_worker "${WORKER_NAME}" "${WORKER_NAME}" "${WORKER_MINIO_PASSWORD}" "${EXTRA_ENV_JSON}" 2>&1) || true
+    else
+        CREATE_OUTPUT=$(container_create_worker "${WORKER_NAME}" "${WORKER_NAME}" "${WORKER_MINIO_PASSWORD}" "${EXTRA_ENV_JSON}" 2>&1) || true
+    fi
+
     CONTAINER_ID=$(echo "${CREATE_OUTPUT}" | tail -1)
+    # Extract actual console host port (randomly assigned, may differ from container port)
+    CONSOLE_HOST_PORT=$(echo "${CREATE_OUTPUT}" | grep -o 'CONSOLE_HOST_PORT=[0-9]*' | head -1 | cut -d= -f2)
     if [ -n "${CONTAINER_ID}" ] && [ ${#CONTAINER_ID} -ge 12 ]; then
         DEPLOY_MODE="local"
+        if [ -n "${CONSOLE_HOST_PORT}" ]; then
+            log "  Console available at host port ${CONSOLE_HOST_PORT}"
+        fi
         log "  Waiting for Worker agent to be ready..."
-        if container_wait_worker_ready "${WORKER_NAME}" 120; then
-            WORKER_STATUS="ready"
-            log "  Worker agent is ready!"
+        if [ "${WORKER_RUNTIME}" = "copaw" ]; then
+            if container_wait_copaw_worker_ready "${WORKER_NAME}" 120; then
+                WORKER_STATUS="ready"
+                log "  CoPaw Worker agent is ready!"
+            else
+                WORKER_STATUS="starting"
+                log "  WARNING: CoPaw Worker agent not ready within timeout (container may still be initializing)"
+            fi
         else
-            WORKER_STATUS="starting"
-            log "  WARNING: Worker agent not ready within timeout (container may still be initializing)"
+            if container_wait_worker_ready "${WORKER_NAME}" 120; then
+                WORKER_STATUS="ready"
+                log "  Worker agent is ready!"
+            else
+                WORKER_STATUS="starting"
+                log "  WARNING: Worker agent not ready within timeout (container may still be initializing)"
+            fi
         fi
     else
         log "  WARNING: Container creation failed, falling back to remote mode"
@@ -601,6 +629,7 @@ RESULT=$(jq -n \
     --arg container_id "${CONTAINER_ID}" \
     --arg status "${WORKER_STATUS}" \
     --arg install_cmd "${INSTALL_CMD:-}" \
+    --arg console_host_port "${CONSOLE_HOST_PORT:-}" \
     --argjson skills "${SKILLS_JSON}" \
     '{
         worker_name: $name,
@@ -612,7 +641,8 @@ RESULT=$(jq -n \
         mode: $mode,
         container_id: $container_id,
         status: $status,
-        install_cmd: (if $install_cmd == "" then null else $install_cmd end)
+        install_cmd: (if $install_cmd == "" then null else $install_cmd end),
+        console_host_port: (if $console_host_port == "" then null else $console_host_port end)
     }')
 
 echo "---RESULT---"

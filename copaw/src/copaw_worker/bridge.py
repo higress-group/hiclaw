@@ -20,7 +20,7 @@ def _port_remap(url: str, is_container: bool) -> str:
 
 
 def _is_in_container() -> bool:
-    return Path("/.dockerenv").exists()
+    return Path("/.dockerenv").exists() or Path("/run/.containerenv").exists()
 
 
 def _secret_dir(working_dir: Path) -> Path:
@@ -137,6 +137,8 @@ def _write_config_json(
         "group_policy": group_policy,
         "group_allow_from": group_allow_from,
         "groups": groups,
+        "filter_tool_messages": True,
+        "filter_thinking": True,
     }
 
     config_path = working_dir / "config.json"

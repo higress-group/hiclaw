@@ -277,7 +277,16 @@ case "${MODEL_NAME}" in
         export MODEL_CONTEXT_WINDOW=200000 MODEL_MAX_TOKENS=128000 ;;
 esac
 export MODEL_REASONING=true
-log "Model: ${MODEL_NAME} (context=${MODEL_CONTEXT_WINDOW}, maxTokens=${MODEL_MAX_TOKENS}, reasoning=${MODEL_REASONING})"
+
+# Resolve input modalities: only vision-capable models get "image"
+case "${MODEL_NAME}" in
+    gpt-5.4|gpt-5.3-codex|gpt-5-mini|gpt-5-nano|claude-opus-4-6|claude-sonnet-4-6|claude-haiku-4-5|qwen3.5-plus|kimi-k2.5)
+        export MODEL_INPUT='["text", "image"]' ;;
+    *)
+        export MODEL_INPUT='["text"]' ;;
+esac
+
+log "Model: ${MODEL_NAME} (context=${MODEL_CONTEXT_WINDOW}, maxTokens=${MODEL_MAX_TOKENS}, reasoning=${MODEL_REASONING}, input=${MODEL_INPUT})"
 
 if [ -f /root/manager-workspace/openclaw.json ]; then
     log "Manager openclaw.json already exists, updating dynamic fields only (preserving user customizations)..."
@@ -286,11 +295,13 @@ if [ -f /root/manager-workspace/openclaw.json ]; then
        --arg model "${MODEL_NAME}" \
        --argjson ctx "${MODEL_CONTEXT_WINDOW}" \
        --argjson max "${MODEL_MAX_TOKENS}" \
+       --argjson input "${MODEL_INPUT}" \
        '.channels.matrix.accessToken = $token | .hooks.token = $key | .models.providers["hiclaw-gateway"].apiKey = $key
         | .models.providers["hiclaw-gateway"].models[0].id = $model
         | .models.providers["hiclaw-gateway"].models[0].name = $model
         | .models.providers["hiclaw-gateway"].models[0].contextWindow = $ctx
         | .models.providers["hiclaw-gateway"].models[0].maxTokens = $max
+        | .models.providers["hiclaw-gateway"].models[0].input = $input
         | .agents.defaults.model.primary = ("hiclaw-gateway/" + $model)' \
        /root/manager-workspace/openclaw.json > /tmp/openclaw.json.tmp && \
         mv /tmp/openclaw.json.tmp /root/manager-workspace/openclaw.json

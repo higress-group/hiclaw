@@ -1,6 +1,6 @@
 ---
 name: worker-management
-description: Manage the full lifecycle of Worker Agents (create, configure, monitor, reset, update model). Use when the human admin requests creating a new worker, resetting a worker, or switching a worker's model to a different one.
+description: Manage the full lifecycle of Worker Agents (create, configure, monitor, reset). Use when the human admin requests creating a new worker, resetting a worker, or managing worker skills and lifecycle.
 ---
 
 # Worker Management
@@ -29,21 +29,29 @@ cat > ~/hiclaw-fs/agents/<NAME>/SOUL.md << 'EOF'
 EOF
 
 # Step 2: Run create script
+# For standard openclaw worker (container-based):
 bash /opt/hiclaw/agent/skills/worker-management/scripts/create-worker.sh \
   --name <NAME> \
   --skills <skill1>,<skill2>
+
+# For copaw worker (Python, pip-installed on host):
+bash /opt/hiclaw/agent/skills/worker-management/scripts/create-worker.sh \
+  --name <NAME> \
+  --skills <skill1>,<skill2> \
+  --runtime copaw
 ```
+
+> **Runtime selection:** If the admin mentions "copaw" / "Python worker" / "pip worker", always pass `--runtime copaw`. See Step 0 below for the full keyword table.
 
 ### Skills by Worker Type (quick lookup)
 
-| Worker Type | Skills |
-|-------------|--------|
-| Frontend | `coding-cli,file-sync` |
-| Backend | `coding-cli,file-sync,git-delegation` |
-| DevOps | `github-operations,git-delegation` |
-| General | `file-sync` |
+| Worker Type | Skills | Flags |
+|-------------|--------|-------|
+| Development (coding, DevOps, review) | `coding-cli,github-operations,git-delegation` | `--find-skills` |
+| Data / Analysis | `coding-cli` | `--find-skills` |
+| General Purpose | _(default)_ | `--find-skills` |
 
-> `file-sync` is auto-included. Use `--find-skills` to enable on-demand skill discovery.
+> `file-sync` is auto-included. `--find-skills` lets the Worker discover additional skills on-demand. Trim skills that clearly don't apply.
 
 ---
 
@@ -64,14 +72,29 @@ HICLAW_ADMIN_USER          # Admin username
 HICLAW_DEFAULT_MODEL       # Default LLM model (e.g., qwen3.5-plus)
 HICLAW_REGISTRATION_TOKEN  # Token for registering Matrix users
 HICLAW_MANAGER_PASSWORD    # Manager's Matrix password
-HICLAW_WORKER_IMAGE        # Worker container image URL
+HICLAW_WORKER_IMAGE               # Worker container image URL
+HICLAW_DEFAULT_WORKER_RUNTIME     # Default runtime for new workers (openclaw | copaw)
 ```
 
 No need to set defaults - these are always available in the container environment.
 
 ## Create a Worker
 
-### Step 0: Receive configuration from AGENTS.md interaction
+### Step 0: Determine runtime
+
+Before anything else, determine which runtime to use based on the admin's request. This step is **mandatory** — never skip it.
+
+| Admin says (any of these keywords) | Runtime |
+|-------------------------------------|---------|
+| "copaw", "CoPaw", "Python worker", "pip worker", "host worker", "pip install" | `copaw` |
+| "openclaw", "container worker", "docker worker", or **none of the above** | `openclaw` (default) |
+
+**Rules:**
+- If the admin mentions "copaw" anywhere in the request (e.g., "帮我创建一个 copaw"、"create a copaw worker"), use `--runtime copaw`. Do NOT fall through to the default openclaw path.
+- If the admin does not mention any runtime keyword, use `${HICLAW_DEFAULT_WORKER_RUNTIME:-openclaw}` as the default.
+- When in doubt, ask the admin: "Should this be a copaw (Python, ~100MB RAM) worker or an openclaw (Node.js, ~500MB RAM) worker?"
+
+### Step 0.5: Receive configuration from AGENTS.md interaction
 
 By the time you reach this skill, the admin has already confirmed:
 - Worker name, role description, and any custom model/MCP server preferences
@@ -157,15 +180,12 @@ bash /opt/hiclaw/agent/skills/worker-management/scripts/create-worker.sh --name 
 - `--skills-api-url`: custom skills registry URL (default: https://skills.sh). Only used when `--find-skills` is set
 - `--remote`: force output install command instead of starting container locally
 - `--runtime`: `openclaw` (default) or `copaw`. Use `copaw` for Python-based Workers that run via `pip install copaw-worker` instead of a container image
-
 **Runtime: `copaw`**
 
 When `--runtime copaw` is specified:
-- Container startup is skipped entirely (copaw workers are pip-installed processes, not containers)
-- `status` is always `"pending_install"` — the admin must run the `install_cmd` on the target machine
-- The install command does **not** include `--console-port` by default (~100MB RAM). To enable the web console, append `--console-port 8088` to the command — note this adds ~500MB RAM overhead. If port 8088 is already in use, change it to another free port.
+- If a container runtime socket is available, the CoPaw Worker container (`hiclaw/copaw-worker`) is started locally — the same way openclaw workers are started. Lifecycle management (auto-stop/start) works for copaw containers too. Console is disabled by default to save ~500MB RAM; use `enable-worker-console.sh` to enable it on demand.
+- If no container runtime socket is available (or `--remote` is passed), `status` is `"pending_install"` — the admin must run the `install_cmd` on the target machine.
 - The worker entry in `workers-registry.json` will have `"runtime": "copaw"`
-- Lifecycle management (auto-stop/start) is skipped for copaw workers — they are treated like remote workers
 
 **Default behavior** (without `--remote`):
 - Starts the Worker container locally. In a standard HiClaw installation the Docker socket is always mounted — this is the expected path for all local deployments.
@@ -192,7 +212,7 @@ The script outputs a JSON result after `---RESULT---`:
 - `"starting"` — Container is running but the gateway health check timed out (120 s). The Worker may still be initializing (e.g. slow MinIO sync on first boot). Report this to admin and suggest they check `container_logs_worker` after a minute.
 - `"pending_install"` — Local container runtime not available. Admin must run the `install_cmd` on the target machine.
 
-Report the result to the human admin. If `status` is `"pending_install"`, provide the `install_cmd` from the JSON output. Also remind the admin that for remote deployment, the Worker machine must be able to resolve these domains to the Manager's IP (via DNS or `/etc/hosts`):
+Report the result to the human admin. If `status` is `"pending_install"`, provide the `install_cmd` from the JSON output **verbatim in a code block** — do NOT redact, mask, or replace any parameter values (including `--fs-secret`). The command must be directly copy-pasteable by the admin. Also remind the admin that for remote deployment, the Worker machine must be able to resolve these domains to the Manager's IP (via DNS or `/etc/hosts`):
 
 - `${HICLAW_MATRIX_DOMAIN}` (Matrix homeserver, e.g. `matrix-local.hiclaw.io`)
 - `${HICLAW_AI_GATEWAY_DOMAIN}` (AI Gateway for LLM and MCP, e.g. `aigw-local.hiclaw.io`)
@@ -294,18 +314,7 @@ bash /opt/hiclaw/agent/skills/worker-management/scripts/lifecycle-worker.sh --ac
 
 # Manually wake up (start) a stopped Worker container
 bash /opt/hiclaw/agent/skills/worker-management/scripts/lifecycle-worker.sh --action start --worker <name>
-
-# Update a Worker's model (patches openclaw.json in MinIO and notifies the Worker to reload)
-bash /opt/hiclaw/agent/skills/worker-management/scripts/lifecycle-worker.sh --action update-model --worker <name> --model <model-id>
 ```
-
-The `update-model` action:
-1. Resolves the correct `contextWindow` and `maxTokens` for the given model (same mapping as Manager startup)
-2. Patches the Worker's `openclaw.json` in MinIO in-place (preserves all other config)
-3. Updates `workers-registry.json` with the new model name
-4. Sends a Matrix @mention to the Worker asking it to use the `file-sync` skill to pick up the change
-
-If the Worker container is stopped, the config is still updated in MinIO — it will take effect on next start.
 
 ### Changing the Idle Timeout
 
@@ -323,7 +332,22 @@ jq '.idle_timeout_minutes = 60' ~/worker-lifecycle.json > /tmp/lc.json && mv /tm
 | Container is stopped | `lifecycle-worker.sh --action start` | Restarts the existing container, preserving all config and mounts |
 | Container does not exist (`not_found`) | `create-worker.sh` | Rebuilds from image; full registration flow required |
 | Worker needs reset or config update | `create-worker.sh` (removes old container first) | Full rebuild; Matrix account is reused |
-| copaw runtime worker | `copaw-worker run --name <name> ...` (on target machine) | Not container-managed; lifecycle scripts skip these workers |
+| copaw runtime worker (container) | `lifecycle-worker.sh --action start` | Restarts the existing CoPaw container |
+| copaw runtime worker (remote) | `copaw-worker --name <name> ...` (on target machine) | Not container-managed; lifecycle scripts skip these workers |
+
+## CoPaw Console Management
+
+CoPaw Workers are created without the web console by default (~500MB saved). Enable or disable it on demand:
+
+```bash
+# Enable — recreates container with console; result JSON contains console_host_port
+bash /opt/hiclaw/agent/skills/worker-management/scripts/enable-worker-console.sh --name <WORKER_NAME>
+
+# Disable — recreates container without console, frees ~500MB RAM
+bash /opt/hiclaw/agent/skills/worker-management/scripts/enable-worker-console.sh --name <WORKER_NAME> --action disable
+```
+
+After enabling, read `console_host_port` from the JSON result and report the access URL to the admin: `http://<manager-host>:<console_host_port>`.
 
 ## Enable Peer Mentions Between Workers
 

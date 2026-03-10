@@ -50,6 +50,14 @@ case "${MODEL_NAME}" in
         CTX=200000; MAX=128000 ;;
 esac
 
+# Resolve input modalities: only vision-capable models get "image"
+case "${MODEL_NAME}" in
+    gpt-5.4|gpt-5.3-codex|gpt-5-mini|gpt-5-nano|claude-opus-4-6|claude-sonnet-4-6|claude-haiku-4-5|qwen3.5-plus|kimi-k2.5)
+        INPUT='["text", "image"]' ;;
+    *)
+        INPUT='["text"]' ;;
+esac
+
 GATEWAY_AUTH_TOKEN=$(openssl rand -hex 32)
 
 export WORKER_NAME
@@ -66,6 +74,7 @@ export HICLAW_DEFAULT_MODEL="${MODEL_NAME}"
 export MODEL_REASONING=true
 export MODEL_CONTEXT_WINDOW="${CTX}"
 export MODEL_MAX_TOKENS="${MAX}"
+export MODEL_INPUT="${INPUT}"
 
 OUTPUT_DIR="/root/hiclaw-fs/agents/${WORKER_NAME}"
 mkdir -p "${OUTPUT_DIR}"

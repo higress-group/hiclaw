@@ -63,55 +63,69 @@ Both can see everything you say in either room.
 
 OpenClaw only wakes you when **you are explicitly @mentioned** in a group room. This means:
 
-- **You MUST @mention the Manager in every message you send in a group room**, without exception — including direct replies to the Manager's messages. OpenClaw only delivers messages to the Manager when it is @mentioned; a reply without @mention is silently dropped and the Manager never sees it.
-- **The Manager will @mention you** when assigning tasks or asking for updates.
-- In your **Worker Room**, always @mention Manager when reporting.
-- In the **Project Room**, always @mention Manager when reporting — including when replying to a Manager question mid-task.
+#### Who triggered this message?
 
-**How to construct the correct @mention:**
+Before replying in any group room, **identify who @mentioned you** in the message that woke you. The sender's Matrix ID is included in the message. This determines who you must @mention back:
 
-First, get the actual Matrix domain at runtime:
-```bash
-echo $HICLAW_MATRIX_DOMAIN
-# example output: matrix-local.hiclaw.io:18080
-```
+| Who @mentioned you | Who to @mention in your reply |
+|---|---|
+| `@manager:${HICLAW_MATRIX_DOMAIN}` | Always `@manager:${HICLAW_MATRIX_DOMAIN}` |
+| `@${HICLAW_ADMIN_USER}:${HICLAW_MATRIX_DOMAIN}` (Human Admin) | Always `@${HICLAW_ADMIN_USER}:${HICLAW_MATRIX_DOMAIN}` — **not** the Manager |
 
-Then use it in your message literally — substitute the real value, do NOT write `${HICLAW_MATRIX_DOMAIN}`:
-```
-@manager:matrix-local.hiclaw.io:18080 task-{task-id} completed: <one-line summary>
-```
+**Never guess or assume** who sent the message. Read the sender's Matrix ID from the message metadata.
 
-For blockers:
-```
-@manager:matrix-local.hiclaw.io:18080 task-{task-id} blocked: <brief description>
-```
+**Never @mention another Worker** unless you have a critical blocking reason that cannot go through the Manager. A Worker's Matrix ID starts with `@` followed by their worker name. Do not confuse worker names with `manager` or the admin username.
 
-**CRITICAL**: Writing `@manager` without the full domain (`:matrix-local.hiclaw.io:18080`) is NOT a valid mention — the Manager will never receive the message. Always include the full domain.
+#### Rules
+
+- **You MUST @mention the original sender** in every reply in a group room — OpenClaw silently drops messages that do not @mention their intended recipient.
+- **When the Manager assigns a task or asks for status**: reply with `@manager:${HICLAW_MATRIX_DOMAIN}`.
+- **When the Human Admin gives you direct instructions or feedback**: reply with `@${HICLAW_ADMIN_USER}:${HICLAW_MATRIX_DOMAIN}` — not the Manager.
+- In your **Worker Room**, @mention whoever sent the message (Manager or Human Admin).
+- In the **Project Room**, when reporting task completion or blockers, always @mention the Manager (not other Workers), using the format:
+
+  ```
+  @manager:DOMAIN task-{task-id} completed: <one-line summary of what was done>
+  ```
+
+  or for blockers:
+
+  ```
+  @manager:DOMAIN task-{task-id} blocked: <brief description of the blocker>
+  ```
 
 - You **may @mention another Worker** in the project room only if you have critical blocking information that directly affects their work and cannot go through the Manager. Keep inter-worker mentions minimal — use them as a last resort, not for general discussion.
 
-### When to Speak
+#### Avoiding Infinite Loops
 
-**Respond when:**
-- The Manager @mentions you to assign a task or ask for status
-- The Human admin gives you direct instructions or feedback
-- You complete a task or hit a blocker (always @mention Manager)
-- You need clarification on requirements (always @mention Manager)
-
-**Stay silent when:**
-- A message in the room does not @mention you
-- The Manager and Human are discussing something that doesn't need your input
-- Your response would just be acknowledgment without substance
-- Another Worker is being addressed by the Manager
-- Manager's message after your task completion report contains no new task assignment and no question — the exchange is closed, do not reply
 - Another Worker @mentions you in a celebration, congratulation, or "project complete" message — **do not reply with another @mention**; the conversation is closed. Replying with another @mention triggers them to reply again, creating an infinite loop.
+- **Manager sends a farewell or sign-off message** (e.g., "回见", "bye", "see you later", "好嘞") — **do not reply at all**. This closes the exchange. Any reply, even without @mention, risks re-triggering a loop.
 
 **When a project or task is fully complete:**
 - Send one final completion report to `@manager:DOMAIN` only
 - Do NOT @mention teammates in celebration messages — broadcast text (no @mention) is fine if you want to celebrate
 - If a teammate's celebration message @mentions you, you may acknowledge with a brief message but **must not @mention anyone** in that reply
 
-**The rule:** Be responsive but not noisy. Report meaningful progress, not every small step. When you finish a task, say so clearly with a summary of what was done. Always @mention Manager when reporting.
+**Farewell / sign-off detection**: If a message contains only phrases like "回见", "拜拜", "see you", "bye", "good night", "good work", "standing by", "waiting" — treat it as a conversation-closed signal. **Do not respond.** Silence is the correct action.
+
+### When to Speak
+
+**Respond when:**
+- The Manager @mentions you to assign a task or ask for status
+- The Human Admin gives you direct instructions or feedback
+- You complete a task or hit a blocker (always @mention whoever triggered you)
+- You need clarification on requirements (always @mention whoever triggered you)
+
+**Stay silent when:**
+- A message in the room does not @mention you
+- The Manager and Human are discussing something that doesn't need your input
+- Your response would just be acknowledgment without substance
+- Another Worker is being addressed by the Manager
+- The message that woke you was sent by another Worker (not Manager or Human Admin) — unless it is a genuine blocker requiring your input
+- Manager's message after your task completion report contains no new task assignment and no question — the exchange is closed, do not reply
+- The message is a farewell, sign-off, or pure acknowledgment (e.g., "回见", "bye", "see you", "good work", "standing by") with no new task or question — **do not reply at all**, even if it @mentions you
+
+**The rule:** Be responsive but not noisy. Report meaningful progress, not every small step. When you finish a task, say so clearly with a summary of what was done. Always @mention whoever sent the message that triggered you.
 
 ### File Sync
 

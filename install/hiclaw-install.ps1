@@ -23,8 +23,9 @@
 #   HICLAW_WORKSPACE_DIR      Host directory for manager workspace (default: ~/hiclaw-manager)
 #   HICLAW_VERSION            Image tag          (default: latest)
 #   HICLAW_REGISTRY           Image registry     (default: auto-detected by timezone)
-#   HICLAW_INSTALL_MANAGER_IMAGE  Override manager image (e.g., local build)
-#   HICLAW_INSTALL_WORKER_IMAGE   Override worker image  (e.g., local build)
+#   HICLAW_INSTALL_MANAGER_IMAGE       Override manager image (e.g., local build)
+#   HICLAW_INSTALL_WORKER_IMAGE        Override worker image  (e.g., local build)
+#   HICLAW_INSTALL_COPAW_WORKER_IMAGE  Override copaw worker image (e.g., local build)
 #   HICLAW_PORT_GATEWAY       Host port for Higress gateway (default: 18080)
 #   HICLAW_PORT_CONSOLE       Host port for Higress console (default: 18001)
 #   HICLAW_PORT_ELEMENT_WEB   Host port for Element Web direct access (default: 18088)
@@ -308,6 +309,13 @@ $script:Messages = @{
     "host_share.sharing" = @{ zh = "共享主机目录: {0} -> 容器内 /host-share"; en = "Sharing host directory: {0} -> /host-share in container" }
     "host_share.not_exist" = @{ zh = "警告: 主机目录 {0} 不存在，跳过验证继续使用"; en = "WARNING: Host directory {0} does not exist, using without validation" }
 
+    # --- Default worker runtime ---
+    "worker_runtime.title" = @{ zh = "--- 默认 Worker 运行时 ---"; en = "--- Default Worker Runtime ---" }
+    "worker_runtime.openclaw" = @{ zh = "OpenClaw（Node.js 容器，~500MB 内存，功能完整）"; en = "OpenClaw (Node.js container, ~500MB RAM, full-featured)" }
+    "worker_runtime.copaw" = @{ zh = "CoPaw（Python 容器，~100MB 内存，默认关闭控制台，可跟 Manager 对话按需开启）"; en = "CoPaw (Python container, ~100MB RAM, console off by default, enable on demand via Manager)" }
+    "worker_runtime.choice" = @{ zh = "请选择 [1/2]"; en = "Enter choice [1/2]" }
+    "worker_runtime.selected" = @{ zh = "默认 Worker 运行时: {0}"; en = "Default Worker runtime: {0}" }
+
     # --- Secrets and config ---
     "install.generating_secrets" = @{ zh = "正在生成密钥..."; en = "Generating secrets..." }
     "install.config_saved" = @{ zh = "配置已保存到 {0}"; en = "Configuration saved to {0}" }
@@ -415,6 +423,7 @@ $script:Messages = @{
     # --- Prompt function messages ---
     "prompt.preset" = @{ zh = "  {0} = （已通过环境变量预设）"; en = "  {0} = (pre-set via env)" }
     "prompt.upgrade_keep" = @{ zh = "  {0} = {1}（当前值，回车保留 / 输入新值覆盖）"; en = "  {0} = {1} (current value, press Enter to keep / type new value to change)" }
+    "prompt.upgrade_empty" = @{ zh = "  {0} = （未设置，回车跳过 / 输入新值设置）"; en = "  {0} = (not set, press Enter to skip / type new value to set)" }
     "prompt.default" = @{ zh = "  {0} = {1}（默认）"; en = "  {0} = {1} (default)" }
     "prompt.required" = @{ zh = "{0} 是必需的（在非交互模式下通过环境变量设置）"; en = "{0} is required (set via environment variable in non-interactive mode)" }
     "prompt.required_empty" = @{ zh = "{0} 是必需的"; en = "{0} is required" }
@@ -625,8 +634,12 @@ HICLAW_GITHUB_TOKEN=$($Config.GITHUB_TOKEN)
 # Skills Registry (optional, default: https://skills.sh)
 HICLAW_SKILLS_API_URL=$($Config.SKILLS_API_URL)
 
-# Worker image (for direct container creation)
+# Worker images (for direct container creation)
 HICLAW_WORKER_IMAGE=$($Config.WORKER_IMAGE)
+HICLAW_COPAW_WORKER_IMAGE=$($Config.COPAW_WORKER_IMAGE)
+
+# Default Worker runtime (openclaw | copaw)
+HICLAW_DEFAULT_WORKER_RUNTIME=$($Config.DEFAULT_WORKER_RUNTIME)
 
 # Higress WASM plugin image registry (auto-selected by timezone)
 HIGRESS_ADMIN_WASM_PLUGIN_IMAGE_REGISTRY=$($Config.REGISTRY)
@@ -686,6 +699,23 @@ function Read-Prompt {
         }
         Write-Log (Get-Msg "prompt.preset" -f $VarName)
         return $envValue
+    }
+    # Upgrade mode: optional fields with empty value — let user set a new value
+    elseif ($Optional -and $script:HICLAW_UPGRADE -and -not $script:HICLAW_NON_INTERACTIVE) {
+        Write-Log (Get-Msg "prompt.upgrade_empty" -f $VarName)
+        $prompt = $PromptText
+        if ($Secret) {
+            $newValue = Read-Host -Prompt $prompt -AsSecureString
+            $newValue = [System.Runtime.InteropServices.Marshal]::PtrToStringAuto(
+                [System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($newValue)
+            )
+        } else {
+            $newValue = Read-Host -Prompt $prompt
+        }
+        if ($newValue) {
+            return $newValue
+        }
+        return ""
     }
 
     # Non-interactive or quickstart mode
@@ -1117,6 +1147,12 @@ function Install-Manager {
         $env:HICLAW_INSTALL_WORKER_IMAGE
     } else {
         "$($script:HICLAW_REGISTRY)/higress/hiclaw-worker:$($script:HICLAW_VERSION)"
+    }
+
+    $script:COPAW_WORKER_IMAGE = if ($env:HICLAW_INSTALL_COPAW_WORKER_IMAGE) {
+        $env:HICLAW_INSTALL_COPAW_WORKER_IMAGE
+    } else {
+        "$($script:HICLAW_REGISTRY)/higress/hiclaw-copaw-worker:$($script:HICLAW_VERSION)"
     }
 
     Write-Log (Get-Msg "install.registry" -f $script:HICLAW_REGISTRY)
@@ -1620,6 +1656,21 @@ function Install-Manager {
     }
     Write-Log (Get-Msg "workspace.dir_label" -f $config.WORKSPACE_DIR)
 
+    # Default Worker Runtime
+    Write-Log (Get-Msg "worker_runtime.title")
+    Write-Host ""
+    Write-Host "  1) $(Get-Msg 'worker_runtime.openclaw')"
+    Write-Host "  2) $(Get-Msg 'worker_runtime.copaw')"
+    Write-Host ""
+    if ($script:HICLAW_NON_INTERACTIVE -or $env:HICLAW_DEFAULT_WORKER_RUNTIME) {
+        $config.DEFAULT_WORKER_RUNTIME = if ($env:HICLAW_DEFAULT_WORKER_RUNTIME) { $env:HICLAW_DEFAULT_WORKER_RUNTIME } else { "openclaw" }
+    } else {
+        $rtChoice = Read-Host (Get-Msg "worker_runtime.choice")
+        $rtChoice = if ($rtChoice) { $rtChoice } else { "1" }
+        $config.DEFAULT_WORKER_RUNTIME = if ($rtChoice -eq "2") { "copaw" } else { "openclaw" }
+    }
+    Write-Log (Get-Msg "worker_runtime.selected" -f $config.DEFAULT_WORKER_RUNTIME)
+
     Write-Log ""
 
     # Generate secrets
@@ -1634,6 +1685,7 @@ function Install-Manager {
     $config.LANGUAGE = $script:HICLAW_LANGUAGE
     $config.REGISTRY = $script:HICLAW_REGISTRY
     $config.WORKER_IMAGE = $script:WORKER_IMAGE
+    $config.COPAW_WORKER_IMAGE = $script:COPAW_WORKER_IMAGE
 
     # Host share directory
     if (-not $script:HICLAW_NON_INTERACTIVE -and -not $script:HICLAW_QUICKSTART -and -not $env:HICLAW_HOST_SHARE_DIR) {
@@ -1741,6 +1793,20 @@ function Install-Manager {
     } else {
         Write-Log (Get-Msg "install.image.pulling_worker" -f $script:WORKER_IMAGE)
         & docker pull $script:WORKER_IMAGE
+    }
+    if ($script:COPAW_WORKER_IMAGE.StartsWith($LocalImagePrefix)) {
+        $copawImageExists = docker image inspect $script:COPAW_WORKER_IMAGE 2>$null
+        if ($LASTEXITCODE -eq 0) {
+            Write-Log "Copaw worker image exists: $($script:COPAW_WORKER_IMAGE)"
+        } else {
+            Write-Log "Pulling copaw worker image: $($script:COPAW_WORKER_IMAGE)"
+            & docker pull $script:COPAW_WORKER_IMAGE 2>$null
+            if ($LASTEXITCODE -ne 0) { Write-Log "Copaw worker image not available (optional)" }
+        }
+    } else {
+        Write-Log "Pulling copaw worker image: $($script:COPAW_WORKER_IMAGE)"
+        & docker pull $script:COPAW_WORKER_IMAGE 2>$null
+        if ($LASTEXITCODE -ne 0) { Write-Log "Copaw worker image not available (optional)" }
     }
 
     # Run container

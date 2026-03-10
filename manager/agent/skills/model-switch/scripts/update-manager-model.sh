@@ -54,7 +54,15 @@ case "${MODEL_NAME}" in
         CTX=200000; MAX=128000 ;;
 esac
 
-log "Updating Manager model: ${MODEL_NAME} (ctx=${CTX}, max=${MAX})"
+# Resolve input modalities: only vision-capable models get "image"
+case "${MODEL_NAME}" in
+    gpt-5.4|gpt-5.3-codex|gpt-5-mini|gpt-5-nano|claude-opus-4-6|claude-sonnet-4-6|claude-haiku-4-5|qwen3.5-plus|kimi-k2.5)
+        INPUT='["text", "image"]' ;;
+    *)
+        INPUT='["text"]' ;;
+esac
+
+log "Updating Manager model: ${MODEL_NAME} (ctx=${CTX}, max=${MAX}, input=${INPUT})"
 
 # ── Pre-flight: verify the model is reachable via AI Gateway ──────────────────
 GATEWAY_URL="http://${HICLAW_AI_GATEWAY_DOMAIN:-aigw-local.hiclaw.io}:8080/v1/chat/completions"
@@ -89,11 +97,13 @@ TMP=$(mktemp)
 jq --arg model "${MODEL_NAME}" \
    --argjson ctx "${CTX}" \
    --argjson max "${MAX}" \
+   --argjson input "${INPUT}" \
    '(.models.providers["hiclaw-gateway"].models[0]) |= (. + {
        "id": $model,
        "name": $model,
        "contextWindow": $ctx,
-       "maxTokens": $max
+       "maxTokens": $max,
+       "input": $input
      })
     | .agents.defaults.model.primary = ("hiclaw-gateway/" + $model)' \
    "${CONFIG_FILE}" > "${TMP}" && mv "${TMP}" "${CONFIG_FILE}"

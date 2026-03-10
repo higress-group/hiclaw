@@ -25,7 +25,8 @@ HiClaw 是基于 [OpenClaw](https://github.com/nicepkg/openclaw) 的开源 Agent
 所有通信都发生在 Matrix 群聊房间里。你看得到一切，随时可以介入——就像在微信群里和一支团队协作。
 
 ## 动态
-- **2026-03-04:** HiClaw 开源，引入 Manager Agent 角色，构建企业级多 Agent 协同平台。了解[更多](https://github.com/higress-group/hiclaw/blob/main/blog/zh-cn/hiclaw-announcement.md) 。
+- **2026-03-10:** HiClaw 1.0.4 发布，支持 CoPaw Worker——内存占用降低 80%，新增本地模式可操作浏览器。了解[更多](blog/zh-cn/hiclaw-1.0.4-release.md)。
+- **2026-03-04:** HiClaw 开源，引入 Manager Agent 角色，构建企业级多 Agent 协同平台。了解[更多](https://github.com/higress-group/hiclaw/blob/main/blog/zh-cn/hiclaw-announcement.md)。
 
 ## 为什么选 HiClaw
 
@@ -195,7 +196,7 @@ docker exec -it hiclaw-manager cat /var/log/hiclaw/manager-agent.log
 
 目前 Worker 基于 OpenClaw 运行，内存占用较高（约 500MB+）。我们计划支持更轻量的 Agent 运行时：
 
-- **CoPaw** —— AgentScope 团队开发的轻量 Agent 运行时，支持本地模型（llama.cpp/MLX/Ollama）和多渠道接入，内存占用比 OpenClaw 更低
+- **CoPaw** ✅ **[已在 1.0.4 发布](blog/zh-cn/hiclaw-1.0.4-release.md)** —— AgentScope 团队开发的轻量 Agent 运行时。Docker 模式内存占用约 100MB（对比 OpenClaw 的 500MB），还支持本地模式可操作浏览器、访问本地文件。
 - **ZeroClaw** —— 基于 Rust 的超轻量运行时，3.4MB 二进制，冷启动 <10ms，专为边缘和资源受限环境设计
 - **NanoClaw** —— 极简 OpenClaw 替代品，<4000 行代码，基于容器隔离，使用 Anthropic Agents SDK
 
@@ -262,7 +263,7 @@ make help  # 查看所有可用目标
 ## 社区
 
 - [Discord](https://discord.gg/NVjNA4BAVw)
-- [钉钉群](https://qr.dingtalk.com/action/joingroup?code=v1,k1,0etR5l8fxeb/6/mzE5hRE1uy4tkiwxvPV9+TdBv7sEM=&_dt_no_comment=1&origin=11)
+- [钉钉群](https://qr.dingtalk.com/action/joingroup?code=v1,k1,6UzvW/6kvHcW2aBsoyJE0roFxM7xt0VgBuU8T3S8aYM=&_dt_no_comment=1&origin=11)
 - 微信群——扫码加入：
 
 <p align="center">
