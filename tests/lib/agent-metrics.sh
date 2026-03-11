@@ -1027,12 +1027,12 @@ generate_comparison_markdown() {
         echo ""
 
         if [ "$baseline_available" = "true" ]; then
-            echo "| Test | LLM Calls | Δ | Mgr Calls | Wkr Calls | Total Tokens | Δ | Trend |"
-            echo "|------|-----------|---|-----------|-----------|--------------|---|-------|"
+            echo "| Test | Mgr Calls | Wkr Calls | Δ Calls | Mgr In | Wkr In | Mgr Out | Wkr Out | Δ Tokens | Trend |"
+            echo "|------|-----------|-----------|---------|--------|--------|---------|---------|----------|-------|"
 
             while IFS= read -r row; do
                 local name calls base_calls delta_calls total base_total delta_total trend
-                local mgr_calls wkr_calls
+                local mgr_calls wkr_calls mgr_in wkr_in mgr_out wkr_out
                 name=$(echo "$row" | jq -r '.test_name')
                 calls=$(echo "$row" | jq -r '.current.llm_calls // 0')
                 base_calls=$(echo "$row" | jq -r '.baseline.llm_calls // 0')
@@ -1042,6 +1042,10 @@ generate_comparison_markdown() {
                 delta_total=$(echo "$row" | jq -r '.delta.tokens_total // 0')
                 mgr_calls=$(echo "$row" | jq -r '.current.by_role.manager.llm_calls // 0')
                 wkr_calls=$(echo "$row" | jq -r '.current.by_role.workers.llm_calls // 0')
+                mgr_in=$(echo "$row" | jq -r '.current.by_role.manager.tokens.input // 0')
+                wkr_in=$(echo "$row" | jq -r '.current.by_role.workers.tokens.input // 0')
+                mgr_out=$(echo "$row" | jq -r '.current.by_role.manager.tokens.output // 0')
+                wkr_out=$(echo "$row" | jq -r '.current.by_role.workers.tokens.output // 0')
                 trend=$(echo "$row" | jq -r '.trend')
                 local trend_icon
                 case "$trend" in
@@ -1050,21 +1054,22 @@ generate_comparison_markdown() {
                     new_test)  trend_icon="🆕 new" ;;
                     *)         trend_icon="— unchanged" ;;
                 esac
-                echo "| $name | $calls | $(_format_delta "$delta_calls") $(_format_pct "$calls" "$base_calls") | $mgr_calls | $wkr_calls | $total | $(_format_delta "$delta_total") $(_format_pct "$total" "$base_total") | $trend_icon |"
+                echo "| $name | $mgr_calls | $wkr_calls | $(_format_delta "$delta_calls") $(_format_pct "$calls" "$base_calls") | $mgr_in | $wkr_in | $mgr_out | $wkr_out | $(_format_delta "$delta_total") $(_format_pct "$total" "$base_total") | $trend_icon |"
             done < <(echo "$comparison" | jq -c '.tests[]')
         else
-            echo "| Test | LLM Calls | Mgr Calls | Wkr Calls | Input Tokens | Output Tokens |"
-            echo "|------|-----------|-----------|-----------|--------------|---------------|"
+            echo "| Test | Mgr Calls | Wkr Calls | Mgr In | Wkr In | Mgr Out | Wkr Out |"
+            echo "|------|-----------|-----------|--------|--------|---------|---------|"
 
             while IFS= read -r row; do
-                local name calls mgr_calls wkr_calls tin tout
+                local name mgr_calls wkr_calls mgr_in wkr_in mgr_out wkr_out
                 name=$(echo "$row" | jq -r '.test_name')
-                calls=$(echo "$row" | jq -r '.current.llm_calls // .llm_calls // 0')
                 mgr_calls=$(echo "$row" | jq -r '.current.by_role.manager.llm_calls // .by_role.manager.llm_calls // 0')
                 wkr_calls=$(echo "$row" | jq -r '.current.by_role.workers.llm_calls // .by_role.workers.llm_calls // 0')
-                tin=$(echo "$row" | jq -r '.current.tokens.input // .tokens.input // 0')
-                tout=$(echo "$row" | jq -r '.current.tokens.output // .tokens.output // 0')
-                echo "| $name | $calls | $mgr_calls | $wkr_calls | $tin | $tout |"
+                mgr_in=$(echo "$row" | jq -r '.current.by_role.manager.tokens.input // .by_role.manager.tokens.input // 0')
+                wkr_in=$(echo "$row" | jq -r '.current.by_role.workers.tokens.input // .by_role.workers.tokens.input // 0')
+                mgr_out=$(echo "$row" | jq -r '.current.by_role.manager.tokens.output // .by_role.manager.tokens.output // 0')
+                wkr_out=$(echo "$row" | jq -r '.current.by_role.workers.tokens.output // .by_role.workers.tokens.output // 0')
+                echo "| $name | $mgr_calls | $wkr_calls | $mgr_in | $wkr_in | $mgr_out | $wkr_out |"
             done < <(echo "$comparison" | jq -c '.tests[]')
         fi
         echo ""
