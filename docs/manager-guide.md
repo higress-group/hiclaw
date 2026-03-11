@@ -73,7 +73,7 @@ The Manager supports multiple communication channels beyond the built-in Matrix 
 
 ### Primary Channel
 
-The Manager sends proactive notifications (daily keepalive, etc.) to the **primary channel**. By default this is Matrix DM.
+The Manager sends proactive notifications (cross-channel escalation, etc.) to the **primary channel**. By default this is Matrix DM.
 
 **Setting the primary channel**: On the first DM from a new channel, the Manager will ask whether you want to make it the primary channel. Reply "yes" to confirm. You can also switch at any time by saying e.g. "switch primary channel to Discord".
 
@@ -107,60 +107,13 @@ The Manager and Worker OpenClaw instances use **type-based session policies**:
 "session": {
   "resetByType": {
     "dm":    { "mode": "daily", "atHour": 4 },
-    "group": { "mode": "idle",  "idleMinutes": 2880 }
+    "group": { "mode": "daily", "atHour": 4 }
   }
 }
 ```
 
-- **DM sessions** (Manager ↔ Human Admin): reset daily at 04:00. The Manager's daily heartbeat prevents context buildup from accumulating indefinitely.
-- **Group rooms** (Worker rooms, project rooms): reset after **2 days** (2880 minutes) of inactivity. As long as activity is maintained, context is preserved.
-
-### Daily Keepalive Notification (10:00)
-
-Each day between 10:00 and 10:59, the Manager checks whether it has already sent a keepalive notification today. If not, it:
-
-1. Lists all active group rooms (Worker rooms + active project rooms)
-2. Reads the previous day's preferences (which rooms were selected)
-3. Sends a notification via the **primary channel** (or Matrix DM if no primary channel is configured) that includes:
-   - The list of active rooms subject to 2-day idle reset
-   - Why keepalive matters: Workers' conversation history will be wiped after 2 days of inactivity, losing context for ongoing tasks
-   - Why skipping keepalive is valid: fewer messages in history means lower token cost per LLM call
-   - Yesterday's selection (if any), with the option to reuse or adjust
-   - Shortcut replies: 「继续」to reuse yesterday's choices, a new room list to update, 「不需要」to skip
-
-### Responding to the Keepalive Notification
-
-Reply in the DM with one of:
-
-| Reply | Effect |
-|-------|--------|
-| 「继续」 / "same" | Reuse yesterday's room selection |
-| Room names or IDs | Update selection to the provided rooms |
-| 「不需要」 / "skip" | Skip keepalive for today |
-
-The Manager will save the selection and send a keepalive message to each chosen room, waking stopped Worker containers as needed.
-
-### Manual Keepalive
-
-To manually trigger keepalive for a specific room:
-
-```bash
-docker exec hiclaw-manager bash -c \
-  'MANAGER_MATRIX_TOKEN=$(jq -r .channels.matrix.accessToken ~/manager-workspace/openclaw.json) \
-   bash /opt/hiclaw/scripts/session-keepalive.sh --action keepalive --room "!roomid:domain"'
-```
-
-To view active rooms and current preferences:
-
-```bash
-docker exec hiclaw-manager bash -c \
-  'MANAGER_MATRIX_TOKEN=$(jq -r .channels.matrix.accessToken ~/manager-workspace/openclaw.json) \
-   bash /opt/hiclaw/scripts/session-keepalive.sh --action list-rooms'
-
-docker exec hiclaw-manager bash -c \
-  'MANAGER_MATRIX_TOKEN=$(jq -r .channels.matrix.accessToken ~/manager-workspace/openclaw.json) \
-   bash /opt/hiclaw/scripts/session-keepalive.sh --action load-prefs'
-```
+- **DM sessions** (Manager ↔ Human Admin): reset daily at 04:00.
+- **Group rooms** (Worker rooms, project rooms): reset daily at 04:00, same as DM sessions.
 
 ### Session Reset Fallback
 

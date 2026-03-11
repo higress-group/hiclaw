@@ -73,7 +73,7 @@ Manager 支持 Matrix 私信之外的多种通信渠道。管理员可以通过 
 
 ### 主渠道
 
-Manager 将主动通知（每日保活等）发送到**主渠道**。默认为 Matrix 私信。
+Manager 将主动通知（跨渠道升级等）发送到**主渠道**。默认为 Matrix 私信。
 
 **设置主渠道**：首次从新渠道发送私信时，Manager 会询问是否将其设为主渠道。回复"是"确认。也可以随时切换，例如说"将主渠道切换到 Discord"。
 
@@ -107,60 +107,13 @@ Manager 和 Worker 的 OpenClaw 实例使用**基于类型的会话策略**：
 "session": {
   "resetByType": {
     "dm":    { "mode": "daily", "atHour": 4 },
-    "group": { "mode": "idle",  "idleMinutes": 2880 }
+    "group": { "mode": "daily", "atHour": 4 }
   }
 }
 ```
 
-- **私信会话**（Manager ↔ 人工管理员）：每天 04:00 重置。Manager 的每日心跳防止上下文无限积累。
-- **群组房间**（Worker 房间、项目房间）：**2 天**（2880 分钟）无活动后重置。只要保持活动，上下文就会保留。
-
-### 每日保活通知（10:00）
-
-每天 10:00 到 10:59 之间，Manager 检查今天是否已发送保活通知。如果没有，它会：
-
-1. 列出所有活跃的群组房间（Worker 房间 + 活跃项目房间）
-2. 读取前一天的偏好设置（选择了哪些房间）
-3. 通过**主渠道**（或未配置主渠道时通过 Matrix 私信）发送通知，包含：
-   - 受 2 天空闲重置影响的活跃房间列表
-   - 为什么需要保活：2 天无活动后 Worker 的对话历史会被清除，导致进行中任务的上下文丢失
-   - 为什么跳过保活也合理：历史消息越少，每次 LLM 调用消耗的 token 越少
-   - 昨天的选择（如有），并询问是否继续或调整
-   - 快捷回复：「继续」复用昨天的选择，新的房间列表更新选择，「不需要」跳过今天的保活
-
-### 响应保活通知
-
-在私信中回复以下内容之一：
-
-| 回复 | 效果 |
-|------|------|
-| 「继续」/ "same" | 复用昨天的房间选择 |
-| 房间名称或 ID | 更新为提供的房间列表 |
-| 「不需要」/ "skip" | 跳过今天的保活 |
-
-Manager 会保存选择并向每个选定的房间发送保活消息，必要时唤醒已停止的 Worker 容器。
-
-### 手动保活
-
-手动触发特定房间的保活：
-
-```bash
-docker exec hiclaw-manager bash -c \
-  'MANAGER_MATRIX_TOKEN=$(jq -r .channels.matrix.accessToken ~/manager-workspace/openclaw.json) \
-   bash /opt/hiclaw/scripts/session-keepalive.sh --action keepalive --room "!roomid:domain"'
-```
-
-查看活跃房间和当前偏好设置：
-
-```bash
-docker exec hiclaw-manager bash -c \
-  'MANAGER_MATRIX_TOKEN=$(jq -r .channels.matrix.accessToken ~/manager-workspace/openclaw.json) \
-   bash /opt/hiclaw/scripts/session-keepalive.sh --action list-rooms'
-
-docker exec hiclaw-manager bash -c \
-  'MANAGER_MATRIX_TOKEN=$(jq -r .channels.matrix.accessToken ~/manager-workspace/openclaw.json) \
-   bash /opt/hiclaw/scripts/session-keepalive.sh --action load-prefs'
-```
+- **私信会话**（Manager ↔ 人工管理员）：每天 04:00 重置。
+- **群组房间**（Worker 房间、项目房间）：每天 04:00 重置，与私信会话一致。
 
 ### 会话重置后的恢复机制
 

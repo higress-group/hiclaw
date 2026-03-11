@@ -131,14 +131,6 @@ When admin requests a switch (e.g. "switch to Discord as primary", "切换到飞
 3. Write updated file
 4. Confirm in the admin's language, e.g.: "Primary channel switched to [Channel Name]. Daily reminders and proactive notifications will now be sent there."
 
-## Proactive Notification Routing
-
-The daily keepalive (HEARTBEAT.md step 7) calls `/opt/hiclaw/scripts/notify-admin-keepalive.sh`:
-- Exit 0 → notification dispatched to primary channel + mark-notified already called; skip Matrix DM
-- Exit 1 → no non-matrix primary or dispatch failed; use Matrix DM fallback
-
-The script reads `primary-channel.json`, calls `mark-notified`, then triggers an openclaw hook session that generates and delivers the keepalive message to the admin's primary channel.
-
 ## Cross-Channel Escalation
 
 When blocked on an admin decision while working in a Matrix room:
@@ -178,7 +170,7 @@ If `primary-channel.json` is missing, `confirmed: false`, or channel is `matrix`
 
 **通知发送到错误目标**：管理员反映收不到通知。检查 `primary-channel.json` 的 `to` 字段是否正确，向管理员确认其频道 ID 后重新写入。
 
-**Hook dispatch failure**: `notify-admin-keepalive.sh` exits 1 despite confirmed primary channel. Check:
+**Hook dispatch failure**: `escalate-to-admin.sh` exits 1 despite confirmed primary channel. Check:
 1. Is openclaw running? (`ps aux | grep openclaw`)
 2. Is `MANAGER_GATEWAY_KEY` set? (`echo $MANAGER_GATEWAY_KEY`)
 3. Is the hooks API enabled in openclaw config? (check `manager-openclaw.json.tmpl` → `hooks.enabled`)

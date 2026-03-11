@@ -92,7 +92,6 @@ The Manager Agent coordinates the entire team:
 - Runs heartbeat checks (triggered by OpenClaw's built-in heartbeat mechanism)
 - Manages credentials and access control
 - Automatically stops idle Worker containers and restarts them on task assignment
-- Monitors Matrix room session expiry and sends keepalive messages on request
 - Routes daily notifications to the admin's **primary channel** (with Matrix DM fallback)
 - Supports **cross-channel escalation**: sends urgent questions to the admin's primary channel and routes replies back to originating Matrix rooms
 
