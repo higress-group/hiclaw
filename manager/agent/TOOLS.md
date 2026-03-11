@@ -126,14 +126,6 @@ Multi-channel admin identity and primary notification routing.
 - Admin says "switch my primary channel to Discord"
 - Working in a Matrix room and need an urgent admin decision → cross-channel escalation
 
-## higress-gateway-management
-
-Higress AI Gateway: consumers, routes, LLM providers.
-
-- Creating a new Worker → create its Higress consumer and grant it AI route access
-- Admin provides a DeepSeek API key and wants to add it as a new LLM provider
-- Need to rotate an expired API key for an existing provider
-
 ## matrix-server-management
 
 Direct Matrix homeserver operations (Worker/project creation use dedicated scripts — this skill is for explicit standalone requests only).

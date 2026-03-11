@@ -52,8 +52,6 @@ manager/
 │       ├── mcp-server-management/
 │       │   ├── SKILL.md
 │       │   └── references/ # mcp-github.yaml
-│       ├── higress-gateway-management/
-│       │   └── SKILL.md
 │       └── matrix-server-management/
 │           └── SKILL.md
 ├── configs/
