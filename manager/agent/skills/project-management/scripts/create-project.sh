@@ -114,6 +114,8 @@ for worker in "${WORKER_ARR[@]}"; do
 done
 INVITE_LIST="${INVITE_LIST}]"
 
+MANAGER_MATRIX_ID="@manager:${MATRIX_DOMAIN}"
+ADMIN_MATRIX_ID="@${ADMIN_USER}:${MATRIX_DOMAIN}"
 ROOM_RESP=$(curl -sf -X POST http://127.0.0.1:6167/_matrix/client/v3/createRoom \
     -H "Authorization: Bearer ${MANAGER_MATRIX_TOKEN}" \
     -H 'Content-Type: application/json' \
@@ -121,7 +123,13 @@ ROOM_RESP=$(curl -sf -X POST http://127.0.0.1:6167/_matrix/client/v3/createRoom 
         "name": "Project: '"${PROJECT_TITLE}"'",
         "topic": "Project room for '"${PROJECT_TITLE}"' — managed by @manager",
         "invite": '"${INVITE_LIST}"',
-        "preset": "trusted_private_chat"
+        "preset": "private_chat",
+        "power_level_content_override": {
+            "users": {
+                "'"${MANAGER_MATRIX_ID}"'": 100,
+                "'"${ADMIN_MATRIX_ID}"'": 100
+            }
+        }
     }' 2>/dev/null) || _fail "Failed to create Matrix project room"
 
 ROOM_ID=$(echo "${ROOM_RESP}" | jq -r '.room_id // empty')
@@ -131,9 +139,6 @@ log "  Project room created: ${ROOM_ID}"
 # Update meta.json with room_id
 jq --arg rid "${ROOM_ID}" '.project_room_id = $rid' "${PROJECT_DIR}/meta.json" > /tmp/proj-meta-updated.json
 mv /tmp/proj-meta-updated.json "${PROJECT_DIR}/meta.json"
-
-# Ensure admin is in the room (belt-and-suspenders: createRoom already invites, but re-invite is safe)
-ADMIN_MATRIX_ID="@${ADMIN_USER}:${MATRIX_DOMAIN}"
 curl -sf -X POST "http://127.0.0.1:6167/_matrix/client/v3/rooms/${ROOM_ID}/invite" \
     -H "Authorization: Bearer ${MANAGER_MATRIX_TOKEN}" \
     -H 'Content-Type: application/json' \

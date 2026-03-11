@@ -62,7 +62,7 @@ Response: `{"access_token": "...", "user_id": "@<USERNAME>:<DOMAIN>", ...}`
 
 ### Create a Room (3-party: Human + Manager + Worker)
 
-When creating a Worker, always create a Room with the human admin, Manager, and Worker:
+When creating a Worker, always create a Room with the human admin, Manager, and Worker. Use `private_chat` preset so Workers get default power level 0 (regular user), and override Admin + Manager to power level 100 (admin):
 
 ```bash
 MANAGER_TOKEN="<manager_access_token>"
@@ -76,11 +76,19 @@ curl -X POST http://127.0.0.1:6167/_matrix/client/v3/createRoom \
       "@'"${HICLAW_ADMIN_USER}"':'"${HICLAW_MATRIX_DOMAIN}"'",
       "@<WORKER_NAME>:'"${HICLAW_MATRIX_DOMAIN}"'"
     ],
-    "preset": "trusted_private_chat"
+    "preset": "private_chat",
+    "power_level_content_override": {
+      "users": {
+        "@manager:'"${HICLAW_MATRIX_DOMAIN}"'": 100,
+        "@'"${HICLAW_ADMIN_USER}"':'"${HICLAW_MATRIX_DOMAIN}"'": 100
+      }
+    }
   }'
 ```
 
 Response: `{"room_id": "!<id>:<DOMAIN>"}`
+
+**Power levels:** Admin (100) and Manager (100) can manage the room; Workers default to 0 (regular user). Never use `trusted_private_chat` — it grants power level 100 to all members including Workers.
 
 ### Send a Message in a Room
 
