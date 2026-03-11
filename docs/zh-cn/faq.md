@@ -234,7 +234,26 @@ docker exec -it <worker-name> openclaw tui
 
 ## 在房间里和 Manager 聊天没有响应或返回错误状态码
 
-如果 Manager 没有响应，或者返回了 404、503 等状态码，查看 Higress AI 网关日志：
+如果 Manager 没有响应，或者返回了 404、503 等状态码，可以按以下步骤排查：
+
+### 1. 检查 Session 状态
+
+可能是 OpenClaw session 卡住了。进入 Manager 容器，使用 OpenClaw TUI 查看：
+
+```bash
+docker exec -it hiclaw-manager openclaw tui
+```
+
+进入 TUI 后：
+1. 输入 `/sessions` 查看所有 session
+2. 切换到对应聊天记录的 session
+3. 尝试对话，观察是否有报错
+
+如果 session 确实卡住了，可以尝试用 `/reset` 重置 session，看是否恢复正常。
+
+### 2. 检查 Higress AI 网关日志
+
+如果重置 session 后问题仍然存在，查看 Higress AI 网关日志：
 
 ```bash
 docker exec -it hiclaw-manager cat /var/log/hiclaw/higress-gateway.log

@@ -233,7 +233,26 @@ The model's context window size might be misconfigured, causing the window to fi
 
 ## Manager not responding or returning error status codes
 
-If Manager stops responding or you see error codes like 404 or 503, check the Higress AI Gateway log:
+If Manager stops responding or you see error codes like 404 or 503, check these common causes:
+
+### 1. Check session status
+
+The OpenClaw session might be stuck. Enter the Manager container and use the OpenClaw TUI to investigate:
+
+```bash
+docker exec -it hiclaw-manager openclaw tui
+```
+
+In the TUI:
+1. Type `/sessions` to list all sessions
+2. Switch to the session for the relevant chat
+3. Try sending a message and observe if there are any errors
+
+If the session is stuck, try `/reset` to reset it and see if that restores normal behavior.
+
+### 2. Check Higress AI Gateway log
+
+If resetting the session doesn't help, check the Higress AI Gateway log:
 
 ```bash
 docker exec -it hiclaw-manager cat /var/log/hiclaw/higress-gateway.log
