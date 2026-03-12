@@ -48,22 +48,34 @@ server {
         add_header Cache-Control "no-cache";
     }
 }
+NGINX
 
-# OpenClaw Console reverse proxy
-# Listens on 0.0.0.0:18799 and proxies to gateway loopback 127.0.0.1:18799
-# Exposed to host at 127.0.0.1:18888 via Docker port mapping
+# Generate Nginx config for OpenClaw Console reverse proxy.
+# Injects the gateway token into the HTML via sub_filter so the Control UI
+# auto-authenticates without requiring the user to enter a token manually.
+# localStorage key: "openclaw.control.settings.v1" → { token: "<key>" }
+OPENCLAW_TOKEN="${HICLAW_MANAGER_GATEWAY_KEY:-}"
+cat > /etc/nginx/conf.d/openclaw-console.conf << NGINX
+# OpenClaw Console — reverse proxy to gateway loopback with auto-token injection
 server {
     listen 18888;
 
     location / {
         proxy_pass http://127.0.0.1:18799;
         proxy_http_version 1.1;
-        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Upgrade \$http_upgrade;
         proxy_set_header Connection "upgrade";
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        # Disable upstream compression so sub_filter can modify HTML responses
+        proxy_set_header Accept-Encoding "";
         proxy_read_timeout 3600s;
         proxy_send_timeout 3600s;
+
+        # Auto-inject gateway token into localStorage so Control UI connects without manual auth
+        sub_filter_types text/html;
+        sub_filter_once on;
+        sub_filter '</head>' '<script>(function(){var K="openclaw.control.settings.v1",T="${OPENCLAW_TOKEN}";if(!T)return;try{var r=localStorage.getItem(K),s=r?JSON.parse(r):{};s.token=T;localStorage.setItem(K,JSON.stringify(s))}catch(e){}})();</script></head>';
     }
 }
 NGINX
