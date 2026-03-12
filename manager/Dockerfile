@@ -62,6 +62,10 @@ ENV OPENCLAW_CONFIG_PATH="/root/manager-workspace/openclaw.json"
 # Our supervisord.conf replaces the Higress one; our scripts handle all components
 COPY supervisord.conf /etc/supervisor/conf.d/supervisord.conf
 COPY scripts/ /opt/hiclaw/scripts/
+
+# Install systemctl shim so 'openclaw gateway restart' works without systemd
+RUN cp /opt/hiclaw/scripts/systemctl-shim.sh /usr/local/bin/systemctl && \
+    chmod +x /usr/local/bin/systemctl
 COPY agent/ /opt/hiclaw/agent/
 COPY configs/ /opt/hiclaw/configs/
 
@@ -79,7 +83,8 @@ RUN chmod +x /opt/hiclaw/scripts/init/*.sh /opt/hiclaw/scripts/lib/*.sh && \
 # 8080: Higress Gateway (unified entry point)
 # 8001: Higress Console
 # 9001: MinIO Console
-EXPOSE 8080 8001 9001
+# 18888: OpenClaw Console (via nginx reverse proxy to gateway loopback 18799)
+EXPOSE 8080 8001 9001 18888
 
 # ---- Persistent data ----
 # /data: MinIO object storage, secrets, worker credentials

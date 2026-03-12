@@ -48,6 +48,24 @@ server {
         add_header Cache-Control "no-cache";
     }
 }
+
+# OpenClaw Console reverse proxy
+# Listens on 0.0.0.0:18799 and proxies to gateway loopback 127.0.0.1:18799
+# Exposed to host at 127.0.0.1:18888 via Docker port mapping
+server {
+    listen 18888;
+
+    location / {
+        proxy_pass http://127.0.0.1:18799;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_read_timeout 3600s;
+        proxy_send_timeout 3600s;
+    }
+}
 NGINX
 
 # Remove default nginx site if exists

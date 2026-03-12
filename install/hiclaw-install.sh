@@ -354,6 +354,8 @@ msg() {
         "port.console_prompt.en") text="Host port for Higress console (8001 inside container)" ;;
         "port.element_prompt.zh") text="Element Web 直接访问主机端口（容器内 8088）" ;;
         "port.element_prompt.en") text="Host port for Element Web direct access (8088 inside container)" ;;
+        "port.openclaw_console_prompt.zh") text="OpenClaw 控制台主机端口（容器内 18888）" ;;
+        "port.openclaw_console_prompt.en") text="Host port for OpenClaw console (18888 inside container)" ;;
         # --- Local-only binding ---
         "port.local_only.title.zh") text="--- 网络访问模式 ---" ;;
         "port.local_only.title.en") text="--- Network Access Mode ---" ;;
@@ -1489,6 +1491,7 @@ install_manager() {
     prompt HICLAW_PORT_GATEWAY "$(msg port.gateway_prompt)" "18080"
     prompt HICLAW_PORT_CONSOLE "$(msg port.console_prompt)" "18001"
     prompt HICLAW_PORT_ELEMENT_WEB "$(msg port.element_prompt)" "18088"
+    prompt HICLAW_PORT_OPENCLAW_CONSOLE "$(msg port.openclaw_console_prompt)" "18888"
 
     log ""
 
@@ -1599,6 +1602,7 @@ HICLAW_ADMIN_PASSWORD=${HICLAW_ADMIN_PASSWORD}
 HICLAW_PORT_GATEWAY=${HICLAW_PORT_GATEWAY}
 HICLAW_PORT_CONSOLE=${HICLAW_PORT_CONSOLE}
 HICLAW_PORT_ELEMENT_WEB=${HICLAW_PORT_ELEMENT_WEB}
+HICLAW_PORT_OPENCLAW_CONSOLE=${HICLAW_PORT_OPENCLAW_CONSOLE:-18888}
 
 # Matrix
 HICLAW_MATRIX_DOMAIN=${HICLAW_MATRIX_DOMAIN}
@@ -1775,6 +1779,7 @@ EOF
         -p "${_port_prefix}${HICLAW_PORT_GATEWAY}:8080" \
         -p "${_port_prefix}${HICLAW_PORT_CONSOLE}:8001" \
         -p "${_port_prefix}${HICLAW_PORT_ELEMENT_WEB:-18088}:8088" \
+        -p "${_port_prefix}${HICLAW_PORT_OPENCLAW_CONSOLE:-18888}:18888" \
         ${DATA_MOUNT_ARGS} \
         ${WORKSPACE_MOUNT_ARGS} \
         ${HOST_SHARE_MOUNT_ARGS} \
