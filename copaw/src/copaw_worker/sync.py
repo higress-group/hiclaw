@@ -27,8 +27,12 @@ def _mc(*args: str, check: bool = True) -> subprocess.CompletedProcess:
     if not mc_bin:
         raise RuntimeError("mc binary not found on PATH. Please install mc first.")
     cmd = [mc_bin, *args]
-    logger.debug("mc cmd: %s", " ".join(cmd))
-    return subprocess.run(cmd, capture_output=True, text=True, check=check)
+    logger.info("mc cmd: %s", " ".join(cmd))
+    result = subprocess.run(cmd, capture_output=True, text=True, check=check)
+    logger.info("mc stdout (%d chars): %r", len(result.stdout), result.stdout[:200])
+    if result.stderr:
+        logger.info("mc stderr: %r", result.stderr[:200])
+    return result
 
 
 class FileSync:
@@ -121,6 +125,7 @@ class FileSync:
         text = self._cat(f"{self._prefix}/openclaw.json")
         if not text:
             raise RuntimeError(f"openclaw.json not found in MinIO for worker {self.worker_name}")
+        logger.info("openclaw.json raw content (%d chars): %r", len(text), text[:500])
         return json.loads(text)
 
     def get_soul(self) -> Optional[str]:
