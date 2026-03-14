@@ -62,7 +62,7 @@ bash <(curl -sSL https://higress.ai/hiclaw/install.sh)
 **Windows（支持 PowerShell 5+）输入以下安装命令：**
 
 ```powershell
-Set-ExecutionPolicy Bypass -Scope Process -Force; Invoke-Expression ((New-Object System.Net.WebClient).DownloadString('https://higress.ai/hiclaw/install.ps1'))
+Set-ExecutionPolicy Bypass -Scope Process -Force; $wc=New-Object Net.WebClient; $wc.Encoding=[Text.Encoding]::UTF8; iex $wc.DownloadString('https://higress.ai/hiclaw/install.ps1')
 ```
 
 这里，输入 Mac 系统的安装命令。

@@ -248,7 +248,7 @@ bash <(curl -sSL https://higress.ai/hiclaw/install.sh)
 **Windows (PowerShell 7+):**
 
 ```powershell
-Set-ExecutionPolicy Bypass -Scope Process -Force; Invoke-Expression ((New-Object System.Net.WebClient).DownloadString('https://higress.ai/hiclaw/install.ps1'))
+Set-ExecutionPolicy Bypass -Scope Process -Force; $wc=New-Object Net.WebClient; $wc.Encoding=[Text.Encoding]::UTF8; iex $wc.DownloadString('https://higress.ai/hiclaw/install.ps1')
 ```
 
 > ⚠️ Windows users need **PowerShell 7+** and **Docker Desktop** first.
