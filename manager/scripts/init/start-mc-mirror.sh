@@ -1,8 +1,28 @@
 #!/bin/bash
-# start-mc-mirror.sh - Initialize MinIO storage and start bidirectional file sync
+# start-mc-mirror.sh - Initialize MinIO storage and start periodic Remote->Local sync
 #
 # Manager's own workspace (/root/manager-workspace/) is LOCAL ONLY and not synced to MinIO.
 # MinIO only stores shared data and worker configs (/root/hiclaw-fs/).
+#
+# ── File Sync Design Principle ──────────────────────────────────────────────
+#
+#   Local -> Remote (push):
+#     The party that writes a file is responsible for pushing it to MinIO
+#     immediately via explicit mc cp/mirror. No background Local->Remote sync.
+#
+#   Remote -> Local (pull):
+#     The party that modifies files in MinIO is responsible for notifying the
+#     other side via Matrix @mention, so the receiver can pull on demand.
+#     Examples:
+#       - Manager pushes task spec → @mentions Worker → Worker runs file-sync
+#       - Worker pushes task result → @mentions Manager → Manager runs mc mirror
+#       - Manager pushes skill update → push-worker-skills.sh notifies Worker
+#
+#   This script only provides a 5-minute fallback pull as a safety net, in case
+#   an on-demand pull was missed (e.g., agent didn't follow SKILL.md exactly).
+#   Normal operation should NOT rely on this fallback.
+#
+# ────────────────────────────────────────────────────────────────────────────
 
 source /opt/hiclaw/scripts/lib/base.sh
 waitForService "MinIO" "127.0.0.1" 9000
@@ -31,67 +51,9 @@ touch "${HICLAW_FS_ROOT}/.initialized"
 
 log "MinIO storage initialized and synced to ${HICLAW_FS_ROOT}/"
 
-# Store PID file for cleanup on restart
-PID_FILE="/var/run/mc-mirror-watch.pid"
-
-# Clean up any existing watch process from previous runs
-if [ -f "${PID_FILE}" ]; then
-    OLD_PID=$(cat "${PID_FILE}" 2>/dev/null)
-    if [ -n "${OLD_PID}" ] && kill -0 "${OLD_PID}" 2>/dev/null; then
-        log "Cleaning up previous watch process (PID: ${OLD_PID})"
-        kill "${OLD_PID}" 2>/dev/null || true
-        # Wait for process to terminate
-        for i in $(seq 1 10); do
-            if ! kill -0 "${OLD_PID}" 2>/dev/null; then
-                break
-            fi
-            sleep 1
-        done
-        # Force kill if still running
-        if kill -0 "${OLD_PID}" 2>/dev/null; then
-            kill -9 "${OLD_PID}" 2>/dev/null || true
-        fi
-    fi
-    rm -f "${PID_FILE}"
-fi
-
-# Start bidirectional sync (shared + worker data only — manager workspace excluded)
-# Local -> Remote: real-time watch (filesystem notify)
-mc mirror --watch "${HICLAW_FS_ROOT}/" hiclaw/hiclaw-storage/ --overwrite &
-LOCAL_TO_REMOTE_PID=$!
-
-# Store PID for cleanup
-echo "${LOCAL_TO_REMOTE_PID}" > "${PID_FILE}"
-
-log "Local->Remote sync started (PID: ${LOCAL_TO_REMOTE_PID})"
-
-# Cleanup function to terminate background process on exit
-_cleanup() {
-    log "Stopping mc mirror watch (PID: ${LOCAL_TO_REMOTE_PID})..."
-    if [ -n "${LOCAL_TO_REMOTE_PID}" ] && kill -0 "${LOCAL_TO_REMOTE_PID}" 2>/dev/null; then
-        kill "${LOCAL_TO_REMOTE_PID}" 2>/dev/null || true
-        # Wait for graceful termination
-        for i in $(seq 1 5); do
-            if ! kill -0 "${LOCAL_TO_REMOTE_PID}" 2>/dev/null; then
-                log "mc mirror watch terminated gracefully"
-                break
-            fi
-            sleep 1
-        done
-        # Force kill if still running
-        if kill -0 "${LOCAL_TO_REMOTE_PID}" 2>/dev/null; then
-            kill -9 "${LOCAL_TO_REMOTE_PID}" 2>/dev/null || true
-            log "mc mirror watch force terminated"
-        fi
-    fi
-    rm -f "${PID_FILE}"
-    exit 0
-}
-
-# Register cleanup function for common exit signals
-trap _cleanup EXIT INT TERM HUP QUIT
-
-# Remote -> Local: periodic pull every 5 minutes (aligned with heartbeat)
+# Fallback: periodic Remote->Local pull every 5 minutes.
+# Normal operation relies on on-demand pulls triggered by Matrix notifications.
+# This loop is a safety net only — see design principle above.
 while true; do
     sleep 300
     mc mirror hiclaw/hiclaw-storage/ "${HICLAW_FS_ROOT}/" --overwrite --newer-than "5m" 2>/dev/null || true

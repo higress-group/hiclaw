@@ -310,9 +310,10 @@ When a Worker @mentions you with a task completion in the project room:
 
 ### 3a. Parse task outcome
 
-**First, read the task's `result.md` file** and extract the outcome:
+**First, pull the task directory from MinIO** (Worker has pushed results there), then read `result.md`:
 
 ```bash
+mc mirror hiclaw/hiclaw-storage/shared/tasks/${TASK_ID}/ /root/hiclaw-fs/shared/tasks/${TASK_ID}/ --overwrite
 RESULT_FILE="/root/hiclaw-fs/shared/tasks/${TASK_ID}/result.md"
 
 # Look for the Outcome section
@@ -414,7 +415,14 @@ Address all issues identified in the review/feedback, then:
 EOF
 ```
 
-5. **Update plan.md** to add the revision task:
+5. **Push revision task files to MinIO and update plan.md**:
+
+   ```bash
+   mc cp /root/hiclaw-fs/shared/tasks/${REVISION_TASK_ID}/meta.json hiclaw/hiclaw-storage/shared/tasks/${REVISION_TASK_ID}/meta.json
+   mc cp /root/hiclaw-fs/shared/tasks/${REVISION_TASK_ID}/spec.md hiclaw/hiclaw-storage/shared/tasks/${REVISION_TASK_ID}/spec.md
+   ```
+
+   Add the revision task to plan.md:
 
 ```markdown
 ### Phase N: {Phase Name}

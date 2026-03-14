@@ -93,28 +93,21 @@ log "HOME set to ${HOME} (workspace files will be synced to MinIO)"
 # Step 3: Start file sync
 # ============================================================
 #
-# Bidirectional sync between Worker workspace and MinIO, with clear ownership split:
+# ── File Sync Design Principle ──────────────────────────────────────────────
 #
-# Manager-managed (Worker read-only, Remote->Local pulls):
-#   openclaw.json, mcporter-servers.json, skills/, shared/
+#   The party that writes a file is responsible for:
+#     1. Pushing it to MinIO immediately (Local -> Remote)
+#     2. Notifying the other side via Matrix @mention so they can pull on demand
 #
-# Worker-managed (Worker read-write, Local->Remote pushes, never pulled):
-#   AGENTS.md, SOUL.md, .openclaw/ (sessions), memory/, skills add output, etc.
+#   Local -> Remote: change-triggered push of Worker-managed content
+#     - Uses find to detect files modified in last 10s; only runs mc mirror when needed
+#     - Avoids mc mirror --watch TOCTOU bug (crashes on atomic ops like npm install)
+#     - Excludes Manager-managed files (openclaw.json, mcporter-servers.json) and caches
 #
-# Local -> Remote: change-triggered sync
-#   - Avoids mc mirror --watch TOCTOU bug (crashes when source files deleted during
-#     atomic ops e.g. npm install, skills add)
-#   - Uses find to detect files modified in last 10s; only runs mc mirror when needed
-#   - Excludes Manager-managed files (openclaw.json, mcporter-servers.json) and
-#     caches (.agents, .cache, .npm, .local, .mc)
-#   - Pushes Worker-managed content including .openclaw sessions (backup to MinIO)
+#   Remote -> Local: on-demand pull via file-sync skill (triggered by Manager @mention)
+#     + 5-minute fallback pull of Manager-managed paths as safety net
 #
-# Remote -> Local: periodic pull (every 5m), allowlist only
-#   - Pulls only Manager-managed paths; never overwrites Worker-generated content
-#   - Prevents .openclaw session conflict: sessions are backed up up but never
-#     pulled back (would overwrite real-time session state)
-#   - On-demand pull also available via file-sync skill when Manager notifies
-#
+# ────────────────────────────────────────────────────────────────────────────
 (
     while true; do
         # Check for files modified in the last 10 seconds
@@ -132,7 +125,8 @@ log "HOME set to ${HOME} (workspace files will be synced to MinIO)"
 ) &
 log "Local->Remote change-triggered sync started (PID: $!)"
 
-# Remote -> Local: periodic pull (allowlist, see block above)
+# Remote -> Local: fallback pull of Manager-managed files (safety net, every 5m)
+# Normal operation relies on on-demand pulls via file-sync skill when Manager @mentions.
 (
     while true; do
         sleep 300
@@ -142,7 +136,7 @@ log "Local->Remote change-triggered sync started (PID: $!)"
         mc mirror "hiclaw/hiclaw-storage/shared/" "${HICLAW_ROOT}/shared/" --overwrite --newer-than "5m" 2>/dev/null || true
     done
 ) &
-log "Remote->Local periodic sync started (Manager-managed files only, every 5m, PID: $!)"
+log "Remote->Local fallback sync started (Manager-managed files only, every 5m, PID: $!)"
 
 # ============================================================
 # Step 4: Configure mcporter (MCP tool CLI)

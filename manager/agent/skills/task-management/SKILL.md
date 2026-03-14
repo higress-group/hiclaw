@@ -53,20 +53,28 @@ Ask admin: enable find-skills (recommended) or disable; optionally provide custo
    }
    # spec.md — complete requirements, acceptance criteria, context
    ```
-3. Notify Worker in their Room:
+3. Push task files to MinIO immediately:
+   ```bash
+   mc cp /root/hiclaw-fs/shared/tasks/{task-id}/meta.json hiclaw/hiclaw-storage/shared/tasks/{task-id}/meta.json
+   mc cp /root/hiclaw-fs/shared/tasks/{task-id}/spec.md hiclaw/hiclaw-storage/shared/tasks/{task-id}/spec.md
+   ```
+4. Notify Worker in their Room:
    ```
    @{worker}:{domain} New task [{task-id}]: {title}. Use your file-sync skill to pull the spec: hiclaw/hiclaw-storage/shared/tasks/{task-id}/spec.md. @mention me when complete.
    ```
    - If Worker has `find-skills` skill (`test -d /root/hiclaw-fs/agents/{worker}/skills/find-skills`), add: `💡 Run \`skills find <keyword>\` if you need additional capabilities.`
-4. Add to `state.json`:
+5. Add to `state.json`:
    ```bash
    bash /opt/hiclaw/agent/skills/task-management/scripts/manage-state.sh \
      --action add-finite --task-id {task-id} --title "{short description}" \
      --assigned-to {worker} --room-id {room-id}
    ```
    If the task belongs to a project, append `--project-room-id {project-room-id}`.
-5. On completion: update `meta.json` status=completed + completed_at, then remove from `state.json`:
+6. On completion: pull the task directory from MinIO first (Worker has pushed results), then update `meta.json` status=completed + completed_at, and remove from `state.json`:
    ```bash
+   mc mirror hiclaw/hiclaw-storage/shared/tasks/{task-id}/ /root/hiclaw-fs/shared/tasks/{task-id}/ --overwrite
+   # Update meta.json, then:
+   mc cp /root/hiclaw-fs/shared/tasks/{task-id}/meta.json hiclaw/hiclaw-storage/shared/tasks/{task-id}/meta.json
    bash /opt/hiclaw/agent/skills/task-management/scripts/manage-state.sh \
      --action complete --task-id {task-id}
    ```
@@ -106,16 +114,21 @@ For recurring/scheduled tasks:
    ```
    - `status` is always `"active"`, never `"completed"`
    - `schedule`: standard 5-field cron; `timezone`: tz database name
-2. Add to `state.json`:
+2. Push task files to MinIO immediately:
+   ```bash
+   mc cp /root/hiclaw-fs/shared/tasks/{task-id}/meta.json hiclaw/hiclaw-storage/shared/tasks/{task-id}/meta.json
+   mc cp /root/hiclaw-fs/shared/tasks/{task-id}/spec.md hiclaw/hiclaw-storage/shared/tasks/{task-id}/spec.md
+   ```
+3. Add to `state.json`:
    ```bash
    bash /opt/hiclaw/agent/skills/task-management/scripts/manage-state.sh \
      --action add-infinite --task-id {task-id} --title "{short description}" \
      --assigned-to {worker} --room-id {room-id} \
      --schedule "{cron}" --timezone "{tz}" --next-scheduled-at "{ISO-8601}"
    ```
-3. Heartbeat triggers when `now > next_scheduled_at + 30min` and `last_executed_at < next_scheduled_at`
-4. Trigger message: `@{worker}:{domain} Execute recurring task {task-id}: {title}. Report back with "executed" when done.`
-5. On execution: update `last_executed_at` and recalculate `next_scheduled_at`:
+4. Heartbeat triggers when `now > next_scheduled_at + 30min` and `last_executed_at < next_scheduled_at`
+5. Trigger message: `@{worker}:{domain} Execute recurring task {task-id}: {title}. Report back with "executed" when done.`
+6. On execution: update `last_executed_at` and recalculate `next_scheduled_at`:
    ```bash
    bash /opt/hiclaw/agent/skills/task-management/scripts/manage-state.sh \
      --action executed --task-id {task-id} --next-scheduled-at "{new-ISO-8601}"

@@ -13,4 +13,8 @@ Record image-affecting changes to `manager/`, `worker/`, `openclaw-base/` here b
 - feat(manager): `setup-mcp-server.sh` now generates Manager's own mcporter-servers.json, creates Worker mcporter config if missing, reads Worker gateway key from creds file instead of registry; pushes to MinIO via `mc cp`
 - fix(worker): always set MCPORTER_CONFIG env var in worker-entrypoint.sh (even if file not yet present) so mcporter works after file-sync pulls config
 - feat(manager): add `--no-reasoning` flag to model-switch and worker-model-switch scripts to allow disabling reasoning; patch `reasoning` field in openclaw.json during model switch
+- refactor(manager): remove Local->Remote background sync from start-mc-mirror.sh; all writes now push to MinIO explicitly via mc cp/mirror in skill scripts
+- refactor(manager): add explicit `mc cp` push steps to task-management and project-management SKILL.md after writing task files locally
+- refactor(manager): add on-demand `mc mirror` pull in task/project completion flows so Manager reads fresh Worker results from MinIO
+- docs(manager,worker,copaw): unify file sync design principle comments — writer pushes and notifies via Matrix, receiver pulls on demand, 5-min periodic pull as fallback only
 

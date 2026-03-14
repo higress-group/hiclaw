@@ -2,17 +2,21 @@
 
 All MinIO operations use the `mc` CLI (MinIO Client).
 
-Ownership split (aligned with OpenClaw worker-entrypoint.sh):
+File Sync Design Principle:
 
-  Manager-managed (Worker read-only, pull only, never overwrite):
+  The party that writes a file is responsible for:
+    1. Pushing it to MinIO immediately (Local -> Remote)
+    2. Notifying the other side via Matrix @mention so they can pull on demand
+
+  Manager-managed (Worker read-only, pull only):
     openclaw.json, mcporter-servers.json, skills/, shared/
 
-  Worker-managed (Worker read-write, push to MinIO, never pull-overwrite):
+  Worker-managed (Worker read-write, push to MinIO):
     AGENTS.md, SOUL.md, .copaw/sessions/, memory/, etc.
 
   Local -> Remote (push_loop): change-triggered push of Worker-managed content.
-  Remote -> Local (sync_loop pull_all): allowlist only, Manager-managed paths.
-  Prevents .copaw/sessions conflict: sessions backed up but never pulled back.
+  Remote -> Local (sync_loop pull_all): on-demand via file-sync skill when Manager
+    @mentions, plus fallback periodic pull of Manager-managed paths as safety net.
 """
 from __future__ import annotations
 
