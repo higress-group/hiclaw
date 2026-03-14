@@ -1559,7 +1559,7 @@ function Install-Manager {
     Write-Host "  1) $(Get-Msg 'port.local_only.hint_yes')"
     Write-Host "  2) $(Get-Msg 'port.local_only.hint_no')"
     Write-Host ""
-    if ($script:HICLAW_NON_INTERACTIVE -eq "1" -or $script:HICLAW_QUICKSTART) {
+    if ($script:HICLAW_NON_INTERACTIVE) {
         $localOnly = if ($env:HICLAW_LOCAL_ONLY) { $env:HICLAW_LOCAL_ONLY } else { "1" }
     } elseif ($null -ne $env:HICLAW_LOCAL_ONLY) {
         $localOnly = $env:HICLAW_LOCAL_ONLY

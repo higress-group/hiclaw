@@ -68,7 +68,7 @@ F**or macOS, enter the following installation command**
 bash <(curl -sSL https://higress.ai/hiclaw/install.sh)
 ```
 
-**For Windows (requires PowerShell 7+), enter the corresponding command below**
+**For Windows (supports PowerShell 5+), enter the corresponding command below**
 
 ```powershell
 Set-ExecutionPolicy Bypass -Scope Process -Force; Invoke-Expression ((New-Object System.Net.WebClient).DownloadString('https://higress.ai/hiclaw/install.ps1'))
