@@ -7,6 +7,7 @@ so CoPaw's channel registry picks it up automatically.
 from __future__ import annotations
 
 import asyncio
+import html
 import io
 import logging
 import mimetypes
@@ -55,6 +56,11 @@ except ImportError:  # pragma: no cover
 
 
 CHANNEL_KEY = "matrix"
+
+
+def _text_to_html(text: str) -> str:
+    """Escape HTML special chars and convert newlines to <br> for Matrix."""
+    return html.escape(text).replace("\n", "<br>\n")
 
 # Markers that separate accumulated history from the triggering message,
 # matching the convention used by OpenClaw so agents can parse uniformly.
@@ -883,8 +889,10 @@ class MatrixChannel(BaseChannel):
         )
 
         body = content.get("body", "")
+        # Reuse already-converted formatted_body (set by send()) or convert now
+        html_body = content.get("formatted_body") or _text_to_html(body)
         content["format"] = "org.matrix.custom.html"
-        content["formatted_body"] = f"{pill} {body}" if body else pill
+        content["formatted_body"] = f"{pill} {html_body}" if html_body else pill
         # Prepend plain-text fallback so non-HTML clients also see the mention
         content["body"] = f"{display_name} {body}" if body else display_name
 
@@ -916,7 +924,12 @@ class MatrixChannel(BaseChannel):
             return
 
         room_id = to_handle
-        content: dict[str, Any] = {"msgtype": "m.text", "body": text}
+        content: dict[str, Any] = {
+            "msgtype": "m.text",
+            "body": text,
+            "format": "org.matrix.custom.html",
+            "formatted_body": _text_to_html(text),
+        }
 
         sender_id = (meta or {}).get("sender_id") or (meta or {}).get("user_id")
         if sender_id:
