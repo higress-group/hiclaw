@@ -21,3 +21,5 @@ Record image-affecting changes to `manager/`, `worker/`, `openclaw-base/` here b
 - fix(manager): manage-state.sh `executed` action no longer errors when infinite task is missing from active_tasks (backward compat with legacy tasks)
 - feat(manager): add delegation-first principle to SOUL.md — Manager prioritizes assigning tasks to Workers over self-execution
 - feat(manager): task-management SKILL.md Step 0 decision flow now explicitly marks Worker delegation as preferred and self-execution as last resort
+- fix(worker): fix `hiclaw-sync: Permission denied` after upgrade — replace symlink with `/bin/sh` wrapper so execution does not depend on `+x` permission bit (MinIO does not preserve Unix permissions); add `chmod +x` in `hiclaw-sync.sh` and entrypoint fallback sync to restore script permissions after pull
+- fix(install): upgrade now pulls both openclaw and copaw worker images when the other runtime's image exists locally, ensuring all worker containers get updated regardless of the selected default runtime

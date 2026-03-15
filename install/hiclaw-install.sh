@@ -1725,7 +1725,7 @@ EOF
         log "$(msg install.yolo)"
     fi
 
-    # Pull images (only pull the worker image matching the selected runtime)
+    # Pull images (pull the selected runtime's worker image; on upgrade, also pull the other if present locally)
     LOCAL_IMAGE_PREFIX="hiclaw/"
 
     # Helper: pull or skip a single image
@@ -1745,11 +1745,27 @@ EOF
     # Manager image is always required
     _pull_image "${MANAGER_IMAGE}" "install.image.exists" "install.image.pulling_manager"
 
-    # Pull only the worker image for the selected runtime
+    # Pull worker image for the selected runtime
     if [ "${HICLAW_DEFAULT_WORKER_RUNTIME}" = "copaw" ]; then
         _pull_image "${COPAW_WORKER_IMAGE}" "install.image.worker_exists" "install.image.pulling_worker"
     else
         _pull_image "${WORKER_IMAGE}" "install.image.worker_exists" "install.image.pulling_worker"
+    fi
+
+    # During upgrade, also pull the other worker image if containers using it exist locally.
+    # This ensures ALL worker containers get updated, not just the ones matching the selected runtime.
+    if [ "${HICLAW_UPGRADE:-0}" = "1" ]; then
+        if [ "${HICLAW_DEFAULT_WORKER_RUNTIME}" = "copaw" ]; then
+            # Selected copaw, check if any openclaw worker image exists locally
+            if ${DOCKER_CMD} image inspect "${WORKER_IMAGE}" >/dev/null 2>&1; then
+                _pull_image "${WORKER_IMAGE}" "install.image.worker_exists" "install.image.pulling_worker"
+            fi
+        else
+            # Selected openclaw, check if any copaw worker image exists locally
+            if ${DOCKER_CMD} image inspect "${COPAW_WORKER_IMAGE}" >/dev/null 2>&1; then
+                _pull_image "${COPAW_WORKER_IMAGE}" "install.image.worker_exists" "install.image.pulling_worker"
+            fi
+        fi
     fi
 
     # Stop and remove existing containers (deferred from upgrade detection

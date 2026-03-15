@@ -84,8 +84,12 @@ if [ -f "${WORKSPACE}/skills-lock.json" ] && [ -z "$(ls -A ${WORKSPACE}/skills 2
     cd "${WORKSPACE}" && skills experimental_install -y 2>/dev/null || log "Warning: skills restore failed, will need to reinstall"
 fi
 
-# Ensure hiclaw-sync symlink is functional (wrapper script calls workspace path)
-ln -sf "${WORKSPACE}/skills/file-sync/scripts/hiclaw-sync.sh" /usr/local/bin/hiclaw-sync 2>/dev/null || true
+# Ensure hiclaw-sync wrapper is functional
+# Use /bin/sh to invoke the script so it works even without +x permission
+# (MinIO object storage does not preserve Unix permission bits)
+printf '#!/bin/bash\nexec /bin/sh "%s/skills/file-sync/scripts/hiclaw-sync.sh" "$@"\n' \
+    "${WORKSPACE}" > /usr/local/bin/hiclaw-sync
+chmod +x /usr/local/bin/hiclaw-sync
 
 log "HOME set to ${HOME} (workspace files will be synced to MinIO)"
 
@@ -133,6 +137,7 @@ log "Local->Remote change-triggered sync started (PID: $!)"
         mc cp "hiclaw/hiclaw-storage/agents/${WORKER_NAME}/openclaw.json" "${WORKSPACE}/openclaw.json" 2>/dev/null || true
         mc cp "hiclaw/hiclaw-storage/agents/${WORKER_NAME}/config/mcporter.json" "${WORKSPACE}/config/mcporter.json" 2>/dev/null || true
         mc mirror "hiclaw/hiclaw-storage/agents/${WORKER_NAME}/skills/" "${WORKSPACE}/skills/" --overwrite 2>/dev/null || true
+        find "${WORKSPACE}/skills" -name '*.sh' -exec chmod +x {} + 2>/dev/null || true
         mc mirror "hiclaw/hiclaw-storage/shared/" "${HICLAW_ROOT}/shared/" --overwrite --newer-than "5m" 2>/dev/null || true
     done
 ) &

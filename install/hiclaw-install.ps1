@@ -1764,7 +1764,7 @@ function Install-Manager {
         & docker pull $script:MANAGER_IMAGE
     }
 
-    # Pull only the worker image matching the selected runtime
+    # Pull the worker image matching the selected runtime (on upgrade, also pull the other if present locally)
     $selectedWorkerImage = if ($config.DEFAULT_WORKER_RUNTIME -eq "copaw") { $script:COPAW_WORKER_IMAGE } else { $script:WORKER_IMAGE }
     if ($selectedWorkerImage.StartsWith($LocalImagePrefix)) {
         $workerImageExists = docker image inspect $selectedWorkerImage 2>$null
@@ -1777,6 +1777,20 @@ function Install-Manager {
     } else {
         Write-Log (Get-Msg "install.image.pulling_worker" -f $selectedWorkerImage)
         & docker pull $selectedWorkerImage
+    }
+
+    # During upgrade, also pull the other worker image if it exists locally
+    if ($script:HICLAW_UPGRADE) {
+        $otherWorkerImage = if ($config.DEFAULT_WORKER_RUNTIME -eq "copaw") { $script:WORKER_IMAGE } else { $script:COPAW_WORKER_IMAGE }
+        $otherExists = docker image inspect $otherWorkerImage 2>$null
+        if ($LASTEXITCODE -eq 0) {
+            if ($otherWorkerImage.StartsWith($LocalImagePrefix)) {
+                Write-Log (Get-Msg "install.image.worker_exists" -f $otherWorkerImage)
+            } else {
+                Write-Log (Get-Msg "install.image.pulling_worker" -f $otherWorkerImage)
+                & docker pull $otherWorkerImage
+            }
+        }
     }
 
     # Stop and remove existing containers (deferred until after all
