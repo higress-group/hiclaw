@@ -30,6 +30,7 @@ Key Features:
 
 ## News
 
+- **2026-03-14**: HiClaw 1.0.6 released with enterprise-grade MCP Server management — zero credential exposure, maximum tool access. Workers can now safely use any MCP tool through Higress AI Gateway. Read more on our [blog](blog/hiclaw-1.0.6-release.md).
 - **2026-03-10**: HiClaw 1.0.4 released with CoPaw Worker support — 80% less memory, local host mode for browser automation. Read more on our [blog](blog/hiclaw-1.0.4-release.md).
 - **2026-03-04**: We officially open source HiClaw, an Agent Teams System. Read more on our [blog](https://github.com/higress-group/hiclaw/blob/main/blog/hiclaw-announcement.md).
 
