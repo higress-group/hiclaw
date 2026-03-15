@@ -1,0 +1,56 @@
+# HiClaw Manager - Docker Compose
+#
+# Prerequisites:
+#   Run hiclaw-install.sh first to generate hiclaw-manager.env (contains secrets and config).
+#
+# Usage:
+#   docker compose up -d
+#
+# This is equivalent to the `docker run` command in hiclaw-install.sh.
+# For interactive setup with auto-configuration, use hiclaw-install.sh instead.
+#
+# Optional environment variables (override via shell or .env file):
+#   HICLAW_REGISTRY       - Image registry (default: higress-registry.cn-hangzhou.cr.aliyuncs.com)
+#   HICLAW_VERSION        - Image tag (default: latest)
+#   HICLAW_TIMEZONE       - Container timezone (default: Asia/Shanghai)
+#   HICLAW_ENV_FILE       - Path to env file (default: hiclaw-manager.env)
+#   HICLAW_DATA_DIR       - Docker volume name for persistent data (default: hiclaw-data)
+#   HICLAW_WORKSPACE_DIR  - Host directory for manager workspace (default: ~/hiclaw-manager)
+#   HICLAW_HOST_SHARE_DIR - Host directory for file sharing (default: $HOME)
+
+services:
+  manager:
+    image: ${HICLAW_REGISTRY:-higress-registry.cn-hangzhou.cr.aliyuncs.com}/higress/hiclaw-manager:${HICLAW_VERSION:-latest}
+    container_name: hiclaw-manager
+    restart: unless-stopped
+    env_file:
+      - ${HICLAW_ENV_FILE:-hiclaw-manager.env}
+    environment:
+      - HOME=/root/manager-workspace
+      - HOST_ORIGINAL_HOME=${HICLAW_HOST_SHARE_DIR:-${HOME}}
+      - TZ=${HICLAW_TIMEZONE:-Asia/Shanghai}
+    working_dir: /root/manager-workspace
+    ports:
+      # Higress Gateway (main API gateway)
+      - "${HICLAW_PORT_GATEWAY:-18080}:8080"
+      # Higress Console (gateway management UI)
+      - "${HICLAW_PORT_CONSOLE:-18001}:8001"
+      # Element Web (chat UI)
+      - "${HICLAW_PORT_ELEMENT_WEB:-18088}:8088"
+      # OpenClaw Console (agent console, localhost only)
+      - "127.0.0.1:${HICLAW_PORT_OPENCLAW_CONSOLE:-18888}:18888"
+    volumes:
+      # Persistent data (MinIO storage, Tuwunel DB, secrets)
+      - ${HICLAW_DATA_DIR:-hiclaw-data}:/data
+      # Manager workspace (skills, memory, state — host-editable)
+      - ${HICLAW_WORKSPACE_DIR:-~/hiclaw-manager}:/root/manager-workspace
+      # Host directory sharing (optional, for file access from manager)
+      - ${HICLAW_HOST_SHARE_DIR:-${HOME}}:/host-share
+      # Docker socket (required for manager to create worker containers)
+      - /var/run/docker.sock:/var/run/docker.sock
+    security_opt:
+      - label=disable
+
+volumes:
+  hiclaw-data:
+    name: ${HICLAW_DATA_DIR:-hiclaw-data}
