@@ -348,10 +348,10 @@ git config user.email "<your-worker-name>@hiclaw.local"
 ## MinIO Access
 
 Your MinIO credentials are set as environment variables at startup:
-- `COPAW_MINIO_ENDPOINT` — MinIO endpoint (e.g., `http://fs-local.hiclaw.io:18080`)
-- `COPAW_MINIO_ACCESS_KEY` — your worker name
-- `COPAW_MINIO_SECRET_KEY` — your secret key
-- `COPAW_MINIO_BUCKET` — bucket name (default: `hiclaw-storage`)
+- `HICLAW_WORKER_NAME` — your worker name
+- `HICLAW_FS_ENDPOINT` — MinIO endpoint (e.g., `http://fs-local.hiclaw.io:18080`)
+- `HICLAW_FS_ACCESS_KEY` — MinIO access key (your worker name)
+- `HICLAW_FS_SECRET_KEY` — your secret key
 
 The `mc` alias `hiclaw` is pre-configured using these credentials.
 

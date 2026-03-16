@@ -245,6 +245,13 @@ log "  MinIO user ${WORKER_NAME} created with policy ${POLICY_NAME}"
 log "Step 2: Creating Matrix room..."
 MANAGER_MATRIX_ID="@manager:${MATRIX_DOMAIN}"
 ADMIN_MATRIX_ID="@${ADMIN_USER}:${MATRIX_DOMAIN}"
+# Build initial_state for room creation: add E2EE encryption state if enabled
+ROOM_E2EE_INITIAL_STATE=""
+if [ "${HICLAW_MATRIX_E2EE:-0}" = "1" ] || [ "${HICLAW_MATRIX_E2EE:-}" = "true" ]; then
+    ROOM_E2EE_INITIAL_STATE=',"initial_state":[{"type":"m.room.encryption","state_key":"","content":{"algorithm":"m.megolm.v1.aes-sha2"}}]'
+    log "  E2EE enabled: adding m.room.encryption to room initial_state"
+fi
+
 ROOM_RESP=$(curl -sf -X POST http://127.0.0.1:6167/_matrix/client/v3/createRoom \
     -H "Authorization: Bearer ${MANAGER_MATRIX_TOKEN}" \
     -H 'Content-Type: application/json' \
@@ -262,7 +269,7 @@ ROOM_RESP=$(curl -sf -X POST http://127.0.0.1:6167/_matrix/client/v3/createRoom 
                 "'"${ADMIN_MATRIX_ID}"'": 100,
                 "@'"${WORKER_NAME}"':'"${MATRIX_DOMAIN}"'": 0
             }
-        }
+        }'"${ROOM_E2EE_INITIAL_STATE}"'
     }' 2>/dev/null) || _fail "Failed to create Matrix room"
 
 ROOM_ID=$(echo "${ROOM_RESP}" | jq -r '.room_id // empty')

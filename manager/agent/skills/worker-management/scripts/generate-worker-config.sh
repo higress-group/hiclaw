@@ -76,6 +76,13 @@ export MODEL_CONTEXT_WINDOW="${CTX}"
 export MODEL_MAX_TOKENS="${MAX}"
 export MODEL_INPUT="${INPUT}"
 
+# E2EE: convert HICLAW_MATRIX_E2EE to JSON boolean for template substitution
+if [ "${HICLAW_MATRIX_E2EE:-0}" = "1" ] || [ "${HICLAW_MATRIX_E2EE:-}" = "true" ]; then
+    export MATRIX_E2EE_ENABLED=true
+else
+    export MATRIX_E2EE_ENABLED=false
+fi
+
 OUTPUT_DIR="/root/hiclaw-fs/agents/${WORKER_NAME}"
 mkdir -p "${OUTPUT_DIR}"
 

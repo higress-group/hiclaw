@@ -122,22 +122,43 @@ log "Model test passed (HTTP 200)"
 rm -f /tmp/model-test-resp.json
 # ─────────────────────────────────────────────────────────────────────────────
 
-TMP=$(mktemp)
-jq --arg model "${MODEL_NAME}" \
-   --argjson ctx "${CTX}" \
-   --argjson max "${MAX}" \
-   --argjson reasoning "${REASONING}" \
-   --argjson input "${INPUT}" \
-   '(.models.providers["hiclaw-gateway"].models[0]) |= (. + {
-       "id": $model,
-       "name": $model,
-       "reasoning": $reasoning,
-       "contextWindow": $ctx,
-       "maxTokens": $max,
-       "input": $input
-     })
-    | .agents.defaults.model.primary = ("hiclaw-gateway/" + $model)' \
-   "${CONFIG_FILE}" > "${TMP}" && mv "${TMP}" "${CONFIG_FILE}"
+# Check if the model already exists in the models array
+MODEL_EXISTS=$(jq --arg model "${MODEL_NAME}" \
+    '[.models.providers["hiclaw-gateway"].models[] | select(.id == $model)] | length' \
+    "${CONFIG_FILE}" 2>/dev/null)
 
-log "Done. OpenClaw will hot-reload the config within ~300ms."
-log "Model is now: ${MODEL_NAME}"
+TMP=$(mktemp)
+if [ "${MODEL_EXISTS}" -gt 0 ]; then
+    # Known model: switch the primary model pointer and update reasoning
+    jq --arg model "${MODEL_NAME}" \
+       --argjson reasoning "${REASONING}" \
+       '(.models.providers["hiclaw-gateway"].models[] | select(.id == $model)).reasoning = $reasoning
+        | .agents.defaults.model.primary = ("hiclaw-gateway/" + $model)
+        | .agents.defaults.models["hiclaw-gateway/" + $model] = { "alias": $model }' \
+       "${CONFIG_FILE}" > "${TMP}" && mv "${TMP}" "${CONFIG_FILE}"
+
+    log "Done. Model is now: ${MODEL_NAME}"
+else
+    # New model: add to models array and switch primary
+    jq --arg model "${MODEL_NAME}" \
+       --argjson ctx "${CTX}" \
+       --argjson max "${MAX}" \
+       --argjson reasoning "${REASONING}" \
+       --argjson input "${INPUT}" \
+       '.models.providers["hiclaw-gateway"].models += [{
+           "id": $model,
+           "name": $model,
+           "reasoning": $reasoning,
+           "contextWindow": $ctx,
+           "maxTokens": $max,
+           "input": $input
+         }]
+        | .agents.defaults.model.primary = ("hiclaw-gateway/" + $model)
+        | .agents.defaults.models["hiclaw-gateway/" + $model] = { "alias": $model }' \
+       "${CONFIG_FILE}" > "${TMP}" && mv "${TMP}" "${CONFIG_FILE}"
+
+    log "Done. Model '${MODEL_NAME}' has been added to the models list."
+fi
+
+echo ""
+echo "RESTART_REQUIRED: Run 'openclaw gateway restart' to apply the model switch."

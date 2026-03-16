@@ -5,17 +5,39 @@ copaw-sync - Manual sync trigger for CoPaw Worker
 Reads MinIO credentials from environment variables and triggers an immediate
 sync of config files (openclaw.json, SOUL.md, AGENTS.md, skills) from MinIO.
 
-Environment variables required:
-- COPAW_WORKER_NAME: Worker name
-- COPAW_MINIO_ENDPOINT: MinIO endpoint (e.g., http://fs-local.hiclaw.io:18080)
-- COPAW_MINIO_ACCESS_KEY: MinIO access key (worker name)
-- COPAW_MINIO_SECRET_KEY: MinIO secret key
-- COPAW_MINIO_BUCKET: MinIO bucket (default: hiclaw-storage)
+Environment variables (reads HICLAW_* set by the container, with COPAW_* fallback
+for backward compatibility with remote/pip-installed workers):
+- HICLAW_WORKER_NAME: Worker name
+- HICLAW_FS_ENDPOINT: MinIO endpoint (e.g., http://fs-local.hiclaw.io:18080)
+- HICLAW_FS_ACCESS_KEY: MinIO access key (worker name)
+- HICLAW_FS_SECRET_KEY: MinIO secret key
+- HICLAW_FS_BUCKET: MinIO bucket (default: hiclaw-storage)
 - COPAW_WORKING_DIR: CoPaw working directory (default: ~/.copaw-worker/<worker_name>/.copaw)
+  (set at runtime by bridge.py, not a container env var)
 """
 import os
 import sys
 from pathlib import Path
+
+# ---------------------------------------------------------------------------
+# Ensure we run inside the correct venv.
+#
+# The copaw-worker package is installed in /opt/venv/standard (or /opt/venv/lite),
+# NOT in the system Python.  When the Agent calls `python3 <this-script>`, it
+# uses the system interpreter which cannot find copaw_worker.
+#
+# Fix: if the import fails AND we detect a venv with copaw_worker installed,
+# re-exec this script with that venv's python so all dependencies are available.
+# ---------------------------------------------------------------------------
+_VENV_REEXEC_MARKER = "_COPAW_SYNC_VENV_REEXEC"
+
+def _find_venv_python() -> str | None:
+    """Return the first venv python that has copaw_worker installed."""
+    for venv in ("/opt/venv/lite", "/opt/venv/standard"):
+        py = Path(venv) / "bin" / "python3"
+        if py.exists():
+            return str(py)
+    return None
 
 # Try to import copaw_worker - it should be installed via pip
 try:
@@ -29,27 +51,37 @@ except ImportError:
         try:
             from copaw_worker.sync import FileSync
             from copaw_worker.bridge import bridge_openclaw_to_copaw
-        except ImportError as e:
-            print(f"Error: copaw-worker package not found. Please install it with: pip install copaw-worker", file=sys.stderr)
-            print(f"Import error: {e}", file=sys.stderr)
-            sys.exit(1)
-    else:
-        print(f"Error: copaw-worker package not found. Please install it with: pip install copaw-worker", file=sys.stderr)
+        except ImportError:
+            pass  # fall through to venv re-exec below
+    # Attempt venv re-exec (only once to avoid infinite loop)
+    if "copaw_worker" not in sys.modules and not os.environ.get(_VENV_REEXEC_MARKER):
+        venv_py = _find_venv_python()
+        if venv_py:
+            os.environ[_VENV_REEXEC_MARKER] = "1"
+            os.execv(venv_py, [venv_py] + sys.argv)
+        print("Error: copaw-worker package not found and no venv detected.", file=sys.stderr)
+        print("Please install it with: pip install copaw-worker", file=sys.stderr)
+        sys.exit(1)
+    elif "copaw_worker" not in sys.modules:
+        print("Error: copaw-worker package not found even in venv.", file=sys.stderr)
         sys.exit(1)
 
 
 def main():
-    # Read environment variables
-    worker_name = os.getenv("COPAW_WORKER_NAME")
-    minio_endpoint = os.getenv("COPAW_MINIO_ENDPOINT")
-    minio_access_key = os.getenv("COPAW_MINIO_ACCESS_KEY")
-    minio_secret_key = os.getenv("COPAW_MINIO_SECRET_KEY")
-    minio_bucket = os.getenv("COPAW_MINIO_BUCKET", "hiclaw-storage")
+    # Read environment variables.
+    # Primary: HICLAW_* (set by container and entrypoint).
+    # Fallback: COPAW_* (backward compat for remote/pip-installed workers).
+    worker_name = os.getenv("HICLAW_WORKER_NAME") or os.getenv("COPAW_WORKER_NAME")
+    minio_endpoint = os.getenv("HICLAW_FS_ENDPOINT") or os.getenv("COPAW_MINIO_ENDPOINT")
+    minio_access_key = os.getenv("HICLAW_FS_ACCESS_KEY") or os.getenv("COPAW_MINIO_ACCESS_KEY")
+    minio_secret_key = os.getenv("HICLAW_FS_SECRET_KEY") or os.getenv("COPAW_MINIO_SECRET_KEY")
+    minio_bucket = os.getenv("HICLAW_FS_BUCKET") or os.getenv("COPAW_MINIO_BUCKET") or "hiclaw-storage"
     working_dir = os.getenv("COPAW_WORKING_DIR")
 
     if not all([worker_name, minio_endpoint, minio_access_key, minio_secret_key]):
         print("Error: Missing required environment variables", file=sys.stderr)
-        print("Required: COPAW_WORKER_NAME, COPAW_MINIO_ENDPOINT, COPAW_MINIO_ACCESS_KEY, COPAW_MINIO_SECRET_KEY", file=sys.stderr)
+        print("Required: HICLAW_WORKER_NAME, HICLAW_FS_ENDPOINT, "
+              "HICLAW_FS_ACCESS_KEY, HICLAW_FS_SECRET_KEY", file=sys.stderr)
         sys.exit(1)
 
     if not working_dir:

@@ -15,6 +15,7 @@
       "enabled": true,
       "homeserver": "${HICLAW_MATRIX_SERVER}",
       "accessToken": "${WORKER_MATRIX_TOKEN}",
+      "encryption": ${MATRIX_E2EE_ENABLED},
       "dm": {
         "policy": "allowlist",
         "allowFrom": [
@@ -41,14 +42,19 @@
         "apiKey": "${WORKER_GATEWAY_KEY}",
         "api": "openai-completions",
         "models": [
-          {
-            "id": "${HICLAW_DEFAULT_MODEL}",
-            "name": "${HICLAW_DEFAULT_MODEL}",
-            "reasoning": ${MODEL_REASONING},
-            "contextWindow": ${MODEL_CONTEXT_WINDOW},
-            "maxTokens": ${MODEL_MAX_TOKENS},
-            "input": ${MODEL_INPUT}
-          }
+          { "id": "gpt-5.4",           "name": "gpt-5.4",           "reasoning": true,  "contextWindow": 1050000, "maxTokens": 128000, "input": ["text", "image"] },
+          { "id": "gpt-5.3-codex",     "name": "gpt-5.3-codex",     "reasoning": true,  "contextWindow": 400000,  "maxTokens": 128000, "input": ["text", "image"] },
+          { "id": "gpt-5-mini",        "name": "gpt-5-mini",        "reasoning": true,  "contextWindow": 400000,  "maxTokens": 128000, "input": ["text", "image"] },
+          { "id": "gpt-5-nano",        "name": "gpt-5-nano",        "reasoning": true,  "contextWindow": 400000,  "maxTokens": 128000, "input": ["text", "image"] },
+          { "id": "claude-opus-4-6",   "name": "claude-opus-4-6",   "reasoning": true,  "contextWindow": 1000000, "maxTokens": 128000, "input": ["text", "image"] },
+          { "id": "claude-sonnet-4-6", "name": "claude-sonnet-4-6", "reasoning": true,  "contextWindow": 1000000, "maxTokens": 64000,  "input": ["text", "image"] },
+          { "id": "claude-haiku-4-5",  "name": "claude-haiku-4-5",  "reasoning": true,  "contextWindow": 200000,  "maxTokens": 64000,  "input": ["text", "image"] },
+          { "id": "qwen3.5-plus",      "name": "qwen3.5-plus",      "reasoning": true,  "contextWindow": 200000,  "maxTokens": 64000,  "input": ["text", "image"] },
+          { "id": "deepseek-chat",     "name": "deepseek-chat",     "reasoning": true,  "contextWindow": 256000,  "maxTokens": 128000, "input": ["text"] },
+          { "id": "deepseek-reasoner", "name": "deepseek-reasoner", "reasoning": true,  "contextWindow": 256000,  "maxTokens": 128000, "input": ["text"] },
+          { "id": "kimi-k2.5",         "name": "kimi-k2.5",         "reasoning": true,  "contextWindow": 256000,  "maxTokens": 128000, "input": ["text", "image"] },
+          { "id": "glm-5",             "name": "glm-5",             "reasoning": true,  "contextWindow": 200000,  "maxTokens": 128000, "input": ["text"] },
+          { "id": "MiniMax-M2.5",      "name": "MiniMax-M2.5",      "reasoning": true,  "contextWindow": 200000,  "maxTokens": 128000, "input": ["text"] }
         ]
       }
     }
@@ -60,6 +66,21 @@
       "workspace": "~",
       "model": {
         "primary": "hiclaw-gateway/${HICLAW_DEFAULT_MODEL}"
+      },
+      "models": {
+        "hiclaw-gateway/gpt-5.4":           { "alias": "gpt-5.4" },
+        "hiclaw-gateway/gpt-5.3-codex":     { "alias": "gpt-5.3-codex" },
+        "hiclaw-gateway/gpt-5-mini":        { "alias": "gpt-5-mini" },
+        "hiclaw-gateway/gpt-5-nano":        { "alias": "gpt-5-nano" },
+        "hiclaw-gateway/claude-opus-4-6":   { "alias": "claude-opus-4-6" },
+        "hiclaw-gateway/claude-sonnet-4-6": { "alias": "claude-sonnet-4-6" },
+        "hiclaw-gateway/claude-haiku-4-5":  { "alias": "claude-haiku-4-5" },
+        "hiclaw-gateway/qwen3.5-plus":      { "alias": "qwen3.5-plus" },
+        "hiclaw-gateway/deepseek-chat":     { "alias": "deepseek-chat" },
+        "hiclaw-gateway/deepseek-reasoner": { "alias": "deepseek-reasoner" },
+        "hiclaw-gateway/kimi-k2.5":         { "alias": "kimi-k2.5" },
+        "hiclaw-gateway/glm-5":             { "alias": "glm-5" },
+        "hiclaw-gateway/MiniMax-M2.5":      { "alias": "MiniMax-M2.5" }
       },
       "maxConcurrent": 4,
       "subagents": {

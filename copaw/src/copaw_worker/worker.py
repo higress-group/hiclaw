@@ -93,29 +93,34 @@ class Worker:
             local_dir=self.config.install_dir / self.worker_name,
         )
 
-        # 2. Pull config from MinIO
-        console.print("[yellow]Pulling configuration from MinIO...[/yellow]")
+        # 2. Full mirror from MinIO (restore all state: config, sessions, sync token, etc.)
+        #    Mirrors the OpenClaw worker's startup approach: pull everything first,
+        #    then use selective sync during runtime.
+        console.print("[yellow]Pulling all files from MinIO...[/yellow]")
         try:
-            openclaw_cfg = self.sync.get_config()
-            soul_content = self.sync.get_soul()
-            agents_content = self.sync.get_agents_md()
+            self.sync.mirror_all()
         except Exception as exc:
-            console.print(f"[red]Failed to pull config: {exc}[/red]")
+            console.print(f"[red]Failed to mirror from MinIO: {exc}[/red]")
             return False
 
-        # 3. Set up CoPaw working directory
+        # 3. Parse openclaw.json (already on disk after mirror_all)
+        try:
+            openclaw_cfg = self.sync.get_config()
+        except Exception as exc:
+            console.print(f"[red]Failed to read config: {exc}[/red]")
+            return False
+
+        # 4. Set up CoPaw working directory
         self._copaw_working_dir = self.config.install_dir / self.worker_name / ".copaw"
         self._copaw_working_dir.mkdir(parents=True, exist_ok=True)
 
-        # Write SOUL.md / AGENTS.md into CoPaw working dir and workspace root (Worker-managed)
-        if soul_content:
-            (self._copaw_working_dir / "SOUL.md").write_text(soul_content)
-            (self.sync.local_dir / "SOUL.md").write_text(soul_content)
-        if agents_content:
-            (self._copaw_working_dir / "AGENTS.md").write_text(agents_content)
-            (self.sync.local_dir / "AGENTS.md").write_text(agents_content)
+        # Write SOUL.md / AGENTS.md into CoPaw working dir (read from local copies pulled by mirror_all)
+        for name in ("SOUL.md", "AGENTS.md"):
+            src = self.sync.local_dir / name
+            if src.exists():
+                (self._copaw_working_dir / name).write_text(src.read_text())
 
-        # 4. Bridge openclaw.json -> CoPaw config.json + providers.json
+        # 5. Bridge openclaw.json -> CoPaw config.json + providers.json
         console.print("[yellow]Bridging configuration to CoPaw...[/yellow]")
         try:
             bridge_openclaw_to_copaw(openclaw_cfg, self._copaw_working_dir)
@@ -123,17 +128,17 @@ class Worker:
             console.print(f"[red]Config bridge failed: {exc}[/red]")
             return False
 
-        # 5. Copy mcporter config into CoPaw working dir so mcporter finds
+        # 6. Copy mcporter config into CoPaw working dir so mcporter finds
         #    ./config/mcporter.json when running from COPAW_WORKING_DIR
         self._copy_mcporter_config()
 
-        # 6. Install MatrixChannel into CoPaw's custom_channels dir
+        # 7. Install MatrixChannel into CoPaw's custom_channels dir
         self._install_matrix_channel()
 
-        # 7. Sync skills from MinIO into CoPaw's active_skills dir
+        # 8. Sync skills from MinIO into CoPaw's active_skills dir
         self._sync_skills()
 
-        # 8. Start background MinIO sync
+        # 9. Start background MinIO sync
         asyncio.create_task(
             sync_loop(
                 self.sync,

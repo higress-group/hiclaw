@@ -130,6 +130,25 @@ class FileSync:
             logger.debug("mc ls error for %s: %s", prefix, exc)
             return []
 
+    def mirror_all(self) -> None:
+        """Full mirror of the worker's MinIO prefix to local_dir.
+
+        Called once at startup to restore all state (config, sessions, sync
+        token, etc.) — mirrors the OpenClaw worker's ``mc mirror`` approach.
+        After this, the running sync uses pull_all (Manager-managed only)
+        and push_local (Worker-managed only).
+        """
+        self._ensure_alias()
+        remote = self._object_path(f"{self._prefix}/")
+        local = str(self.local_dir) + "/"
+        try:
+            _mc("mirror", remote, local, "--overwrite", check=True)
+            logger.info("mirror_all: full mirror completed from %s", remote)
+        except subprocess.CalledProcessError as exc:
+            logger.warning("mirror_all: mc mirror failed: %s", exc.stderr)
+            raise
+
+
     # ------------------------------------------------------------------
     # Public API
     # ------------------------------------------------------------------

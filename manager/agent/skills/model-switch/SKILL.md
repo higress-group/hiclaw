@@ -5,7 +5,7 @@ description: Switch the Manager Agent's own LLM model. Use when the human admin 
 
 # Model Switch
 
-Switch the Manager's own LLM model. The script tests connectivity first, then hot-patches `openclaw.json` — OpenClaw reloads within ~300ms, no restart needed.
+Switch the Manager's own LLM model. The script tests connectivity first, then patches `openclaw.json`.
 
 ## Usage
 
@@ -23,38 +23,42 @@ bash /opt/hiclaw/agent/skills/model-switch/scripts/update-manager-model.sh deeps
 ## What the script does
 
 1. Strips any `hiclaw-gateway/` prefix from the model name
-2. Resolves `contextWindow` and `maxTokens` for the model (uses `--context-window` override if provided)
-3. Tests the model via `POST /v1/chat/completions` on the AI Gateway — exits with error if unreachable
-4. Patches `openclaw.json`: updates `models[0].id/name/reasoning/contextWindow/maxTokens` and `agents.defaults.model.primary`
+2. Tests the model via `POST /v1/chat/completions` on the AI Gateway — exits with error if unreachable
+3. If the model is already in the `models` array: switches `agents.defaults.model.primary`
+4. If the model is new: adds it to the `models` array and switches primary
+5. Always outputs `RESTART_REQUIRED`
+
+## After running the script
+
+The script always outputs `RESTART_REQUIRED`. Run `openclaw gateway restart` to apply the change, then tell the human admin the switch is complete.
 
 ## Reasoning control
 
-By default, reasoning (extended thinking) is enabled for all models. To disable it, pass `--no-reasoning`:
-
-```bash
-bash /opt/hiclaw/agent/skills/model-switch/scripts/update-manager-model.sh deepseek-chat --no-reasoning
-```
-
-This sets `"reasoning": false` in `openclaw.json`. Omitting the flag keeps reasoning enabled (`"reasoning": true`).
+By default, reasoning (extended thinking) is enabled. To disable it, pass `--no-reasoning`.
 
 ## On failure
 
-If the gateway test fails (non-200), the script prints:
-
-```
-ERROR: Model test failed (HTTP <code>): <response>
-The model '<name>' is not reachable via the AI Gateway.
-Please check the Higress Console to confirm the AI route is configured for this model:
-  http://<manager-host>:8001  →  AI Routes → verify provider and model mapping
-```
-
-No changes are made to `openclaw.json` in this case.
+If the gateway test fails (non-200), the script prints an error with details. No changes are made to `openclaw.json` in this case.
 
 ## Important
 
-**NEVER use `session_status` tool to change the model** — that only affects the current session temporarily and does not persist. Always use this script.
+This skill switches the **primary model** (persisted in `openclaw.json`). After running the script, you must run `openclaw gateway restart` for the change to take effect. The human admin can also use the `/model` slash command to switch the current session's model instantly without restart, but that is non-persistent and only supports pre-configured models.
 
-## Supported models with known context windows
+## Switching to an unknown model
+
+When the human admin requests switching to a model you don't recognize, you MUST:
+
+1. **Ask the admin two questions** before running the script:
+   - "This model is not in the known list. What is its context window size (in tokens)?"
+   - "Does this model support reasoning (extended thinking)?"
+2. Run the script with the appropriate flags:
+   ```bash
+   bash /opt/hiclaw/agent/skills/model-switch/scripts/update-manager-model.sh <MODEL_ID> --context-window <SIZE> [--no-reasoning]
+   ```
+3. If the admin does not know the context window, use the default (150,000) by omitting `--context-window`.
+4. If the model does not support reasoning, add `--no-reasoning`.
+
+## Pre-configured models (for reference)
 
 | Model | contextWindow | maxTokens |
 |-------|--------------|-----------|
@@ -66,16 +70,3 @@ No changes are made to `openclaw.json` in this case.
 | qwen3.5-plus | 200,000 | 64,000 |
 | deepseek-chat / deepseek-reasoner / kimi-k2.5 | 256,000 | 128,000 |
 | glm-5 / MiniMax-M2.5 | 200,000 | 128,000 |
-| *(other)* | 150,000 | 128,000 |
-
-## Switching to an unknown model
-
-When the human admin requests switching to a model **not listed in the table above**, you MUST:
-
-1. **Ask the admin for the model's context window size** before running the script. Example: "This model is not in the known list. What is its context window size (in tokens)?"
-2. Once the admin provides the context window, run the script with `--context-window`:
-   ```bash
-   bash /opt/hiclaw/agent/skills/model-switch/scripts/update-manager-model.sh <MODEL_ID> --context-window <SIZE>
-   ```
-3. If the admin does not know the context window, use the default (150,000) by omitting `--context-window`.
-4. If the admin wants to disable reasoning, add `--no-reasoning` to the command.
