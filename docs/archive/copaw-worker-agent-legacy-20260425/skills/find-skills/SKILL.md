@@ -29,20 +29,10 @@ The Skills CLI (`skills`) is the package manager for the open agent skills ecosy
 
 If `skills` command is not found, install it: `npm install -g skills`
 
-Resolve the script from local skill paths. Do not hardcode container absolute paths in chat or task outputs:
+Always use this fixed script path for this skill. Do not rely on a relative `scripts/` path from your current directory:
 
 ```bash
-FIND_SKILLS_SCRIPT=""
-for candidate in \
-  "./skills/find-skills/scripts/hiclaw-find-skill.sh" \
-  "./active_skills/find-skills/scripts/hiclaw-find-skill.sh" \
-  "./find-skills/scripts/hiclaw-find-skill.sh"; do
-  if [ -x "$candidate" ]; then
-    FIND_SKILLS_SCRIPT="$candidate"
-    break
-  fi
-done
-test -n "$FIND_SKILLS_SCRIPT" || { echo "find-skills script not found" >&2; exit 1; }
+FIND_SKILLS_SCRIPT="$HOME/.copaw-worker/${HICLAW_WORKER_NAME}/.copaw/active_skills/find-skills/scripts/hiclaw-find-skill.sh"
 ```
 
 **Key commands:**
@@ -89,7 +79,7 @@ For example:
 The command will return results like:
 
 ```
-Install with ./skills/find-skills/scripts/hiclaw-find-skill.sh install <skill>
+Install with /root/.copaw-worker/${HICLAW_WORKER_NAME}/.copaw/active_skills/find-skills/scripts/hiclaw-find-skill.sh install <skill>
 
 vercel-react-best-practices
 └ React and Next.js performance guidance
@@ -139,7 +129,7 @@ If the user wants to proceed, you can install the skill for them:
 "${FIND_SKILLS_SCRIPT}" install <skill>
 ```
 
-The default install location for `skills add -g` is runtime-managed. Prefer the install command printed by this skill and then use the `file-sharing` skill if your coordinator asks you to sync updates.
+The default install location for `skills add -g` is `~/.agents/skills/`. In container mode this is symlinked to the worker's MinIO-synced skills directory. In host mode (non-container), you need to check `~/.agents/skills/` for installed skills and load them manually.
 
 ## Common Skill Categories
 
@@ -181,4 +171,4 @@ skills init my-xyz-skill
 
 ## Skill Resources
 
-`hiclaw-find-skill.sh` is the resource that belongs to this skill. Resolve it into `FIND_SKILLS_SCRIPT` first so your command does not depend on hidden runtime paths.
+`$HOME/.copaw-worker/${HICLAW_WORKER_NAME}/.copaw/active_skills/find-skills/scripts/hiclaw-find-skill.sh` is the resource that belongs to this skill. Always invoke that exact path (or the `FIND_SKILLS_SCRIPT` variable above) instead of `scripts/hiclaw-find-skill.sh`, so your command does not depend on the current directory.
