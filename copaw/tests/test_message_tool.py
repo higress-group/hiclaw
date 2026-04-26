@@ -80,6 +80,32 @@ def test_build_matrix_text_content_renders_minimal_markdown():
     assert "```" not in formatted_body
 
 
+def test_build_matrix_text_content_renders_status_report_markdown():
+    content = build_matrix_text_content(
+        "\n".join(
+            [
+                "## Project Status",
+                "",
+                "| Task ID | Owner | Status |",
+                "|---------|-------|--------|",
+                "| st-01 | dev | Completed |",
+                "",
+                "- ✅ Task file published",
+                "1. Start st-02",
+            ],
+        ),
+        [],
+    )
+
+    formatted_body = content["formatted_body"]
+    assert "<h2>Project Status</h2>" in formatted_body
+    assert "<table>" in formatted_body
+    assert "<th>Task ID</th>" in formatted_body
+    assert "<td>st-01</td>" in formatted_body
+    assert "<ul>" in formatted_body
+    assert "<ol>" in formatted_body
+
+
 def test_validate_matrix_message_policy_blocks_status_ping():
     with pytest.raises(ValueError, match="status symbol"):
         validate_matrix_message_policy(

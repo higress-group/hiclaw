@@ -109,6 +109,32 @@ def _render_inline_matrix_html(text: str) -> str:
 
 def _render_matrix_formatted_body(text: str) -> str:
     """Render Matrix custom HTML without relying on optional Markdown deps."""
+    try:
+        from markdown_it import MarkdownIt
+
+        md = MarkdownIt(
+            "commonmark",
+            {
+                "html": False,
+                "linkify": True,
+                "breaks": True,
+                "typographer": False,
+            },
+        )
+        md.enable("strikethrough")
+        md.enable("table")
+
+        try:
+            from linkify_it import LinkifyIt
+
+            md.linkify = LinkifyIt()
+        except ImportError:
+            pass
+
+        return md.render(text or "").rstrip("\n")
+    except ImportError:
+        pass
+
     lines = (text or "").splitlines()
     if not lines:
         return ""

@@ -45,29 +45,39 @@ Do not send requester updates for unchanged polling results, repeated waiting, r
 
 Do not copy team-room coordination logs into requester DM. Summarize the state.
 
-Use a Matrix-friendly plain-text structure for final or node-status reports. Do not use Markdown tables; Matrix may render them as raw pipe text.
+Use a Matrix-friendly Markdown structure for final or node-status reports. The message tool renders headings, lists, dividers, and Markdown tables into Matrix HTML.
 
-```text
-Project: <name>
-Status: <IN_PROGRESS | BLOCKED | REVISION_NEEDED | COMPLETED>
+```markdown
+---
+
+## Project Status Report
+
+**Project Name**: <name>  
+**Project ID**: <project-id>  
+**Status**: <IN_PROGRESS | BLOCKED | REVISION_NEEDED | COMPLETED>
 
 Summary:
 <1-3 sentences about what changed and what happens next>
 
 Task Status:
-- <task-id> <title>
-  Owner: <worker/role>
-  Status: <Pending/In Progress/Completed/Blocked/Revision>
-  Result: <short result or next action>
+| Task ID | Task | Owner | Status | Depends On |
+|---------|------|-------|--------|------------|
+| <task-id> | <title> | <worker/role> | <Pending/In Progress/Completed/Blocked/Revision> | <dependency or none> |
+
+Current Progress:
+- <completed or changed project event>
 
 Deliverables:
 - <name/path>: <what it contains>
+
+Next Steps:
+1. <next DAG transition or requester action>
 
 Notes:
 - <important dependency, blocker, risk, or next step; omit if none>
 ```
 
-For intermediate node updates, omit `Deliverables` unless new deliverables are available. Keep reports concise. Prefer task status and deliverables over process narration. The requester wants current state and outcomes, not internal command logs.
+For intermediate node updates, omit `Deliverables` unless new deliverables are available. Keep reports concise. Prefer task status, current progress, and next steps over process narration. The requester wants current state and outcomes, not internal command logs.
 
 ## Same Room
 
