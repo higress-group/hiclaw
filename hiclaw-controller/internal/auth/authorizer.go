@@ -71,6 +71,12 @@ func (a *Authorizer) authorizeTeamLeader(caller *CallerIdentity, req AuthzReques
 		}
 		return deny(caller, req)
 
+	case "credentials":
+		if req.Action == ActionSTS {
+			return nil
+		}
+		return deny(caller, req)
+
 	default:
 		return deny(caller, req)
 	}
