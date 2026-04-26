@@ -140,7 +140,7 @@ func createWorkerCmd() *cobra.Command {
 	cmd.Flags().StringVar(&soul, "soul", "", "Worker SOUL.md content (inline)")
 	cmd.Flags().StringVar(&soulFile, "soul-file", "", "Path to SOUL.md file (overrides --soul)")
 	cmd.Flags().StringVar(&skills, "skills", "", "Comma-separated built-in skills")
-	cmd.Flags().StringVar(&packageURI, "package", "", "Package URI (nacos://, http://, oss://) or shorthand")
+	cmd.Flags().StringVar(&packageURI, "package", "", "Package URI (nacos://[?authType=...], http://, oss://) or shorthand")
 	cmd.Flags().StringVar(&expose, "expose", "", "Comma-separated ports to expose (e.g. 8080,3000)")
 	cmd.Flags().StringVar(&team, "team", "", "Team name (assigns worker to a team)")
 	cmd.Flags().StringVar(&role, "role", "", "Role within team (team_leader|worker)")

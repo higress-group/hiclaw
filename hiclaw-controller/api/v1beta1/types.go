@@ -96,7 +96,7 @@ type WorkerSpec struct {
 	Skills        []string            `json:"skills,omitempty"`       // built-in skills only
 	RemoteSkills  []RemoteSkillSource `json:"remoteSkills,omitempty"` // remote skills from source registries
 	McpServers    []MCPServer         `json:"mcpServers,omitempty"`
-	Package       string              `json:"package,omitempty"` // file://, http(s)://, or nacos:// URI
+	Package       string              `json:"package,omitempty"` // file://, http(s)://, or nacos://[user:pass@]host:port/...; optional ?authType=nacos|sts-hiclaw|none
 	Expose        []ExposePort        `json:"expose,omitempty"`  // ports to expose via Higress gateway
 	ChannelPolicy *ChannelPolicySpec  `json:"channelPolicy,omitempty"`
 
@@ -433,7 +433,7 @@ type ManagerSpec struct {
 	Agents     string        `json:"agents,omitempty"`     // custom AGENTS.md content
 	Skills     []string      `json:"skills,omitempty"`     // on-demand skills to enable
 	McpServers []MCPServer   `json:"mcpServers,omitempty"` // MCP servers callable by the Manager via mcporter
-	Package    string        `json:"package,omitempty"`    // file://, http(s)://, or nacos:// URI
+	Package    string        `json:"package,omitempty"`    // file://, http(s)://, or nacos://; optional ?authType= for Nacos
 	Config     ManagerConfig `json:"config,omitempty"`
 
 	// State is the desired lifecycle state of the manager.

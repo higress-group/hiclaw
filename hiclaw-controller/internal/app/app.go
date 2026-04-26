@@ -219,7 +219,6 @@ func (a *App) initInfraClients(_ context.Context) error {
 	a.agentGen = agentconfig.NewGenerator(cfg.AgentConfig())
 	a.shell = executor.NewShell(cfg.SkillsDir)
 	a.packages = executor.NewPackageResolver("/tmp/import")
-	a.packages.NacosAuthType = cfg.NacosAuthType
 
 	// Credential provider sidecar — required for ai-gateway / external OSS /
 	// worker STS issuance, optional otherwise.
@@ -230,7 +229,7 @@ func (a *App) initInfraClients(_ context.Context) error {
 		// the accessresolver needs to read Worker/Manager CRs.
 		logger.Info("credential-provider sidecar configured", "url", cfg.CredentialProviderURL)
 	}
-	if cfg.NacosAuthType == "sts-hiclaw" && a.credProvider != nil {
+	if a.credProvider != nil {
 		a.packages.CredClient = a.credProvider
 	}
 
@@ -453,7 +452,6 @@ func (a *App) initServiceLayer(_ context.Context) error {
 		AgentFSDir:      cfg.AgentFSDir(),
 		WorkerAgentDir:  cfg.WorkerAgentDir(),
 		MatrixDomain:    cfg.MatrixDomain,
-		NacosAuthType:   cfg.NacosAuthType,
 		NacosCredClient: a.credProvider,
 	})
 

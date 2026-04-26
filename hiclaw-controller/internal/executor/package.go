@@ -20,10 +20,8 @@ type PackageResolver struct {
 	ImportDir  string // e.g. /tmp/import
 	ExtractDir string // e.g. /tmp/import/extracted
 
-	// NacosAuthType selects the Nacos auth implementation:
-	// "nacos" (user/pass), "sts-hiclaw" (STS), "none" or "" (auto-detect).
-	NacosAuthType string
-	// CredClient is required when NacosAuthType == "sts-hiclaw".
+	// CredClient is used when a nacos:// package URI includes ?authType=sts-hiclaw
+	// (STS via hiclaw-credential-provider). Optional for user/password or none.
 	CredClient credprovider.Client
 }
 
@@ -481,8 +479,9 @@ func (p *PackageResolver) resolveHTTP(ctx context.Context, uri string) (string, 
 }
 
 // resolveNacos downloads a Worker template from Nacos via the AgentSpec client API.
-// URI format: nacos://[user:pass@]host:port/{namespace}/{agentspec-name}[/{version}]
-// The Nacos server address (and optional credentials) are extracted directly from the URI.
+// URI format: nacos://[user:pass@]host:port/{namespace}/{agentspec-name}[/{version}][?authType=...]
+// Optional query: authType=nacos|sts-hiclaw|none (empty = auto from userinfo, same as NewNacosAIClient).
+// The Nacos server address (and optional credentials) are extracted from the URI authority.
 func (p *PackageResolver) resolveNacos(ctx context.Context, u *url.URL) (string, error) {
 	// Parse URI path segments: /{namespace}/{agentspec-name}/{version}
 	parts := strings.Split(strings.Trim(u.Path, "/"), "/")
@@ -512,7 +511,8 @@ func (p *PackageResolver) resolveNacos(ctx context.Context, u *url.URL) (string,
 		return "", fmt.Errorf("failed to clean previous nacos package %s: %w", destPath, err)
 	}
 
-	client, err := NewNacosAIClient(ctx, nacosAddr, namespace, p.NacosAuthType, p.CredClient)
+	authType := strings.TrimSpace(u.Query().Get("authType"))
+	client, err := NewNacosAIClient(ctx, nacosAddr, namespace, authType, p.CredClient)
 	if err != nil {
 		return "", err
 	}
@@ -539,16 +539,11 @@ func (p *PackageResolver) resolveNacos(ctx context.Context, u *url.URL) (string,
 }
 
 // ValidateNacosURIOptions configures Nacos preflight so it matches runtime
-// PackageResolver behavior. Use the same values as the controller: AuthType
-// from HICLAW_NACOS_AUTH_TYPE and CredClient from the credential-provider
-// (when NacosAuthType is sts-hiclaw).
+// PackageResolver behavior. The auth type is read from the nacos:// URI query:
+//   ?authType=nacos|sts-hiclaw|none
+// or omitted for the same auto-detection as NewNacosAIClient.
 type ValidateNacosURIOptions struct {
-	// AuthType is one of "nacos", "sts-hiclaw", "none", or "" (auto-detect from
-	// the URI, same as NewNacosAIClient). When empty, the value of
-	// HICLAW_NACOS_AUTH_TYPE is used so CLI preflight can align with the
-	// controller's environment.
-	AuthType string
-	// CredClient is required when the effective auth type is "sts-hiclaw"; it
+	// CredClient is required when the URI includes authType=sts-hiclaw; it
 	// should be the same credprovider.Client wired into PackageResolver
 	// (HTTP client to hiclaw-credential-provider /issue).
 	CredClient credprovider.Client
@@ -591,10 +586,7 @@ func ValidateNacosURI(ctx context.Context, raw string, opts ValidateNacosURIOpti
 		version = ""
 	}
 
-	authType := opts.AuthType
-	if authType == "" {
-		authType = os.Getenv("HICLAW_NACOS_AUTH_TYPE")
-	}
+	authType := strings.TrimSpace(u.Query().Get("authType"))
 
 	// newNacosAIClient validates the address format, connects, and
 	// performs login (or STS) when credentials are present — same as resolveNacos.
