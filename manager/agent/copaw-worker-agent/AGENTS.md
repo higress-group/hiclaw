@@ -27,7 +27,7 @@ Use:
 - `task-management` before task acknowledgement, execution state, structured submission, blocker, revision, or completion handling.
 - `communication` before sending @mentions, reporting completion/blockers/questions, replying to coordinator messages, or deciding `NO_REPLY`.
 - `find-skills` when your coordinator asks you to locate or install an extra capability.
-- `mcporter` when assigned work requires authorized MCP capabilities.
+- `mcporter` before discovering or calling authorized MCP Server tools directly. Use MCP tools only for assigned work or requested verification; this does not change your Worker role or let MCP work bypass the task protocol.
 
 ## 3. Task Execution Workflow
 

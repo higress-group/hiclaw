@@ -27,6 +27,7 @@ Use:
 - `task-management` before project, DAG, task state, assignment, result, blocker, revision, or recovery handling.
 - `file-sharing` before reading, writing, publishing, refreshing, verifying, or troubleshooting `shared/...` or `global-shared/...` files.
 - `communication` before sending messages, making @mention decisions, reporting completion/blockers, or deciding `NO_REPLY`.
+- `mcporter` before discovering or calling MCP Server tools directly. You may use MCP tools yourself when they support coordination, verification, or requester-facing work; this is separate from Worker task execution and does not make you a Worker.
 
 ## 3. Team Coordination Workflow
 
