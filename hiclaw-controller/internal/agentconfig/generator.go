@@ -17,7 +17,7 @@ func NewGenerator(cfg Config) *Generator {
 		cfg.AdminUser = "admin"
 	}
 	if cfg.DefaultModel == "" {
-		cfg.DefaultModel = "qwen3.5-plus"
+		cfg.DefaultModel = "qwen3.6-plus"
 	}
 	return &Generator{config: cfg}
 }
@@ -384,6 +384,7 @@ func defaultModelSpec(modelName string) ModelSpec {
 		"claude-opus-4-6":   {1000000, 128000, true, true},
 		"claude-sonnet-4-6": {1000000, 64000, true, true},
 		"claude-haiku-4-5":  {200000, 64000, true, true},
+		"qwen3.6-plus":      {200000, 64000, true, true},
 		"qwen3.5-plus":      {200000, 64000, true, true},
 		"deepseek-chat":     {256000, 128000, false, true},
 		"deepseek-reasoner": {256000, 128000, false, true},
@@ -449,7 +450,7 @@ func (g *Generator) allModelSpecs(selectedModel string) []ModelSpec {
 	allModels := []string{
 		"gpt-5.4", "gpt-5.3-codex", "gpt-5-mini", "gpt-5-nano",
 		"claude-opus-4-6", "claude-sonnet-4-6", "claude-haiku-4-5",
-		"qwen3.5-plus",
+		"qwen3.6-plus", "qwen3.5-plus",
 		"deepseek-chat", "deepseek-reasoner",
 		"kimi-k2.5", "glm-5",
 		"MiniMax-M2.7", "MiniMax-M2.7-highspeed", "MiniMax-M2.5",
@@ -473,7 +474,7 @@ func (g *Generator) allModelAliases(selectedModel string) map[string]interface{}
 	allModels := []string{
 		"gpt-5.4", "gpt-5.3-codex", "gpt-5-mini", "gpt-5-nano",
 		"claude-opus-4-6", "claude-sonnet-4-6", "claude-haiku-4-5",
-		"qwen3.5-plus",
+		"qwen3.6-plus", "qwen3.5-plus",
 		"deepseek-chat", "deepseek-reasoner",
 		"kimi-k2.5", "glm-5",
 		"MiniMax-M2.7", "MiniMax-M2.7-highspeed", "MiniMax-M2.5",

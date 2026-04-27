@@ -117,7 +117,7 @@ type ProvisionerConfig struct {
 	// this model so a 200 response proves the entire path the manager
 	// will exercise (auth filter → route → upstream → model resolution)
 	// is live. Sourced from Config.ManagerModel which already resolves
-	// HICLAW_MANAGER_MODEL → HICLAW_DEFAULT_MODEL → "qwen3.5-plus".
+	// HICLAW_MANAGER_MODEL → HICLAW_DEFAULT_MODEL → "qwen3.6-plus".
 	ManagerModel string
 
 	// ManagerEnabled reflects HICLAW_MANAGER_ENABLED. When false, no Manager

@@ -14,7 +14,7 @@
 # Environment variables (for automation):
 #   HICLAW_NON_INTERACTIVE    Skip all prompts, use defaults  (default: 0)
 #   HICLAW_LLM_PROVIDER      LLM provider       (default: openai-compat for zh non-interactive Token Plan; qwen for en)
-#   HICLAW_DEFAULT_MODEL      Default model       (default: qwen3.6-plus for zh Token Plan; qwen3.5-plus for qwen)
+#   HICLAW_DEFAULT_MODEL      Default model       (default: qwen3.6-plus for zh Token Plan and en non-interactive)
 #   HICLAW_OPENAI_BASE_URL    OpenAI-compatible base URL (default for zh non-interactive: Alibaba Token Plan endpoint)
 #   HICLAW_LLM_API_KEY        LLM API key         (required)
 #   HICLAW_ADMIN_USER         Admin username       (default: admin)
@@ -424,8 +424,8 @@ msg() {
         "llm.provider.selected_openai.en") text="  Provider: %s (OpenAI-compatible)" ;;
         "llm.provider.invalid.zh") text="无效选择: %s（请输入 1 或 2）" ;;
         "llm.provider.invalid.en") text="Invalid choice: %s (please enter 1 or 2)" ;;
-        "llm.qwen.model_prompt.zh") text="默认模型 ID [qwen3.5-plus]" ;;
-        "llm.qwen.model_prompt.en") text="Default Model ID [qwen3.5-plus]" ;;
+        "llm.qwen.model_prompt.zh") text="默认模型 ID [qwen3.6-plus]" ;;
+        "llm.qwen.model_prompt.en") text="Default Model ID [qwen3.6-plus]" ;;
         "llm.openai.base_url_prompt.zh") text="Base URL（例如 https://api.openai.com/v1）" ;;
         "llm.openai.base_url_prompt.en") text="Base URL (e.g., https://api.openai.com/v1)" ;;
         "llm.openai.model_prompt.zh") text="默认模型 ID [gpt-5.4]" ;;
@@ -1737,7 +1737,7 @@ step_llm() {
             log "$(msg llm.openai.base_url_label "${HICLAW_OPENAI_BASE_URL}")"
         else
             HICLAW_LLM_PROVIDER="${HICLAW_LLM_PROVIDER:-qwen}"
-            HICLAW_DEFAULT_MODEL="${HICLAW_DEFAULT_MODEL:-qwen3.5-plus}"
+            HICLAW_DEFAULT_MODEL="${HICLAW_DEFAULT_MODEL:-qwen3.6-plus}"
             HICLAW_OPENAI_BASE_URL="${HICLAW_OPENAI_BASE_URL:-}"
             log "$(msg llm.provider.qwen_default "${HICLAW_LLM_PROVIDER}")"
         fi
@@ -1848,7 +1848,7 @@ step_llm() {
                         echo ""
                         read -e -p "$(msg llm.qwen.model_prompt): " HICLAW_DEFAULT_MODEL
                         if [ "${HICLAW_DEFAULT_MODEL}" = "b" ]; then STEP_RESULT="back"; return 0; fi
-                        HICLAW_DEFAULT_MODEL="${HICLAW_DEFAULT_MODEL:-qwen3.5-plus}"
+                        HICLAW_DEFAULT_MODEL="${HICLAW_DEFAULT_MODEL:-qwen3.6-plus}"
                         log "$(msg llm.provider.selected_qwen)"
                         log "$(msg llm.model.label "${HICLAW_DEFAULT_MODEL}")"
                         prompt_custom_model_params "${HICLAW_DEFAULT_MODEL}" || return 0
@@ -1860,7 +1860,7 @@ step_llm() {
                         echo ""
                         read -e -p "$(msg llm.qwen.model_prompt): " HICLAW_DEFAULT_MODEL
                         if [ "${HICLAW_DEFAULT_MODEL}" = "b" ]; then STEP_RESULT="back"; return 0; fi
-                        HICLAW_DEFAULT_MODEL="${HICLAW_DEFAULT_MODEL:-qwen3.5-plus}"
+                        HICLAW_DEFAULT_MODEL="${HICLAW_DEFAULT_MODEL:-qwen3.6-plus}"
                         log "$(msg llm.provider.selected_codingplan_legacy)"
                         log "$(msg llm.model.label "${HICLAW_DEFAULT_MODEL}")"
                         prompt_custom_model_params "${HICLAW_DEFAULT_MODEL}" || return 0

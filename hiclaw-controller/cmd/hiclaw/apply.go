@@ -23,7 +23,7 @@ func applyCmd() *cobra.Command {
 
   hiclaw apply -f resource.yaml
   hiclaw apply worker --name alice --zip worker.zip
-  hiclaw apply worker --name alice --model qwen3.5-plus`,
+  hiclaw apply worker --name alice --model qwen3.6-plus`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if len(files) > 0 {
 				return applyFromFiles(files)
@@ -172,7 +172,7 @@ func applyWorkerSubCmd() *cobra.Command {
 		Long: `Create or update a Worker from CLI parameters or a ZIP package.
 
   hiclaw apply worker --name alice --zip worker.zip
-  hiclaw apply worker --name alice --model qwen3.5-plus
+  hiclaw apply worker --name alice --model qwen3.6-plus
   hiclaw apply worker --name bob --model claude-sonnet-4-6 --skills github-operations`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if name == "" {
@@ -192,7 +192,7 @@ func applyWorkerSubCmd() *cobra.Command {
 	}
 
 	cmd.Flags().StringVar(&name, "name", "", "Worker name (required)")
-	cmd.Flags().StringVar(&model, "model", "", "LLM model ID (default: $HICLAW_DEFAULT_MODEL, else qwen3.5-plus)")
+	cmd.Flags().StringVar(&model, "model", "", "LLM model ID (default: $HICLAW_DEFAULT_MODEL, else qwen3.6-plus)")
 	cmd.Flags().StringVar(&zipFile, "zip", "", "Local ZIP package (manifest.json)")
 	cmd.Flags().StringVar(&runtime, "runtime", "", "Agent runtime (openclaw|copaw|hermes)")
 	cmd.Flags().StringVar(&image, "image", "", "Container image override")

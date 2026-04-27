@@ -11,10 +11,10 @@ import (
 )
 
 func TestDefaultWorkerModel(t *testing.T) {
-	t.Run("falls back to qwen3.5-plus when env var unset", func(t *testing.T) {
+	t.Run("falls back to qwen3.6-plus when env var unset", func(t *testing.T) {
 		t.Setenv("HICLAW_DEFAULT_MODEL", "")
-		if got := defaultWorkerModel(); got != "qwen3.5-plus" {
-			t.Fatalf("defaultWorkerModel() = %q, want qwen3.5-plus", got)
+		if got := defaultWorkerModel(); got != "qwen3.6-plus" {
+			t.Fatalf("defaultWorkerModel() = %q, want qwen3.6-plus", got)
 		}
 	})
 	t.Run("prefers HICLAW_DEFAULT_MODEL when set", func(t *testing.T) {
@@ -25,8 +25,8 @@ func TestDefaultWorkerModel(t *testing.T) {
 	})
 	t.Run("trims whitespace before falling back", func(t *testing.T) {
 		t.Setenv("HICLAW_DEFAULT_MODEL", "   ")
-		if got := defaultWorkerModel(); got != "qwen3.5-plus" {
-			t.Fatalf("defaultWorkerModel() = %q, want qwen3.5-plus", got)
+		if got := defaultWorkerModel(); got != "qwen3.6-plus" {
+			t.Fatalf("defaultWorkerModel() = %q, want qwen3.6-plus", got)
 		}
 	})
 }

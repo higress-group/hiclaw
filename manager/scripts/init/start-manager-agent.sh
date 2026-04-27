@@ -624,7 +624,7 @@ log "Generating Manager openclaw.json..."
 export MANAGER_MATRIX_TOKEN="${MANAGER_TOKEN}"
 export MANAGER_GATEWAY_KEY="${HICLAW_MANAGER_GATEWAY_KEY}"
 # Resolve model parameters based on model name
-MODEL_NAME="${HICLAW_DEFAULT_MODEL:-qwen3.5-plus}"
+MODEL_NAME="${HICLAW_DEFAULT_MODEL:-qwen3.6-plus}"
 case "${MODEL_NAME}" in
     gpt-5.3-codex|gpt-5-mini|gpt-5-nano)
         export MODEL_CONTEXT_WINDOW=400000 MODEL_MAX_TOKENS=128000 ;;
@@ -634,7 +634,7 @@ case "${MODEL_NAME}" in
         export MODEL_CONTEXT_WINDOW=1000000 MODEL_MAX_TOKENS=64000 ;;
     claude-haiku-4-5)
         export MODEL_CONTEXT_WINDOW=200000 MODEL_MAX_TOKENS=64000 ;;
-    qwen3.5-plus)
+    qwen3.6-plus|qwen3.5-plus)
         export MODEL_CONTEXT_WINDOW=200000 MODEL_MAX_TOKENS=64000 ;;
     deepseek-chat|deepseek-reasoner|kimi-k2.5)
         export MODEL_CONTEXT_WINDOW=256000 MODEL_MAX_TOKENS=128000 ;;
@@ -660,7 +660,7 @@ log "Matrix E2EE: ${MATRIX_E2EE_ENABLED}"
 
 # Resolve input modalities: only vision-capable models get "image"
 case "${MODEL_NAME}" in
-    gpt-5.4|gpt-5.3-codex|gpt-5-mini|gpt-5-nano|claude-opus-4-6|claude-sonnet-4-6|claude-haiku-4-5|qwen3.5-plus|kimi-k2.5)
+    gpt-5.4|gpt-5.3-codex|gpt-5-mini|gpt-5-nano|claude-opus-4-6|claude-sonnet-4-6|claude-haiku-4-5|qwen3.6-plus|qwen3.5-plus|kimi-k2.5)
         export MODEL_INPUT='["text", "image"]' ;;
     *)
         export MODEL_INPUT='["text"]' ;;

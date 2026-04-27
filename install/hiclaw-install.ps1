@@ -14,7 +14,7 @@
 # Environment variables (for automation):
 #   HICLAW_NON_INTERACTIVE    Skip all prompts, use defaults  (default: 0)
 #   HICLAW_LLM_PROVIDER       LLM provider       (default: openai-compat for zh non-interactive Token Plan; qwen for en)
-#   HICLAW_DEFAULT_MODEL      Default model      (default: qwen3.6-plus for zh Token Plan; qwen3.5-plus for qwen)
+#   HICLAW_DEFAULT_MODEL      Default model      (default: qwen3.6-plus for zh Token Plan and en non-interactive)
 #   HICLAW_OPENAI_BASE_URL    OpenAI-compatible base URL (default for zh non-interactive: Alibaba Token Plan endpoint)
 #   HICLAW_LLM_API_KEY        LLM API key        (required)
 #   HICLAW_ADMIN_USER         Admin username     (default: admin)
@@ -322,7 +322,7 @@ $script:Messages = @{
     "llm.provider.selected_qwen" = @{ zh = "  提供商: 阿里云百炼"; en = "  Provider: Alibaba Cloud Bailian" }
     "llm.provider.selected_openai" = @{ zh = "  提供商: {0}（OpenAI 兼容）"; en = "  Provider: {0} (OpenAI-compatible)" }
     "llm.provider.invalid" = @{ zh = "无效选择: {0}（请输入 1 或 2）"; en = "Invalid choice: {0} (please enter 1 or 2)" }
-    "llm.qwen.model_prompt" = @{ zh = "默认模型 ID [qwen3.5-plus]"; en = "Default Model ID [qwen3.5-plus]" }
+    "llm.qwen.model_prompt" = @{ zh = "默认模型 ID [qwen3.6-plus]"; en = "Default Model ID [qwen3.6-plus]" }
     "llm.openai.base_url_prompt" = @{ zh = "Base URL（例如 https://api.openai.com/v1）"; en = "Base URL (e.g., https://api.openai.com/v1)" }
     "llm.openai.model_prompt" = @{ zh = "默认模型 ID [gpt-5.4]"; en = "Default Model ID [gpt-5.4]" }
     "llm.openai.base_url_label" = @{ zh = "  Base URL: {0}"; en = "  Base URL: {0}" }
@@ -1664,7 +1664,7 @@ function Step-Llm {
             Write-Log (Get-Msg "llm.openai.base_url_label" -f $script:config.OPENAI_BASE_URL)
         } else {
             $script:config.LLM_PROVIDER = if ($env:HICLAW_LLM_PROVIDER) { $env:HICLAW_LLM_PROVIDER } else { "qwen" }
-            $script:config.DEFAULT_MODEL = if ($env:HICLAW_DEFAULT_MODEL) { $env:HICLAW_DEFAULT_MODEL } else { "qwen3.5-plus" }
+            $script:config.DEFAULT_MODEL = if ($env:HICLAW_DEFAULT_MODEL) { $env:HICLAW_DEFAULT_MODEL } else { "qwen3.6-plus" }
             $script:config.OPENAI_BASE_URL = if ($env:HICLAW_OPENAI_BASE_URL) { $env:HICLAW_OPENAI_BASE_URL } else { "" }
             Write-Log (Get-Msg "llm.provider.qwen_default" -f $script:config.LLM_PROVIDER)
         }
@@ -1766,7 +1766,7 @@ function Step-Llm {
                     Write-Host ""
                     $qwenModelInput = Read-Host (Get-Msg "llm.qwen.model_prompt")
                     if ($qwenModelInput -eq "b") { $script:StepResult = "back"; return }
-                    $script:config.DEFAULT_MODEL = if ($qwenModelInput) { $qwenModelInput } elseif ($env:HICLAW_DEFAULT_MODEL) { $env:HICLAW_DEFAULT_MODEL } else { "qwen3.5-plus" }
+                    $script:config.DEFAULT_MODEL = if ($qwenModelInput) { $qwenModelInput } elseif ($env:HICLAW_DEFAULT_MODEL) { $env:HICLAW_DEFAULT_MODEL } else { "qwen3.6-plus" }
                     Write-Log (Get-Msg "llm.provider.selected_qwen")
                     Request-CustomModelParams $script:config.DEFAULT_MODEL
                     if ($script:StepResult -eq "back") { return }
@@ -1777,7 +1777,7 @@ function Step-Llm {
                     Write-Host ""
                     $codingModelInput = Read-Host (Get-Msg "llm.qwen.model_prompt")
                     if ($codingModelInput -eq "b") { $script:StepResult = "back"; return }
-                    $script:config.DEFAULT_MODEL = if ($codingModelInput) { $codingModelInput } elseif ($env:HICLAW_DEFAULT_MODEL) { $env:HICLAW_DEFAULT_MODEL } else { "qwen3.5-plus" }
+                    $script:config.DEFAULT_MODEL = if ($codingModelInput) { $codingModelInput } elseif ($env:HICLAW_DEFAULT_MODEL) { $env:HICLAW_DEFAULT_MODEL } else { "qwen3.6-plus" }
                     Write-Log (Get-Msg "llm.provider.selected_codingplan_legacy")
                     Request-CustomModelParams $script:config.DEFAULT_MODEL
                     if ($script:StepResult -eq "back") { return }
