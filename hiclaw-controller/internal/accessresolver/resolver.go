@@ -90,6 +90,8 @@ func (r *Resolver) resolveWorker(ctx context.Context, name string) (string, []cr
 	crEntries := w.Spec.AccessEntries
 	if len(crEntries) == 0 {
 		crEntries = DefaultEntriesForWorker()
+	} else if !hasServiceEntry(crEntries, credprovider.ServiceObjectStorage) {
+		crEntries = append(DefaultEntriesForWorker(), crEntries...)
 	}
 	runtimeName := name
 	if w.Name != "" {
@@ -147,6 +149,8 @@ func (r *Resolver) resolveTeamMember(ctx context.Context, name, teamName string)
 	}
 	if len(crEntries) == 0 {
 		crEntries = DefaultEntriesForTeamMember()
+	} else if !hasServiceEntry(crEntries, credprovider.ServiceObjectStorage) {
+		crEntries = append(DefaultEntriesForTeamMember(), crEntries...)
 	}
 
 	runtimeTeamName := teamName
@@ -184,6 +188,8 @@ func (r *Resolver) resolveManager(ctx context.Context, name string) (string, []c
 	crEntries := m.Spec.AccessEntries
 	if len(crEntries) == 0 {
 		crEntries = DefaultEntriesForManager()
+	} else if !hasServiceEntry(crEntries, credprovider.ServiceObjectStorage) {
+		crEntries = append(DefaultEntriesForManager(), crEntries...)
 	}
 	tmpl := templateCtx{kind: "Manager", name: name, namespace: r.namespace}
 	resolved, err := r.resolveEntries(crEntries, tmpl)
@@ -386,6 +392,16 @@ func copyPermissions(in []string) []string {
 	out := make([]string, len(in))
 	copy(out, in)
 	return out
+}
+
+// hasServiceEntry reports whether any entry in the list targets the given service.
+func hasServiceEntry(entries []v1beta1.AccessEntry, service string) bool {
+	for _, e := range entries {
+		if e.Service == service {
+			return true
+		}
+	}
+	return false
 }
 
 // marshalJSONDeterministic marshals m with sorted keys so that default

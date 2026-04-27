@@ -98,6 +98,15 @@ func hasAllPerms(perms []string, want ...string) bool {
 	return true
 }
 
+func entryForService(entries []credprovider.AccessEntry, service string) *credprovider.AccessEntry {
+	for i := range entries {
+		if entries[i].Service == service {
+			return &entries[i]
+		}
+	}
+	return nil
+}
+
 func TestResolveWorker_CustomBucketRef(t *testing.T) {
 	worker := &v1beta1.Worker{}
 	worker.Name = "bob"
@@ -226,10 +235,16 @@ func TestResolve_AIGatewayHappyPath(t *testing.T) {
 	if err != nil {
 		t.Fatalf("resolve: %v", err)
 	}
-	if len(entries) != 1 {
+	if len(entries) != 2 {
 		t.Fatalf("got %d entries", len(entries))
 	}
-	got := entries[0]
+	if entryForService(entries, credprovider.ServiceObjectStorage) == nil {
+		t.Fatalf("missing default object-storage entry in %+v", entries)
+	}
+	got := entryForService(entries, credprovider.ServiceAIGateway)
+	if got == nil {
+		t.Fatalf("missing ai-gateway entry in %+v", entries)
+	}
 	if got.Service != credprovider.ServiceAIGateway {
 		t.Fatalf("service = %q", got.Service)
 	}
@@ -261,10 +276,16 @@ func TestResolve_AIRegistryDefaultResources(t *testing.T) {
 	if err != nil {
 		t.Fatalf("resolve: %v", err)
 	}
-	if len(entries) != 1 {
+	if len(entries) != 2 {
 		t.Fatalf("got %d entries", len(entries))
 	}
-	got := entries[0]
+	if entryForService(entries, credprovider.ServiceObjectStorage) == nil {
+		t.Fatalf("missing default object-storage entry in %+v", entries)
+	}
+	got := entryForService(entries, credprovider.ServiceAIRegistry)
+	if got == nil {
+		t.Fatalf("missing ai-registry entry in %+v", entries)
+	}
 	if got.Service != credprovider.ServiceAIRegistry {
 		t.Fatalf("service = %q", got.Service)
 	}
@@ -298,7 +319,10 @@ func TestResolve_AIRegistryCustomResources(t *testing.T) {
 	if err != nil {
 		t.Fatalf("resolve: %v", err)
 	}
-	got := entries[0]
+	got := entryForService(entries, credprovider.ServiceAIRegistry)
+	if got == nil {
+		t.Fatalf("missing ai-registry entry in %+v", entries)
+	}
 	if got.Scope.NamespaceID != "ns1" {
 		t.Fatalf("namespaceId = %q", got.Scope.NamespaceID)
 	}
