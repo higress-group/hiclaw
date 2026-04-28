@@ -1,0 +1,120 @@
+package v1beta1
+
+import (
+	"reflect"
+	"testing"
+)
+
+// TestWorkerSpec_DeepCopyLabels verifies WorkerSpec.Labels is deep-copied:
+// mutating the source map after DeepCopy must not mutate the copy. Covers
+// nil, empty-but-non-nil, and populated variants because our hand-edited
+// zz_generated.deepcopy.go has no code-gen safety net.
+func TestWorkerSpec_DeepCopyLabels(t *testing.T) {
+	cases := []struct {
+		name string
+		in   map[string]string
+	}{
+		{name: "nil", in: nil},
+		{name: "empty", in: map[string]string{}},
+		{name: "populated", in: map[string]string{"owner": "alice", "env": "prod"}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			src := WorkerSpec{Model: "m", Labels: tc.in}
+			cp := *src.DeepCopy()
+
+			if !reflect.DeepEqual(cp.Labels, src.Labels) {
+				t.Fatalf("copy labels=%v want %v", cp.Labels, src.Labels)
+			}
+			if tc.in != nil {
+				src.Labels["mutated"] = "x"
+				if _, ok := cp.Labels["mutated"]; ok {
+					t.Fatalf("DeepCopy did not isolate Labels: %v", cp.Labels)
+				}
+			}
+		})
+	}
+}
+
+// TestManagerSpec_DeepCopyLabels mirrors the WorkerSpec assertion for
+// ManagerSpec.Labels.
+func TestManagerSpec_DeepCopyLabels(t *testing.T) {
+	src := ManagerSpec{Model: "m", Labels: map[string]string{"tier": "ctrl"}}
+	cp := *src.DeepCopy()
+	if !reflect.DeepEqual(cp.Labels, src.Labels) {
+		t.Fatalf("copy labels=%v want %v", cp.Labels, src.Labels)
+	}
+	src.Labels["mutated"] = "x"
+	if _, ok := cp.Labels["mutated"]; ok {
+		t.Fatalf("DeepCopy did not isolate ManagerSpec.Labels: %v", cp.Labels)
+	}
+	// Nil branch — ensure DeepCopy does not allocate an empty map for nil
+	// input (preserves JSON omitempty round-trip stability).
+	srcNil := ManagerSpec{Model: "m"}
+	cpNil := *srcNil.DeepCopy()
+	if cpNil.Labels != nil {
+		t.Fatalf("expected nil Labels on deep-copy of nil source, got %v", cpNil.Labels)
+	}
+}
+
+// TestLeaderSpec_DeepCopyLabels verifies LeaderSpec.Labels survives
+// DeepCopy. The Leader path is exercised separately from TeamWorkerSpec
+// because TeamSpec.DeepCopyInto calls LeaderSpec.DeepCopyInto directly
+// and any regression there would silently drop leader labels.
+func TestLeaderSpec_DeepCopyLabels(t *testing.T) {
+	src := LeaderSpec{Name: "ld", Labels: map[string]string{"role-hint": "planner"}}
+	cp := *src.DeepCopy()
+	if !reflect.DeepEqual(cp.Labels, src.Labels) {
+		t.Fatalf("copy labels=%v want %v", cp.Labels, src.Labels)
+	}
+	src.Labels["role-hint"] = "mutated"
+	if cp.Labels["role-hint"] != "planner" {
+		t.Fatalf("DeepCopy aliased LeaderSpec.Labels: %v", cp.Labels)
+	}
+}
+
+// TestTeamWorkerSpec_DeepCopyLabels verifies TeamWorkerSpec.Labels
+// survives DeepCopy through the TeamSpec.Workers[] slice path.
+func TestTeamWorkerSpec_DeepCopyLabels(t *testing.T) {
+	src := TeamWorkerSpec{Name: "w1", Labels: map[string]string{"skill": "rust"}}
+	cp := *src.DeepCopy()
+	if !reflect.DeepEqual(cp.Labels, src.Labels) {
+		t.Fatalf("copy labels=%v want %v", cp.Labels, src.Labels)
+	}
+	src.Labels["skill"] = "mutated"
+	if cp.Labels["skill"] != "rust" {
+		t.Fatalf("DeepCopy aliased TeamWorkerSpec.Labels: %v", cp.Labels)
+	}
+}
+
+// TestTeamSpec_DeepCopyCascadesToMemberLabels verifies that DeepCopy on
+// the top-level TeamSpec correctly cascades into both LeaderSpec.Labels
+// and every TeamWorkerSpec.Labels — catching the case where a future
+// refactor regenerates zz_generated.deepcopy.go and accidentally drops a
+// nested call.
+func TestTeamSpec_DeepCopyCascadesToMemberLabels(t *testing.T) {
+	src := TeamSpec{
+		Leader: LeaderSpec{
+			Name:   "ld",
+			Labels: map[string]string{"role-hint": "planner"},
+		},
+		Workers: []TeamWorkerSpec{
+			{Name: "w1", Labels: map[string]string{"skill": "rust"}},
+			{Name: "w2"}, // nil labels branch
+		},
+	}
+	cp := *src.DeepCopy()
+
+	src.Leader.Labels["role-hint"] = "mutated"
+	src.Workers[0].Labels["skill"] = "mutated"
+
+	if cp.Leader.Labels["role-hint"] != "planner" {
+		t.Fatalf("LeaderSpec.Labels not isolated: %v", cp.Leader.Labels)
+	}
+	if cp.Workers[0].Labels["skill"] != "rust" {
+		t.Fatalf("Workers[0].Labels not isolated: %v", cp.Workers[0].Labels)
+	}
+	if cp.Workers[1].Labels != nil {
+		t.Fatalf("Workers[1].Labels should remain nil after DeepCopy, got %v", cp.Workers[1].Labels)
+	}
+}

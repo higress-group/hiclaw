@@ -10,9 +10,26 @@ Worker 是轻量级无状态容器，负责：
 - 通过 AI 网关访问 LLM
 - 通过 mcporter CLI 调用 MCP Server 工具（GitHub 等）
 
+### 声明式创建与更新（v1.1.0+）
+
+Worker 由 **CR** 描述。除在 Matrix 里让 Manager 创建外，你还可以：
+
+- 在 **`hiclaw-controller`** 或 **`hiclaw-manager`** 容器内执行 **`hiclaw create worker` / `hiclaw update worker`**（见 [faq.md](../faq.md)）。
+- 使用 **`install/hiclaw-apply.sh`** 应用 YAML（转发到 Manager 容器内的 `hiclaw apply -f`）。
+
+字段说明见 [Declarative Resource Management](../declarative-resource-management.md)。
+
+### 按 `spec.runtime` 区分的目录布局
+
+| 运行时 | 主要工作目录 | 说明 |
+|--------|----------------|------|
+| **openclaw** | `/root/hiclaw-fs/agents/<worker-name>/`（`HOME` 指向此处） | `openclaw.json`、`SOUL.md`、`AGENTS.md`、skills、`.openclaw/` 等。共享数据：`/root/hiclaw-fs/shared/`。 |
+| **copaw** | `/root/.hiclaw-worker/<worker-name>/`（CoPaw 配置在 `.copaw/`） | 兼容性符号链接 **`/root/hiclaw-fs`** 指向该 Worker 树，便于沿用 OpenClaw 风格路径的脚本。 |
+| **hermes** | `/root/hiclaw-fs/agents/<worker-name>/`（`HOME` 即工作区，与 OpenClaw 相同的镜像根） | Hermes 状态在目录内 **`.hermes/`**（如 `.hermes/config.yaml`、`state.db`）。 |
+
 ## 安装
 
-Worker 由 Manager Agent 创建。Manager 负责所有基础设施配置（Matrix 账号、Higress Consumer、配置文件等），可以直接创建 Worker 容器，也可以提供手动执行的命令。
+Worker 由 **Manager Agent** 或 **controller 声明式 API** 创建。Manager 负责（或通过 controller 等价完成）Matrix 账号、Higress Consumer、配置文件等；可直接创建 Worker 容器，也可给出手动执行的 `docker run` 命令。
 
 ### 方式一：直接创建（推荐用于本地开发）
 
@@ -145,13 +162,16 @@ Manager 自动管理 Worker 容器的生命周期：
 | 变量 | 说明 | 示例值 |
 |------|------|--------|
 | `HICLAW_WORKER_NAME` | Worker 标识符 | `alice` |
-| `HICLAW_MATRIX_SERVER` | Matrix Homeserver URL | `http://matrix-local.hiclaw.io:18080` |
-| `HICLAW_AI_GATEWAY` | AI 网关 URL | `http://aigw-local.hiclaw.io:18080` |
+| `HICLAW_MATRIX_URL` | Matrix Homeserver URL | `http://matrix-local.hiclaw.io:18080` |
+| `HICLAW_AI_GATEWAY_URL` | AI 网关 URL | `http://aigw-local.hiclaw.io:18080` |
 | `HICLAW_FS_ENDPOINT` | MinIO 端点 URL | `http://<MANAGER_HOST>:9000` |
+| `HICLAW_FS_BUCKET` | 非默认存储布局下的 bucket 名称 | `hiclaw-storage` |
 | `HICLAW_FS_ACCESS_KEY` | MinIO 访问密钥（由 Manager 生成，Worker 专用） | - |
 | `HICLAW_FS_SECRET_KEY` | MinIO 密钥（由 Manager 生成，Worker 专用） | - |
 
 > 所有参数值均由 Manager 生成，并在 `docker run` 命令中提供，或在直接创建时自动设置。通常无需手动配置。
+>
+> 运行时脚本现在直接使用 `HICLAW_MATRIX_URL` 和 `HICLAW_AI_GATEWAY_URL`；旧别名已经不再属于主契约。
 
 ### 手动同步文件
 

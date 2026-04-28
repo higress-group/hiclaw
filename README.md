@@ -10,17 +10,17 @@
   <a href="https://discord.com/invite/NVjNA4BAVw"><img src="https://img.shields.io/badge/Discord-Join_Us-blueviolet.svg?logo=discord" alt="Discord"></a>
 </p>
 
-**HiClaw is an open-source Collaborative Multi-Agent OS for transparent, human-in-the-loop task coordination via Matrix rooms.**
+**HiClaw is an open-source collaborative multi-agent runtime platform. It enables multiple Agents to collaborate in a controlled and auditable room, with full human visibility and intervention capabilities throughout the process..**
 
-Built with a **Manager-Workers architecture**, HiClaw lets you coordinate multiple Worker Agents through a Manager Agent to complete complex tasks — all conversations are visible in Matrix rooms, and you can intervene at any time.
+Built on a **Manager-Workers architecture**, HiClaw features a Manager that centrally orchestrates multiple Workers, focusing on collaboration scenarios between humans and Agents, as well as among Agents within enterprise environments.
 
-Think of it as your AI team in a chat room: tell the Manager what you need, it spins up Workers, and you watch everything happen in real-time.
+HiClaw does not compete with other xxClaw projects. Instead of implementing Agent logic itself, it orchestrates and manages multiple Agent containers (including the Manager and numerous Workers).
 
 ## Key Features
 
 - 🧬 **Manager-Workers Architecture**: Eliminates the need for human oversight of individual Worker Claws by enabling Agents to manage other Agents.
 
-- 🦞 **Customizable Agents**: Each Agent supports flexible configurations including OpenClaw, Copaw, NanoClaw, ZeroClaw, and enterprise-built Agents—scaling from individual "shrimp farming" to full-scale "shrimp farm" operations..
+- 🤝 **Multi-Runtime Collaboration**: OpenClaw, QwenPaw, and Hermes Workers coexist in the same IM room. Use deterministic agents (OpenClaw/QwenPaw) as Leaders to orchestrate tasks, and Hermes Workers for autonomous code execution — each runtime does what it's best at.
 
 - 📦 **MinIO Shared File System**: Introduces a shared file system for inter-Agent information exchange, significantly reducing token consumption in multi-Agent collaboration scenarios.
 
@@ -30,9 +30,12 @@ Think of it as your AI team in a chat room: tell the Manager what you need, it s
 
 ## News
 
-- **2026-03-14**: HiClaw 1.0.6 — enterprise-grade MCP Server management, zero credential exposure. [Blog](blog/hiclaw-1.0.6-release.md)
-- **2026-03-10**: HiClaw 1.0.4 — CoPaw Worker support, 80% less memory. [Blog](blog/hiclaw-1.0.4-release.md)
-- **2026-03-04**: HiClaw open sourced. [Announcement](blog/hiclaw-announcement.md)
+- **2026-04-24**: [English](blog/hiclaw-1.1.0-release.md) | [中文](blog/zh-cn/hiclaw-1.1.0-release.md) — HiClaw v1.1.0: Kubernetes-native control plane, Hermes autonomous coding agent runtime, 1.7 GB image shrink, hiclaw CLI replaces shell scripts.
+- **2026-04-14**: [English](blog/hiclaw-k8s-native-multi-agent-collaboration.md) | [中文](blog/zh-cn/hiclaw-k8s-native-multi-agent-collaboration.zh-CN.md) — Deep dive: HiClaw as a Kubernetes-native multi-agent collaboration orchestration system.
+- **2026-04-03**: [English](docs/declarative-resource-management.md) | [中文](docs/zh-cn/declarative-resource-management.md) — HiClaw 1.0.9: Kubernetes-style declarative resource management (YAML for Worker, Team, Human); Worker Template Marketplace; Manager CoPaw runtime; Nacos Skills Registry and more.
+- **2026-03-14**: [English](blog/hiclaw-1.0.6-release.md) | [中文](blog/zh-cn/hiclaw-1.0.6-release.md) — HiClaw 1.0.6: enterprise-grade MCP Server management, zero credential exposure.
+- **2026-03-10**: [English](blog/hiclaw-1.0.4-release.md) | [中文](blog/zh-cn/hiclaw-1.0.4-release.md) — HiClaw 1.0.4: CoPaw Worker support, 80% less memory.
+- **2026-03-04**: [English](blog/hiclaw-announcement.md) | [中文](blog/zh-cn/hiclaw-announcement.md) — HiClaw open sourced.
 
 ## Why HiClaw
 
@@ -90,6 +93,150 @@ bash <(curl -sSL https://higress.ai/hiclaw/install.sh)
 HICLAW_VERSION=v1.0.5 bash <(curl -sSL https://higress.ai/hiclaw/install.sh)
 ```
 
+## Uninstall
+
+**macOS / Linux:**
+```bash
+bash <(curl -fsSL https://raw.githubusercontent.com/higress-group/hiclaw/main/install/hiclaw-install.sh) uninstall
+```
+
+**Windows (PowerShell):**
+```powershell
+Set-ExecutionPolicy Bypass -Scope Process -Force; $wc=New-Object Net.WebClient; $wc.Encoding=[Text.Encoding]::UTF8; $s=$wc.DownloadString('https://raw.githubusercontent.com/higress-group/hiclaw/main/install/hiclaw-install.ps1'); & ([scriptblock]::Create($s)) uninstall
+```
+
+This removes all HiClaw containers (Manager, Workers, docker-proxy), Docker volume, network, env file, workspace directory, and install log.
+
+## Install on Kubernetes (Helm)
+
+For shared / production deployments you can install HiClaw on any Kubernetes cluster via the official Helm chart. The default profile bundles the Higress AI gateway, Tuwunel (Matrix), MinIO and the HiClaw controller — no external dependencies required.
+
+**Prerequisites**
+
+- Kubernetes 1.24+ (kind / minikube / k3s / managed K8s — all work)
+- Helm 3.7+
+- A default StorageClass (for the Tuwunel + MinIO PVCs)
+
+**Install (OpenAI / OpenAI-compatible)**
+
+```bash
+helm repo add higress.io https://higress.io/helm-charts
+helm repo update
+
+helm install hiclaw higress.io/hiclaw \
+  -n hiclaw-system --create-namespace \
+  --render-subchart-notes \
+  --set credentials.llmApiKey=<your-api-key> \
+  --set credentials.adminPassword=<your-admin-password> \
+  --set gateway.publicURL=http://localhost:18080
+```
+
+For non-OpenAI providers that expose an OpenAI-compatible API, also set `llmBaseUrl`:
+
+```bash
+helm install hiclaw higress.io/hiclaw \
+  -n hiclaw-system --create-namespace \
+  --render-subchart-notes \
+  --set credentials.llmApiKey=<your-api-key> \
+  --set credentials.llmBaseUrl=https://your-provider.example.com/v1 \
+  --set credentials.defaultModel=your-model-name \
+  --set credentials.adminPassword=<your-admin-password> \
+  --set gateway.publicURL=http://localhost:18080
+```
+
+<details>
+<summary>Using Qwen (通义千问) instead</summary>
+
+```bash
+helm install hiclaw higress.io/hiclaw \
+  -n hiclaw-system --create-namespace \
+  --render-subchart-notes \
+  --set credentials.llmApiKey=<your-qwen-api-key> \
+  --set credentials.llmProvider=qwen \
+  --set credentials.defaultModel=qwen3.5-plus \
+  --set credentials.adminPassword=<your-admin-password> \
+  --set gateway.publicURL=http://localhost:18080
+```
+
+</details>
+
+| Value | Required | Description |
+|---|---|---|
+| `credentials.llmApiKey` | yes | API key for your LLM provider |
+| `gateway.publicURL` | yes | Public URL where users will reach Element Web (e.g. `http://localhost:18080` for port-forward, or `https://hiclaw.example.com` for an Ingress) |
+| `credentials.adminPassword` | recommended | Matrix admin password; auto-generated if left empty (you'll have to read it back from the Secret) |
+| `credentials.llmProvider` | no | LLM provider name, defaults to `openai-compat` |
+| `credentials.defaultModel` | no | Default model, defaults to `gpt-5.4` |
+| `credentials.llmBaseUrl` | no | OpenAI-compatible base URL (e.g. `https://api.deepseek.com/v1`). Leave empty for official OpenAI API |
+| `manager.runtime` | no | Manager agent runtime: `openclaw` (default), `copaw`, or `hermes` |
+| `worker.defaultRuntime` | no | Default Worker runtime: `openclaw` (default), `copaw`, or `hermes` |
+
+<details>
+<summary>Using alternative runtimes (CoPaw Manager + Hermes Workers)</summary>
+
+```bash
+helm install hiclaw higress.io/hiclaw \
+  -n hiclaw-system --create-namespace --devel \
+  --set manager.runtime=copaw \
+  --set worker.defaultRuntime=hermes \
+  --set credentials.llmApiKey=<your-api-key> \
+  --set credentials.llmBaseUrl=https://your-provider.example.com/v1 \
+  --set credentials.defaultModel=your-model-name \
+  --set credentials.adminPassword=<your-admin-password> \
+  --set gateway.publicURL=http://localhost:18080
+```
+
+The image for each component is automatically selected based on the runtime (`hiclaw-manager` / `hiclaw-manager-copaw` for Manager; `hiclaw-worker` / `hiclaw-copaw-worker` / `hiclaw-hermes-worker` for Workers).
+
+</details>
+
+**Multi-Region Image Registry**
+
+The default `global.imageRegistry` points to the China region (`higress-registry.cn-hangzhou.cr.aliyuncs.com/higress`). If you are deploying outside China, override it for faster image pulls:
+
+| Region | Registry |
+|---|---|
+| China (default) | `higress-registry.cn-hangzhou.cr.aliyuncs.com/higress` |
+| North America | `higress-registry.us-west-1.cr.aliyuncs.com/higress` |
+| Southeast Asia | `higress-registry.ap-southeast-7.cr.aliyuncs.com/higress` |
+
+```bash
+# Example: deploy from the North America registry
+helm install hiclaw higress.io/hiclaw \
+  -n hiclaw-system --create-namespace \
+  --render-subchart-notes \
+  --set global.imageRegistry=higress-registry.us-west-1.cr.aliyuncs.com/higress \
+  --set credentials.llmApiKey=<your-api-key> \
+  --set credentials.adminPassword=<your-admin-password> \
+  --set gateway.publicURL=http://localhost:18080
+```
+
+For all configurable values (gateway/storage providers, image tags, resources, persistence, etc.) see [`helm/hiclaw/values.yaml`](helm/hiclaw/values.yaml).
+
+**Access**
+
+```bash
+kubectl port-forward -n hiclaw-system svc/higress-gateway 18080:80
+```
+
+Then open http://localhost:18080 in your browser and log in to Element Web. For an actual cluster, configure an Ingress / LoadBalancer / DNS record pointing at `svc/higress-gateway` and set `gateway.publicURL` accordingly.
+
+**Upgrade**
+
+```bash
+helm repo update
+helm upgrade hiclaw higress.io/hiclaw -n hiclaw-system --reuse-values
+```
+
+**Uninstall**
+
+```bash
+helm uninstall hiclaw -n hiclaw-system
+kubectl delete namespace hiclaw-system
+```
+
+For the Kubernetes-native architecture (CRDs, controller, declarative `Worker` / `Team` / `Human` resources), see [docs/k8s-native-agent-orch.md](docs/k8s-native-agent-orch.md).
+
 ## How It Works
 
 ### Manager as Your AI Chief of Staff
@@ -140,28 +287,49 @@ Alice: Frontend validation updated too.
 
 No hidden agent-to-agent calls. Everything is visible and intervenable.
 
+## Multi-Runtime Collaboration
+
+HiClaw supports three Worker runtimes that can **coexist in the same IM room**, collaborating on tasks together:
+
+- **OpenClaw** (Node.js) — General-purpose agent with rich skills ecosystem, ideal for task orchestration and tool calling
+- **QwenPaw** (Python) — Lightweight runtime, suited for browser automation and quick tasks
+- **Hermes** ([hermes-agent](https://github.com/NousResearch/hermes-agent)) — Autonomous coding agent with terminal sandbox, self-improving skills, and persistent memory
+
+Each runtime excels at different tasks. A common pattern: use deterministic agents (OpenClaw/QwenPaw) as Leaders to decompose and assign work, and Hermes Workers for autonomous code execution. All runtimes communicate via Matrix `m.mentions` in the same room — fully visible, fully intervenable.
+
+```bash
+# Switch any worker's runtime in place
+hiclaw update worker --runtime hermes
+```
+
 ## Architecture
 
 ```
-┌─────────────────────────────────────────────┐
-│         hiclaw-manager-agent                │
-│  Higress │ Tuwunel │ MinIO │ Element Web    │
-│  Manager Agent (OpenClaw)                   │
-└──────────────────┬──────────────────────────┘
+┌───────────────────────────────────────────────┐
+│            hiclaw-controller                  │
+│  Higress │ Tuwunel │ MinIO │ Element Web      │
+└──────────────────┬────────────────────────────┘
                    │ Matrix + HTTP Files
-┌──────────────────┴──────┐  ┌────────────────┐
-│  hiclaw-worker-agent    │  │  hiclaw-worker │
-│  Worker Alice (OpenClaw)│  │  Worker Bob    │
-└─────────────────────────┘  └────────────────┘
+┌──────────────────┴──────────┐
+│     hiclaw-manager-agent     │
+│     Manager (OpenClaw/       │
+│       QwenPaw)               │
+└──────────────────┬──────────┘
+                   │
+┌──────────────────┼────────────────────────────┐
+│                  │                            │
+▼                  ▼                            ▼
+Worker Alice    Worker Bob              Worker Charlie
+(OpenClaw)      (QwenPaw)               (Hermes)
 ```
 
 | Component | Role |
 |-----------|------|
+| hiclaw-controller | Kubernetes-native control plane, reconciles Worker/Team/Manager CRs |
 | Higress AI Gateway | LLM proxy, MCP Server hosting, credential management |
 | Tuwunel (Matrix) | Self-hosted IM server for all Agent + Human communication |
 | Element Web | Browser client, zero setup |
 | MinIO | Centralized file storage, Workers are stateless |
-| OpenClaw | Agent runtime with Matrix plugin and skills |
 
 ## HiClaw vs OpenClaw Native
 
@@ -173,30 +341,6 @@ No hidden agent-to-agent calls. Everything is visible and intervenable.
 | Human visibility | Optional | Built-in (Matrix Rooms) |
 | Mobile access | Depends on channel setup | Any Matrix client, zero config |
 | Monitoring | None | Manager heartbeat, visible in Room |
-
-## Roadmap
-
-### ✅ Released
-
-- ~~**CoPaw** — Lightweight agent runtime~~ [Released in 1.0.4](blog/hiclaw-1.0.4-release.md): ~150MB memory usage (vs ~500MB for OpenClaw), plus local host mode for browser automation.
-- ~~**Universal MCP Service Support** — MCP server integration~~ [Released in 1.0.6](blog/hiclaw-1.0.6-release.md): Any MCP server can be safely exposed to Workers through the gateway. Workers access tools using only Higress-issued tokens; real credentials never leave the gateway.
-
-### In Progress
-
-#### Lightweight Worker Runtimes
-
-- **ZeroClaw** — Rust-based ultra-lightweight runtime, 3.4MB binary, <10ms cold start.
-- **NanoClaw** — Minimal OpenClaw alternative, <4000 LOC, container-based isolation.
-
-Goal: Reduce per-Worker memory from ~500MB to <100MB.
-
-### Planned
-
-#### Team Management Center
-
-A built-in dashboard for observing and controlling your Agent Teams — real-time observation, active interruption, task timeline, resource monitoring.
-
----
 
 ## Documentation
 

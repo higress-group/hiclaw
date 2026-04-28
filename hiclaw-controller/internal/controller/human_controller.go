@@ -2,12 +2,10 @@ package controller
 
 import (
 	"context"
-	"fmt"
-	"strings"
-	"time"
 
 	v1beta1 "github.com/hiclaw/hiclaw-controller/api/v1beta1"
-	"github.com/hiclaw/hiclaw-controller/internal/executor"
+	"github.com/hiclaw/hiclaw-controller/internal/service"
+	kerrors "k8s.io/apimachinery/pkg/util/errors"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
@@ -15,13 +13,20 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
-// HumanReconciler reconciles Human resources.
+// HumanReconciler reconciles Human resources using Service-layer orchestration.
+//
+// Unlike Worker/Manager, a Human has no backend container and no gateway
+// consumer: the reconciler's entire job is to keep a Matrix user plus a
+// set of room memberships in sync with Spec.AccessibleWorkers/Teams and
+// (in embedded mode) with humans-registry.json.
 type HumanReconciler struct {
 	client.Client
-	Executor *executor.Shell
+
+	Provisioner service.HumanProvisioner
+	Legacy      *service.LegacyCompat // nil in incluster mode
 }
 
-func (r *HumanReconciler) Reconcile(ctx context.Context, req reconcile.Request) (reconcile.Result, error) {
+func (r *HumanReconciler) Reconcile(ctx context.Context, req reconcile.Request) (retres reconcile.Result, reterr error) {
 	logger := log.FromContext(ctx)
 
 	var human v1beta1.Human
@@ -29,22 +34,42 @@ func (r *HumanReconciler) Reconcile(ctx context.Context, req reconcile.Request) 
 		return reconcile.Result{}, client.IgnoreNotFound(err)
 	}
 
-	// Handle deletion
+	patchBase := client.MergeFrom(human.DeepCopy())
+
+	s := &humanScope{
+		human:     &human,
+		patchBase: patchBase,
+	}
+
+	// Defer status patch so every phase writes through a single merge-patch
+	// at the end of the reconcile loop. We skip the patch when the object
+	// is being deleted — the finalizer cleanup path calls r.Update itself
+	// and the CR may no longer exist by the time the defer runs.
+	defer func() {
+		if !human.DeletionTimestamp.IsZero() {
+			return
+		}
+
+		human.Status.Phase = computeHumanPhase(&human, reterr)
+		if reterr == nil {
+			human.Status.Message = ""
+		} else {
+			human.Status.Message = reterr.Error()
+		}
+
+		if err := r.Status().Patch(ctx, &human, patchBase); err != nil {
+			logger.Error(err, "failed to patch human status")
+			reterr = kerrors.NewAggregate([]error{reterr, err})
+		}
+	}()
+
 	if !human.DeletionTimestamp.IsZero() {
 		if controllerutil.ContainsFinalizer(&human, finalizerName) {
-			if err := r.handleDelete(ctx, &human); err != nil {
-				logger.Error(err, "failed to delete human", "name", human.Name)
-				return reconcile.Result{RequeueAfter: 30 * time.Second}, err
-			}
-			controllerutil.RemoveFinalizer(&human, finalizerName)
-			if err := r.Update(ctx, &human); err != nil {
-				return reconcile.Result{}, err
-			}
+			return r.reconcileHumanDelete(ctx, s)
 		}
 		return reconcile.Result{}, nil
 	}
 
-	// Add finalizer
 	if !controllerutil.ContainsFinalizer(&human, finalizerName) {
 		controllerutil.AddFinalizer(&human, finalizerName)
 		if err := r.Update(ctx, &human); err != nil {
@@ -52,112 +77,24 @@ func (r *HumanReconciler) Reconcile(ctx context.Context, req reconcile.Request) 
 		}
 	}
 
-	switch human.Status.Phase {
-	case "":
-		return r.handleCreate(ctx, &human)
-	case "Failed":
-		return r.handleCreate(ctx, &human)
-	default:
-		return r.handleUpdate(ctx, &human)
-	}
+	return r.reconcileHumanNormal(ctx, s)
 }
 
-func (r *HumanReconciler) handleCreate(ctx context.Context, h *v1beta1.Human) (reconcile.Result, error) {
-	logger := log.FromContext(ctx)
-	logger.Info("creating human", "name", h.Name)
+// reconcileHumanNormal runs the declarative convergence loop. Phases in
+// order: infrastructure (Matrix account), rooms (membership), legacy
+// (humans-registry.json). Only infrastructure is fatal; the other two
+// phases log errors but never return them, so a transient Matrix hiccup
+// on room invite/kick does not block the next reconcile.
+func (r *HumanReconciler) reconcileHumanNormal(ctx context.Context, s *humanScope) (reconcile.Result, error) {
+	if err := r.reconcileHumanInfra(ctx, s); err != nil {
+		return reconcile.Result{RequeueAfter: reconcileInterval}, err
+	}
+	r.reconcileHumanRooms(ctx, s)
+	r.reconcileHumanLegacy(ctx, s)
 
-	h.Status.Phase = "Pending"
-	if err := r.Status().Update(ctx, h); err != nil {
-		return reconcile.Result{}, err
-	}
-
-	// Build matrix ID from name and domain
-	matrixID := h.Name
-	if h.Status.MatrixUserID != "" {
-		matrixID = h.Status.MatrixUserID
-	}
-
-	args := []string{
-		"--matrix-id", matrixID,
-		"--name", h.Spec.DisplayName,
-		"--level", fmt.Sprintf("%d", h.Spec.PermissionLevel),
-	}
-	if len(h.Spec.AccessibleTeams) > 0 {
-		args = append(args, "--teams", strings.Join(h.Spec.AccessibleTeams, ","))
-	}
-	if len(h.Spec.AccessibleWorkers) > 0 {
-		args = append(args, "--workers", strings.Join(h.Spec.AccessibleWorkers, ","))
-	}
-	if h.Spec.Email != "" {
-		args = append(args, "--email", h.Spec.Email)
-	}
-	if h.Spec.Note != "" {
-		args = append(args, "--note", h.Spec.Note)
-	}
-
-	result, err := r.Executor.Run(ctx,
-		"/opt/hiclaw/agent/skills/human-management/scripts/create-human.sh",
-		args...,
-	)
-	if err != nil {
-		h.Status.Phase = "Failed"
-		h.Status.Message = fmt.Sprintf("create-human.sh failed: %v", err)
-		r.Status().Update(ctx, h)
-		return reconcile.Result{RequeueAfter: time.Minute}, err
-	}
-
-	h.Status.Phase = "Active"
-	h.Status.Message = ""
-	if result.JSON != nil {
-		if mid, ok := result.JSON["matrix_user_id"].(string); ok {
-			h.Status.MatrixUserID = mid
-		}
-		if pw, ok := result.JSON["password"].(string); ok {
-			h.Status.InitialPassword = pw
-		}
-		if sent, ok := result.JSON["email_sent"].(bool); ok {
-			h.Status.EmailSent = sent
-		}
-		if rooms, ok := result.JSON["rooms_invited"].([]interface{}); ok {
-			for _, r := range rooms {
-				if s, ok := r.(string); ok {
-					h.Status.Rooms = append(h.Status.Rooms, s)
-				}
-			}
-		}
-	}
-	if err := r.Status().Update(ctx, h); err != nil {
-		return reconcile.Result{}, err
-	}
-
-	logger.Info("human created", "name", h.Name, "matrixUserID", h.Status.MatrixUserID)
-	return reconcile.Result{}, nil
+	return reconcile.Result{RequeueAfter: reconcileInterval}, nil
 }
 
-func (r *HumanReconciler) handleUpdate(ctx context.Context, h *v1beta1.Human) (reconcile.Result, error) {
-	// TODO: detect permission level / accessible teams changes and reconfigure
-	return reconcile.Result{}, nil
-}
-
-func (r *HumanReconciler) handleDelete(ctx context.Context, h *v1beta1.Human) error {
-	logger := log.FromContext(ctx)
-	logger.Info("deleting human", "name", h.Name)
-
-	// Remove from humans-registry
-	_, err := r.Executor.RunSimple(ctx,
-		"/opt/hiclaw/agent/skills/human-management/scripts/manage-humans-registry.sh",
-		"--action", "remove", "--name", h.Name,
-	)
-	if err != nil {
-		logger.Error(err, "failed to remove human from registry", "name", h.Name)
-	}
-
-	// TODO: remove from all groupAllowFrom and kick from rooms
-
-	return nil
-}
-
-// SetupWithManager registers the HumanReconciler with the controller manager.
 func (r *HumanReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&v1beta1.Human{}).

@@ -327,23 +327,66 @@ def export_matrix_messages(out_dir: Path, since_epoch: float, redact: bool,
 
 
 # ---------------------------------------------------------------------------
-# Agent sessions export (OpenClaw + CoPaw)
+# Agent sessions export (OpenClaw + CoPaw + Hermes)
 # ---------------------------------------------------------------------------
 
 def detect_runtime(container: str) -> tuple[str, str]:
-    std = ".openclaw/agents/main/sessions"
-    if docker_exec(container, f"test -d {std} && echo yes || echo no").strip() == "yes":
-        return "openclaw", std
+    """Probe known absolute session-dir locations across runtimes & container types.
+
+    Returns (runtime_name, absolute_sessions_dir). Empty tuple if none found.
+
+    Layout reference (verified against worker/scripts/worker-entrypoint.sh,
+    copaw/scripts/copaw-worker-entrypoint.sh, copaw/AGENTS.md and
+    tests/lib/agent-metrics.sh):
+
+      Manager (any runtime, HOME=/root/manager-workspace):
+        openclaw -> /root/manager-workspace/.openclaw/agents/main/sessions
+        hermes   -> /root/manager-workspace/.hermes/sessions
+        copaw    -> /root/manager-workspace/.copaw/workspaces/default/sessions
+
+      OpenClaw / Hermes Worker (HOME=/root/hiclaw-fs/agents/<name>):
+        openclaw -> /root/hiclaw-fs/agents/<name>/.openclaw/agents/main/sessions
+        hermes   -> /root/hiclaw-fs/agents/<name>/.hermes/sessions
+
+      CoPaw Worker (HOME=/root/.hiclaw-worker/<name>, also reachable via
+      /root/hiclaw-fs symlink that points to that same dir):
+        copaw    -> /root/.hiclaw-worker/<name>/.copaw/workspaces/default/sessions
+        copaw    -> /root/hiclaw-fs/.copaw/workspaces/default/sessions  (alt)
+    """
+    candidates: list[tuple[str, str]] = [
+        ("openclaw", "/root/manager-workspace/.openclaw/agents/main/sessions"),
+        ("hermes",   "/root/manager-workspace/.hermes/sessions"),
+        ("copaw",    "/root/manager-workspace/.copaw/workspaces/default/sessions"),
+    ]
 
     worker_name = docker_exec(container, "echo $HICLAW_WORKER_NAME").strip()
     if worker_name:
-        copaw_dir = f"{worker_name}/.copaw/sessions"
-        if docker_exec(container, f"test -d '{copaw_dir}' && echo yes || echo no").strip() == "yes":
-            return "copaw", copaw_dir
+        candidates.extend([
+            ("openclaw", f"/root/hiclaw-fs/agents/{worker_name}/.openclaw/agents/main/sessions"),
+            ("hermes",   f"/root/hiclaw-fs/agents/{worker_name}/.hermes/sessions"),
+            ("copaw",    f"/root/.hiclaw-worker/{worker_name}/.copaw/workspaces/default/sessions"),
+            ("copaw",    "/root/hiclaw-fs/.copaw/workspaces/default/sessions"),
+        ])
 
-    found = docker_exec(container, "find . -maxdepth 3 -path '*/.copaw/sessions' -type d 2>/dev/null | head -1").strip()
+    for runtime, path in candidates:
+        if docker_exec(container, f"test -d '{path}' && echo yes || echo no").strip() == "yes":
+            return runtime, path
+
+    # Last-resort: scan from / for any known session dir layout.
+    found = docker_exec(
+        container,
+        "find / -maxdepth 7 \\( "
+        "-path '*/.openclaw/agents/main/sessions' "
+        "-o -path '*/.hermes/sessions' "
+        "-o -path '*/.copaw/workspaces/default/sessions' "
+        "\\) -type d 2>/dev/null | head -1",
+    ).strip()
     if found:
-        return "copaw", found.lstrip("./")
+        if "/.openclaw/" in found:
+            return "openclaw", found
+        if "/.hermes/" in found:
+            return "hermes", found
+        return "copaw", found
 
     return "", ""
 
@@ -502,6 +545,85 @@ def export_copaw_sessions(container: str, sessions_dir: str, since_epoch: float,
     return total_sessions, total_events
 
 
+def export_hermes_sessions(container: str, sessions_dir: str, since_epoch: float,
+                           out_dir: Path, redact: bool) -> tuple[int, int]:
+    ls_output = docker_exec(container, f"ls '{sessions_dir}'/*.jsonl 2>/dev/null").strip()
+    if not ls_output:
+        return 0, 0
+
+    total_sessions = 0
+    total_events = 0
+
+    for session_path in [f.strip() for f in ls_output.splitlines() if f.strip()]:
+        raw = docker_exec(container, f"cat '{session_path}'")
+        if not raw.strip():
+            continue
+
+        output_lines = []
+        last_ts = 0.0
+        for line in raw.splitlines():
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                event = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+
+            event_ts = parse_ts(event.get("timestamp", ""))
+            if event_ts:
+                last_ts = max(last_ts, event_ts)
+
+            role = event.get("role", "")
+            if role != "session_meta" and event_ts < since_epoch and event_ts > 0:
+                continue
+
+            if redact:
+                event = redact_json_strings(event)
+            output_lines.append(json.dumps(event, ensure_ascii=False))
+
+        if not output_lines:
+            continue
+
+        if last_ts < since_epoch and last_ts > 0:
+            continue
+
+        filename = os.path.basename(session_path)
+        with open(out_dir / filename, "w", encoding="utf-8") as f:
+            f.write("\n".join(output_lines) + "\n")
+
+        event_count = len(output_lines) - 1 if output_lines and '"role": "session_meta"' in output_lines[0] else len(output_lines)
+        print(f"  {container}/{filename} (hermes): {event_count} events")
+        total_sessions += 1
+        total_events += max(event_count, 0)
+
+    hermes_home = str(Path(sessions_dir).parent)
+    state_db = f"{hermes_home}/state.db"
+    has_state_db = docker_exec(container, f"test -f '{state_db}' && echo yes || echo no").strip() == "yes"
+    if has_state_db:
+        raw = docker_exec(container, f"python3 - <<'PY'\nimport json, sqlite3\nconn = sqlite3.connect('{state_db}')\nconn.row_factory = sqlite3.Row\nrows = conn.execute('SELECT * FROM sessions ORDER BY started_at DESC LIMIT 200').fetchall()\nprint(json.dumps([dict(r) for r in rows], ensure_ascii=False, indent=2))\nPY")
+        if raw.strip():
+            try:
+                data = json.loads(raw)
+                if redact:
+                    data = redact_json_strings(data)
+                with open(out_dir / "sessions-db.json", "w", encoding="utf-8") as f:
+                    json.dump(data, f, ensure_ascii=False, indent=2)
+            except json.JSONDecodeError:
+                pass
+
+    logs_dir = f"{hermes_home}/logs"
+    has_logs_dir = docker_exec(container, f"test -d '{logs_dir}' && echo yes || echo no").strip() == "yes"
+    if has_logs_dir:
+        for log_name in ("agent.log", "errors.log", "gateway.log"):
+            raw = docker_exec(container, f"test -f '{logs_dir}/{log_name}' && cat '{logs_dir}/{log_name}' || true")
+            if raw.strip():
+                content = redact_pii(raw) if redact else raw
+                (out_dir / log_name).write_text(content, encoding="utf-8")
+
+    return total_sessions, total_events
+
+
 def export_agent_sessions(out_dir: Path, since_epoch: float, redact: bool,
                           container_filter: str | None) -> tuple[int, int]:
     """Export agent sessions from all containers. Returns (session_count, event_count)."""
@@ -528,13 +650,19 @@ def export_agent_sessions(out_dir: Path, since_epoch: float, redact: bool,
         if runtime == "openclaw":
             s, e = export_openclaw_sessions(container, sessions_dir, since_epoch,
                                             container_dir, redact)
+        elif runtime == "hermes":
+            s, e = export_hermes_sessions(container, sessions_dir, since_epoch,
+                                          container_dir, redact)
         else:
             s, e = export_copaw_sessions(container, sessions_dir, since_epoch,
                                          container_dir, redact)
 
         if s == 0:
-            container_dir.rmdir()
-            print(f"  {container} ({runtime}): no sessions in range, skipped")
+            if not any(container_dir.iterdir()):
+                container_dir.rmdir()
+                print(f"  {container} ({runtime}): no sessions in range, skipped")
+            else:
+                print(f"  {container} ({runtime}): exported auxiliary debug artifacts without session events")
         else:
             total_sessions += s
             total_events += e

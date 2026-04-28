@@ -2,6 +2,7 @@
   "gateway": {
     "mode": "local",
     "port": 18799,
+    "bind": "lan",
     "auth": {
       "token": "${MANAGER_GATEWAY_KEY}"
     },
@@ -9,16 +10,21 @@
       "token": "${MANAGER_GATEWAY_KEY}"
     },
     "controlUi": {
-      "dangerouslyDisableDeviceAuth": true
+      "dangerouslyDisableDeviceAuth": true,
+      "allowInsecureAuth": true,
+      "allowedOrigins": ["*"]
     }
   },
 
   "channels": {
     "matrix": {
       "enabled": true,
-      "homeserver": "${HICLAW_MATRIX_SERVER}",
+      "homeserver": "${HICLAW_MATRIX_URL}",
+      "userId": "@manager:${HICLAW_MATRIX_DOMAIN}",
       "accessToken": "${MANAGER_MATRIX_TOKEN}",
       "encryption": ${MATRIX_E2EE_ENABLED},
+      "network": { "dangerouslyAllowPrivateNetwork": true },
+      "autoJoin": "always",
       "dm": {
         "policy": "allowlist",
         "allowFrom": [
@@ -31,7 +37,9 @@
       ],
       "groups": {
         "*": { "allow": true, "requireMention": true }
-      }
+      },
+      "streaming": "partial",
+      "blockStreaming": true
     }
   },
 
@@ -39,7 +47,7 @@
     "mode": "merge",
     "providers": {
       "hiclaw-gateway": {
-        "baseUrl": "http://${HICLAW_AI_GATEWAY_DOMAIN}:8080/v1",
+        "baseUrl": "${HICLAW_AI_GATEWAY_URL}/v1",
         "apiKey": "${MANAGER_GATEWAY_KEY}",
         "api": "openai-completions",
         "models": [
@@ -91,9 +99,24 @@
       "subagents": {
         "maxConcurrent": 16
       },
+      "elevatedDefault": "full",
       "heartbeat": {
         "every": "1h",
         "prompt": "Read ~/HEARTBEAT.md and follow the checklist. Scan ~/hiclaw-fs/shared/tasks/*/meta.json to find tasks with status=assigned. For each, read assigned_to and room_id, then ask the Worker for progress in their Room (the human admin can see the inquiry). If a Worker confirms completion, update meta.json to status=completed with completed_at. Also scan ~/hiclaw-fs/shared/projects/*/meta.json for active projects — for each, read plan.md and check if any in-progress ([~]) tasks have stalled (no recent @mention from the assigned Worker); if stalled, @mention the Worker in the project room asking for a status update. Assess capacity vs pending tasks. Reply HEARTBEAT_OK if nothing needs attention."
+      }
+    }
+  },
+
+  "tools": {
+    "exec": {
+      "host": "gateway",
+      "security": "full",
+      "ask": "off"
+    },
+    "elevated": {
+      "enabled": true,
+      "allowFrom": {
+        "matrix": ["*"]
       }
     }
   },

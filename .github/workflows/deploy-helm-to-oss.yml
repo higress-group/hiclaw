@@ -1,0 +1,65 @@
+name: Deploy Helm Chart to OSS
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Release version (e.g. v1.2.3)'
+        required: true
+        type: string
+
+jobs:
+  deploy-helm-to-oss:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - id: calc-version
+        name: Resolve version
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            RAW_VERSION="${{ github.event.inputs.version }}"
+          else
+            RAW_VERSION="${{ github.ref_name }}"
+          fi
+          # Validate format: vX.Y.Z optionally followed by a pre-release suffix (e.g. -rc1, -beta.2)
+          if ! echo "${RAW_VERSION}" | grep -qE '^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$'; then
+            echo "ERROR: invalid version format: ${RAW_VERSION} (expected vX.Y.Z or vX.Y.Z-suffix)"
+            exit 1
+          fi
+          # Helm chart version must not have the leading 'v'
+          VERSION="${RAW_VERSION#v}"
+          echo "Version=${VERSION}"
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+
+      - name: Download Helm Charts Index
+        uses: go-choppy/ossutil-github-action@master
+        with:
+          ossArgs: 'cp oss://higress-ai/helm-charts/index.yaml ./artifact/'
+          accessKey: ${{ secrets.ACCESS_KEYID }}
+          accessSecret: ${{ secrets.ACCESS_KEYSECRET }}
+          endpoint: oss-cn-hongkong.aliyuncs.com
+
+      - name: Build Artifact
+        uses: stefanprodan/kube-tools@v1
+        with:
+          helmv3: 3.7.2
+          command: |
+            helmv3 repo add higress.io https://higress.io/helm-charts
+            helmv3 dependency build helm/hiclaw
+            helmv3 package helm/hiclaw --debug --app-version ${{steps.calc-version.outputs.version}} --version ${{steps.calc-version.outputs.version}} -d ./artifact
+            helmv3 repo index --url https://higress.io/helm-charts/ --merge ./artifact/index.yaml ./artifact
+            cp ./artifact/index.yaml ./artifact/cn-index.yaml
+            sed -i 's/higress\.io/higress\.cn/g' ./artifact/cn-index.yaml
+
+      - name: Upload to OSS
+        uses: go-choppy/ossutil-github-action@master
+        with:
+          ossArgs: 'cp -r -u ./artifact/ oss://higress-ai/helm-charts/'
+          accessKey: ${{ secrets.ACCESS_KEYID }}
+          accessSecret: ${{ secrets.ACCESS_KEYSECRET }}
+          endpoint: oss-cn-hongkong.aliyuncs.com

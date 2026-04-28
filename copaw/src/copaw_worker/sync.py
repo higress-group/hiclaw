@@ -48,40 +48,51 @@ def _deep_merge(base: dict, override: dict) -> dict:
 
 
 def _merge_openclaw_config(remote_text: str, local_text: str) -> str:
-    """Merge remote and local openclaw.json, preserving Worker additions.
+    """Merge remote and local openclaw.json (local-first, same as hermes_worker).
 
     Rules:
-      - plugins: deep merge entries (remote wins shared), union load.paths
-      - channels: deep merge (remote wins shared types, local-only preserved)
-      - channels.matrix.accessToken: local wins
-      - Everything else: remote as-is
+      - Base: local; tools, agents, mcp, and other keys not listed below stay local.
+      - models, gateway: replaced from remote when present.
+      - channels: deep merge with remote winning leaf conflicts; local-only keys kept.
+      - channels.matrix.accessToken: local wins (Worker re-login after restart).
+      - plugins.entries: deep merge with local winning on shared keys; load.paths union.
     """
     remote = json.loads(remote_text)
     local = json.loads(local_text)
-    merged = dict(remote)
+    merged: dict[str, Any] = dict(local)
 
-    # plugins: union arrays, deep merge entries — only touch fields that exist
-    r_plugins = remote.get("plugins", {})
-    l_plugins = local.get("plugins", {})
+    if remote.get("models") is not None:
+        merged["models"] = remote["models"]
+    if remote.get("gateway") is not None:
+        merged["gateway"] = remote["gateway"]
+
+    r_channels = remote.get("channels") or {}
+    l_channels = local.get("channels") or {}
+    if r_channels or l_channels:
+        merged["channels"] = _deep_merge(dict(l_channels), dict(r_channels))
+        l_token = local.get("channels", {}).get("matrix", {}).get("accessToken")
+        if l_token:
+            merged.setdefault("channels", {}).setdefault("matrix", {})[
+                "accessToken"
+            ] = l_token
+
+    r_plugins = remote.get("plugins")
+    l_plugins = local.get("plugins")
     if r_plugins or l_plugins:
-        m_plugins = _deep_merge(l_plugins, r_plugins)
+        r_plugins = dict(r_plugins or {})
+        l_plugins = dict(l_plugins or {})
+        out_plugins: dict[str, Any] = dict(l_plugins)
+        r_entries = r_plugins.get("entries") or {}
+        l_entries = l_plugins.get("entries") or {}
+        if r_entries or l_entries:
+            out_plugins["entries"] = _deep_merge(dict(r_entries), dict(l_entries))
         r_paths = r_plugins.get("load", {}).get("paths")
         l_paths = l_plugins.get("load", {}).get("paths")
         if r_paths is not None or l_paths is not None:
-            m_plugins.setdefault("load", {})["paths"] = sorted(
-                set((r_paths or []) + (l_paths or []))
-            )
-        merged["plugins"] = m_plugins
-
-    # channels: deep merge, remote wins shared, local-only preserved
-    r_channels = remote.get("channels", {})
-    l_channels = local.get("channels", {})
-    if r_channels or l_channels:
-        merged["channels"] = _deep_merge(l_channels, r_channels)
-        # accessToken: local wins (Worker re-login)
-        l_token = local.get("channels", {}).get("matrix", {}).get("accessToken")
-        if l_token:
-            merged.setdefault("channels", {}).setdefault("matrix", {})["accessToken"] = l_token
+            out_load = dict(l_plugins.get("load") or {})
+            out_load["paths"] = sorted(set((r_paths or []) + (l_paths or [])))
+            out_plugins["load"] = out_load
+        merged["plugins"] = out_plugins
 
     return json.dumps(merged, indent=2)
 
@@ -123,10 +134,7 @@ class FileSync:
         self.local_dir.mkdir(parents=True, exist_ok=True)
         self._prefix = f"agents/{worker_name}"
         self._alias_set = False
-        self._cloud_mode = bool(
-            os.environ.get("ALIBABA_CLOUD_OIDC_TOKEN_FILE")
-            and Path(os.environ.get("ALIBABA_CLOUD_OIDC_TOKEN_FILE", "")).is_file()
-        )
+        self._cloud_mode = os.environ.get("HICLAW_RUNTIME") == "aliyun"
 
     # ------------------------------------------------------------------
     # mc alias management
@@ -527,14 +535,14 @@ def push_local(sync: FileSync, since: float = 0) -> list[str]:
         return pushed
 
     # ── Inner → Outer sync ──────────────────────────────────────────────
-    # CoPaw Agent reads/writes .copaw/AGENTS.md and .copaw/SOUL.md at
+    # CoPaw Agent reads/writes workspaces/default/AGENTS.md and SOUL.md at
     # runtime.  These are "inner" copies derived from the "outer" files at
     # the sync root.  If the Agent modifies them, propagate changes back to
     # the outer layer so the normal push cycle uploads them to MinIO.
-    _INNER_OUTER_FILES = ("AGENTS.md", "SOUL.md")
-    copaw_dir = local_dir / ".copaw"
+    _INNER_OUTER_FILES = ("AGENTS.md", "SOUL.md", "HEARTBEAT.md")
+    copaw_ws_dir = local_dir / ".copaw" / "workspaces" / "default"
     for name in _INNER_OUTER_FILES:
-        inner = copaw_dir / name
+        inner = copaw_ws_dir / name
         outer = local_dir / name
         if not inner.exists():
             continue
@@ -549,7 +557,7 @@ def push_local(sync: FileSync, since: float = 0) -> list[str]:
             outer_content = outer.read_text(errors="replace") if outer.exists() else ""
             if inner_content != outer_content:
                 outer.write_text(inner_content)
-                logger.debug("Inner→Outer sync: .copaw/%s → %s", name, name)
+                logger.debug("Inner→Outer sync: .copaw/workspaces/default/%s → %s", name, name)
 
     sync._ensure_alias()
 
@@ -575,8 +583,9 @@ def push_local(sync: FileSync, since: float = 0) -> list[str]:
         # Skip transient runtime files by extension (e.g. .lock)
         if rel.suffix in _EXCLUDE_EXTENSIONS:
             continue
-        # Skip derived files inside .copaw/
-        if rel.parts[0] == ".copaw" and rel.name in _COPAW_DERIVED_FILES:
+        # Skip derived files directly inside .copaw/ (not in workspaces/)
+        # Files in .copaw/workspaces/default/ are Agent-managed and must be pushed.
+        if len(rel.parts) == 2 and rel.parts[0] == ".copaw" and rel.name in _COPAW_DERIVED_FILES:
             continue
 
         key = f"{sync._prefix}/{rel.as_posix()}"
@@ -600,8 +609,13 @@ async def push_loop(sync: FileSync, check_interval: int = 5) -> None:
 
     Tracks last push timestamp and only triggers push_local when files with
     newer mtime are detected, similar to openclaw's find-newermt approach.
+
+    The first iteration is a full scan (``since=0``) so that files written
+    by bridge/bootstrap BEFORE push_loop was started (e.g. agent.json,
+    AGENTS.md, SOUL.md) still get uploaded. Otherwise their mtime is always
+    ≤ ``last_push_time`` and they'd never be pushed.
     """
-    last_push_time: float = time.time()
+    last_push_time: float = 0.0
 
     while True:
         await asyncio.sleep(check_interval)
