@@ -87,14 +87,18 @@ func (r *HumanReconciler) reconcileHumanRooms(ctx context.Context, s *humanScope
 		// Check if this room belongs to a team that is still in accessibleTeams.
 		// If so, don't kick - the team just hasn't been provisioned yet.
 		if teamName := findTeamNameByRoomID(ctx, r.Client, h.Namespace, rid); teamName != "" {
+			found := false
 			for _, accessibleTeam := range h.Spec.AccessibleTeams {
 				if accessibleTeam == teamName {
 					// Team is still accessible, don't kick even though status.TeamRoomID might be empty
 					kept = append(kept, rid)
+					found = true
 					break
 				}
 			}
-			continue
+			if found {
+				continue
+			}
 		}
 
 		// Not in desired, and not in accessibleTeams - safe to kick
