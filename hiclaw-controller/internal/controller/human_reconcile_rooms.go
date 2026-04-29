@@ -3,8 +3,6 @@ package controller
 import (
 	"context"
 
-	v1beta1 "github.com/hiclaw/hiclaw-controller/api/v1beta1"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 )
 
@@ -80,26 +78,17 @@ func (r *HumanReconciler) reconcileHumanRooms(ctx context.Context, s *humanScope
 			continue
 		}
 
-		// Check if this room belongs to a worker that is still in AccessibleWorkers
-		// If so, don't kick - the worker might not be provisioned yet
-		found := false
-		for _, accessibleWorker := range h.Spec.AccessibleWorkers {
-			var worker v1beta1.Worker
-			if err := r.Get(ctx, client.ObjectKey{Name: accessibleWorker, Namespace: h.Namespace}, &worker); err == nil {
-				if worker.Status.RoomID == rid {
-					kept = append(kept, rid)
-					found = true
-					break
-				}
-			}
-			// Also check team workers
-			if teamRoomID := findTeamWorkerRoomID(ctx, r.Client, h.Namespace, accessibleWorker); teamRoomID == rid {
-				kept = append(kept, rid)
-				found = true
-				break
-			}
+		// Check if this room belongs to a worker still in AccessibleWorkers
+		// If API error, skip kick for safety. If worker exists but not provisioned yet,
+		// skip kick to avoid phantom removal.
+		inWorker, err := isRoomFromAccessibleWorker(ctx, r.Client, h.Namespace, rid, h.Spec.AccessibleWorkers)
+		if err != nil {
+			logger.Error(err, "transient error checking accessible workers; skipping kick for safety", "room", rid)
+			kept = append(kept, rid)
+			continue
 		}
-		if found {
+		if inWorker {
+			kept = append(kept, rid)
 			continue
 		}
 

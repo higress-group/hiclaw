@@ -57,23 +57,15 @@ func computeHumanPhase(h *v1beta1.Human, reconcileErr error) string {
 // Status.Rooms set.
 func buildDesiredHumanRooms(ctx context.Context, c client.Client, h *v1beta1.Human) map[string]struct{} {
 	desired := make(map[string]struct{})
-
-	// Handle workers (standalone + team)
 	for _, workerName := range h.Spec.AccessibleWorkers {
-		// Check standalone worker first
 		var worker v1beta1.Worker
-		if err := c.Get(ctx, client.ObjectKey{Name: workerName, Namespace: h.Namespace}, &worker); err == nil {
-			if worker.Status.RoomID != "" {
-				desired[worker.Status.RoomID] = struct{}{}
-			}
+		if err := c.Get(ctx, client.ObjectKey{Name: workerName, Namespace: h.Namespace}, &worker); err != nil {
+			continue
 		}
-		// Also check if this is a team worker
-		if roomID := findTeamWorkerRoomID(ctx, c, h.Namespace, workerName); roomID != "" {
-			desired[roomID] = struct{}{}
+		if worker.Status.RoomID != "" {
+			desired[worker.Status.RoomID] = struct{}{}
 		}
 	}
-
-	// Handle teams
 	for _, teamName := range h.Spec.AccessibleTeams {
 		var team v1beta1.Team
 		if err := c.Get(ctx, client.ObjectKey{Name: teamName, Namespace: h.Namespace}, &team); err != nil {
@@ -86,18 +78,26 @@ func buildDesiredHumanRooms(ctx context.Context, c client.Client, h *v1beta1.Hum
 	return desired
 }
 
-// findTeamWorkerRoomID looks up a team worker's room ID from Team.Status.Members
-func findTeamWorkerRoomID(ctx context.Context, c client.Client, ns, workerName string) string {
-	var teamList v1beta1.TeamList
-	if err := c.List(ctx, &teamList, client.InNamespace(ns)); err != nil {
-		return ""
-	}
-	for _, t := range teamList.Items {
-		for _, member := range t.Status.Members {
-			if member.Name == workerName {
-				return member.RoomID
-			}
+// isRoomFromAccessibleWorker checks if roomID belongs to a worker still in accessibleWorkers.
+// Returns (true, nil) if worker is in accessibleWorkers AND roomID matches.
+// Returns (true, nil) if worker is in accessibleWorkers AND RoomID is empty (worker not provisioned yet).
+// Returns (false, err) if API fails - caller should skip kick for safety.
+// Returns (false, nil) if roomID doesn't match any accessible worker (safe to kick).
+func isRoomFromAccessibleWorker(ctx context.Context, c client.Client, ns, roomID string, accessibleWorkers []string) (bool, error) {
+	for _, workerName := range accessibleWorkers {
+		var worker v1beta1.Worker
+		if err := c.Get(ctx, client.ObjectKey{Name: workerName, Namespace: ns}, &worker); err != nil {
+			return false, err
+		}
+		// Exact match - room belongs to this worker
+		if worker.Status.RoomID == roomID {
+			return true, nil
+		}
+		// Worker exists in accessibleWorkers but hasn't been provisioned yet
+		// Don't kick - room might be the worker's future room
+		if worker.Status.RoomID == "" {
+			return true, nil
 		}
 	}
-	return ""
+	return false, nil
 }
