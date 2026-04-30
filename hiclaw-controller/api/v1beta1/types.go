@@ -231,6 +231,7 @@ type TeamAdminSpec struct {
 
 type LeaderSpec struct {
 	Name              string                   `json:"name"`
+	WorkerName        string                   `json:"workerName,omitempty"`
 	Model             string                   `json:"model,omitempty"`
 	Identity          string                   `json:"identity,omitempty"`
 	Soul              string                   `json:"soul,omitempty"`
@@ -267,6 +268,7 @@ type TeamLeaderHeartbeatSpec struct {
 
 type TeamWorkerSpec struct {
 	Name          string              `json:"name"`
+	WorkerName    string              `json:"workerName,omitempty"`
 	Model         string              `json:"model,omitempty"`
 	Runtime       string              `json:"runtime,omitempty"`
 	Image         string              `json:"image,omitempty"`
@@ -296,6 +298,24 @@ type TeamWorkerSpec struct {
 	// system labels (see WorkerSpec.Labels godoc). omitempty preserves
 	// hashMemberSourceSpec stability for existing Teams.
 	Labels map[string]string `json:"labels,omitempty"`
+}
+
+// EffectiveWorkerName returns the runtime identity key for a team leader.
+// Empty workerName falls back to spec.name supplied by caller.
+func (s LeaderSpec) EffectiveWorkerName() string {
+	if s.WorkerName != "" {
+		return s.WorkerName
+	}
+	return s.Name
+}
+
+// EffectiveWorkerName returns the runtime identity key for a team worker.
+// Empty workerName falls back to spec.name supplied by caller.
+func (s TeamWorkerSpec) EffectiveWorkerName() string {
+	if s.WorkerName != "" {
+		return s.WorkerName
+	}
+	return s.Name
 }
 
 type TeamStatus struct {
@@ -340,6 +360,9 @@ type TeamMemberStatus struct {
 	// Team.Spec.Workers[i].Name). Uniquely identifies the entry within
 	// Team.Status.Members.
 	Name string `json:"name"`
+	// RuntimeName is the member's runtime identity key (Matrix localpart,
+	// OSS path key, room alias key). Empty falls back to Name.
+	RuntimeName string `json:"runtimeName,omitempty"`
 	// Role is "team_leader" or "worker". Mirrors MemberContext.Role and the
 	// synthesized WorkerResponse.Role exposed via /api/v1/workers/<name>.
 	Role string `json:"role,omitempty"`

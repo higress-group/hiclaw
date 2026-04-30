@@ -131,6 +131,9 @@ func (r *TeamReconciler) reconcileTeamNormal(ctx context.Context, t *v1beta1.Tea
 	for _, w := range t.Spec.Workers {
 		workerNames = append(workerNames, w.Name)
 	}
+	if err := validateTeamRuntimeNames(t); err != nil {
+		return r.failTeam(ctx, t, patchBase, err.Error())
+	}
 
 	// --- Step 1: Team-level infrastructure ---
 	rooms, err := r.Provisioner.ProvisionTeamRooms(ctx, service.TeamRoomRequest{
@@ -179,11 +182,19 @@ func (r *TeamReconciler) reconcileTeamNormal(ctx context.Context, t *v1beta1.Tea
 		if _, keep := desiredNames[ms.Name]; keep {
 			continue
 		}
+		runtimeName := ms.RuntimeName
+		if runtimeName == "" {
+			runtimeName = ms.Name
+		}
+		role := RoleTeamWorker
+		if ms.Role == RoleTeamLeader.String() || ms.Name == t.Spec.Leader.Name {
+			role = RoleTeamLeader
+		}
 		staleCtx := MemberContext{
 			Name:                ms.Name,
-			RuntimeName:         ms.Name,
+			RuntimeName:         runtimeName,
 			Namespace:           t.Namespace,
-			Role:                RoleTeamWorker,
+			Role:                role,
 			TeamName:            t.Name,
 			TeamLeaderName:      t.Spec.Leader.Name,
 			ExistingRoomID:      ms.RoomID,
@@ -192,7 +203,7 @@ func (r *TeamReconciler) reconcileTeamNormal(ctx context.Context, t *v1beta1.Tea
 		if err := ReconcileMemberDelete(ctx, deps, staleCtx); err != nil {
 			logger.Error(err, "failed to remove stale team member (non-fatal)", "name", ms.Name)
 		}
-		r.removeLegacyMember(ctx, ms.Name)
+		r.removeLegacyMember(ctx, runtimeName)
 	}
 	pruneMembers(&t.Status, desiredNames)
 
@@ -323,7 +334,7 @@ func (r *TeamReconciler) reconcileMember(ctx context.Context, deps MemberDeps, m
 	// Pre-populate ExistingMatrixUserID when we've already provisioned the
 	// member before, forcing the Refresh path instead of Provision.
 	if m.IsUpdate {
-		m.ExistingMatrixUserID = r.Provisioner.MatrixUserID(m.Name)
+		m.ExistingMatrixUserID = r.Provisioner.MatrixUserID(m.RuntimeName)
 	}
 
 	if _, err := ReconcileMemberInfra(ctx, deps, m, state); err != nil {
@@ -336,6 +347,7 @@ func (r *TeamReconciler) reconcileMember(ctx context.Context, deps MemberDeps, m
 	if state.MatrixUserID != "" {
 		ms.MatrixUserID = state.MatrixUserID
 	}
+	ms.RuntimeName = m.RuntimeName
 	if err := EnsureMemberServiceAccount(ctx, deps, m); err != nil {
 		return err
 	}
@@ -464,8 +476,12 @@ func (r *TeamReconciler) handleDelete(ctx context.Context, t *v1beta1.Team) erro
 			ExistingRoomID:      existingRoomID,
 			CurrentExposedPorts: exposed,
 		}
+		if ms := t.Status.MemberByName(name); ms != nil && ms.RuntimeName != "" {
+			mctx.RuntimeName = ms.RuntimeName
+		}
 		if role == RoleTeamLeader {
 			mctx.Spec = leaderWorkerSpec(t)
+			mctx.RuntimeName = t.Spec.Leader.EffectiveWorkerName()
 		} else {
 			// For "observed but no longer in Spec.Workers" entries (stale),
 			// the inner loop finds no match and mctx.Spec stays zero. The
@@ -483,7 +499,7 @@ func (r *TeamReconciler) handleDelete(ctx context.Context, t *v1beta1.Team) erro
 			logger.Error(err, "member cleanup failed (non-fatal)", "name", name)
 			errs = append(errs, err)
 		}
-		r.removeLegacyMember(ctx, name)
+		r.removeLegacyMember(ctx, mctx.RuntimeName)
 	}
 
 	if r.Legacy != nil && r.Legacy.Enabled() {
@@ -538,6 +554,10 @@ func (r *TeamReconciler) reconcileLegacyMember(ctx context.Context, t *v1beta1.T
 		return
 	}
 	logger := log.FromContext(ctx)
+	runtimeName := m.RuntimeName
+	if runtimeName == "" {
+		runtimeName = m.Name
+	}
 
 	roomID := ""
 	if ms != nil {
@@ -545,8 +565,8 @@ func (r *TeamReconciler) reconcileLegacyMember(ctx context.Context, t *v1beta1.T
 	}
 
 	entry := service.WorkerRegistryEntry{
-		Name:         m.Name,
-		MatrixUserID: r.Legacy.MatrixUserID(m.Name),
+		Name:         runtimeName,
+		MatrixUserID: r.Legacy.MatrixUserID(runtimeName),
 		RoomID:       roomID,
 		Runtime:      m.Spec.Runtime,
 		Deployment:   "local",
@@ -556,19 +576,22 @@ func (r *TeamReconciler) reconcileLegacyMember(ctx context.Context, t *v1beta1.T
 		Image:        nilIfEmpty(m.Spec.Image),
 	}
 	if err := r.Legacy.UpdateWorkersRegistry(entry); err != nil {
-		logger.Error(err, "workers-registry update failed (non-fatal)", "name", m.Name)
+		logger.Error(err, "workers-registry update failed (non-fatal)", "name", m.Name, "runtimeName", runtimeName)
 	}
 }
 
 // removeLegacyMember deletes a team member from workers-registry.json. Used
 // by both the stale-member cleanup in reconcileTeamNormal and the full team
 // deletion in handleDelete. No-op when Legacy is disabled.
-func (r *TeamReconciler) removeLegacyMember(ctx context.Context, name string) {
+func (r *TeamReconciler) removeLegacyMember(ctx context.Context, runtimeName string) {
 	if r.Legacy == nil || !r.Legacy.Enabled() {
 		return
 	}
-	if err := r.Legacy.RemoveFromWorkersRegistry(name); err != nil {
-		log.FromContext(ctx).Error(err, "workers-registry remove failed (non-fatal)", "name", name)
+	if runtimeName == "" {
+		return
+	}
+	if err := r.Legacy.RemoveFromWorkersRegistry(runtimeName); err != nil {
+		log.FromContext(ctx).Error(err, "workers-registry remove failed (non-fatal)", "runtimeName", runtimeName)
 	}
 }
 
@@ -700,7 +723,7 @@ func buildDesiredMembers(t *v1beta1.Team, controllerName string) []MemberContext
 	}
 	members = append(members, MemberContext{
 		Name:              t.Spec.Leader.Name,
-		RuntimeName:       t.Spec.Leader.Name,
+		RuntimeName:       t.Spec.Leader.EffectiveWorkerName(),
 		Namespace:         t.Namespace,
 		Role:              RoleTeamLeader,
 		Spec:              leaderSpec,
@@ -720,7 +743,7 @@ func buildDesiredMembers(t *v1beta1.Team, controllerName string) []MemberContext
 		spec := teamWorkerSpecToWorkerSpec(t, w)
 		members = append(members, MemberContext{
 			Name:              w.Name,
-			RuntimeName:       w.Name,
+			RuntimeName:       w.EffectiveWorkerName(),
 			Namespace:         t.Namespace,
 			Role:              RoleTeamWorker,
 			Spec:              spec,
@@ -852,6 +875,7 @@ func leaderWorkerSpec(t *v1beta1.Team) v1beta1.WorkerSpec {
 	return v1beta1.WorkerSpec{
 		Model:         t.Spec.Leader.Model,
 		Runtime:       "copaw",
+		WorkerName:    t.Spec.Leader.WorkerName,
 		Identity:      t.Spec.Leader.Identity,
 		Soul:          t.Spec.Leader.Soul,
 		Agents:        t.Spec.Leader.Agents,
@@ -892,6 +916,7 @@ func teamWorkerSpecToWorkerSpec(t *v1beta1.Team, w v1beta1.TeamWorkerSpec) v1bet
 	return v1beta1.WorkerSpec{
 		Model:         w.Model,
 		Runtime:       w.Runtime,
+		WorkerName:    w.WorkerName,
 		Image:         w.Image,
 		Identity:      w.Identity,
 		Soul:          w.Soul,
@@ -905,6 +930,20 @@ func teamWorkerSpecToWorkerSpec(t *v1beta1.Team, w v1beta1.TeamWorkerSpec) v1bet
 		State:         w.State,
 		Env:           w.Env,
 	}
+}
+
+func validateTeamRuntimeNames(t *v1beta1.Team) error {
+	seen := map[string]string{}
+	leaderRuntime := t.Spec.Leader.EffectiveWorkerName()
+	seen[leaderRuntime] = "leader[" + t.Spec.Leader.Name + "]"
+	for _, w := range t.Spec.Workers {
+		runtimeName := w.EffectiveWorkerName()
+		if owner, ok := seen[runtimeName]; ok {
+			return fmt.Errorf("duplicate team runtime workerName %q between %s and worker[%s]", runtimeName, owner, w.Name)
+		}
+		seen[runtimeName] = "worker[" + w.Name + "]"
+	}
+	return nil
 }
 
 func teamAdminMatrixID(t *v1beta1.Team) string {
