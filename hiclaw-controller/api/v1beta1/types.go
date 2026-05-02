@@ -63,6 +63,12 @@ type WorkerSpec struct {
 	Expose        []ExposePort       `json:"expose,omitempty"`  // ports to expose via Higress gateway
 	ChannelPolicy *ChannelPolicySpec `json:"channelPolicy,omitempty"`
 
+	// ContainerManaged indicates whether the controller should manage
+	// container lifecycle for this worker. When false, container
+	// reconciliation is skipped entirely (for remote/pip workers).
+	// Default is true (controller manages container).
+	ContainerManaged *bool `json:"containerManaged,omitempty"`
+
 	// State is the desired lifecycle state of the worker.
 	// Valid values: "Running" (default), "Sleeping", "Stopped".
 	// The controller reconciles actual backend state toward this desired state.
@@ -83,6 +89,14 @@ type WorkerSpec struct {
 	// embed WorkerSpec-shaped hashes keep a stable spec hash when the
 	// field is absent.
 	Labels map[string]string `json:"labels,omitempty"`
+}
+
+// DesiredContainerMan returns the effective desired containerManaged, defaulting to true.
+func (s WorkerSpec) DesiredContainerMan() bool {
+	if s.ContainerManaged != nil {
+		return *s.ContainerManaged
+	}
+	return true
 }
 
 // DesiredState returns the effective desired state, defaulting to "Running".

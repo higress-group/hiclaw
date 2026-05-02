@@ -86,24 +86,31 @@ func (h *ResourceHandler) CreateWorker(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// containerManaged default is true (controller manages container).
+	containerManaged := true
+	if req.ContainerManaged != nil {
+		containerManaged = *req.ContainerManaged
+	}
+
 	worker := &v1beta1.Worker{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      req.Name,
 			Namespace: h.namespace,
 		},
 		Spec: v1beta1.WorkerSpec{
-			Model:         req.Model,
-			Runtime:       req.Runtime,
-			Image:         req.Image,
-			Identity:      req.Identity,
-			Soul:          req.Soul,
-			Agents:        req.Agents,
-			Skills:        req.Skills,
-			McpServers:    req.McpServers,
-			Package:       req.Package,
-			Expose:        req.Expose,
-			ChannelPolicy: req.ChannelPolicy,
-			State:         req.State,
+			Model:            req.Model,
+			Runtime:          req.Runtime,
+			Image:            req.Image,
+			Identity:         req.Identity,
+			Soul:             req.Soul,
+			Agents:           req.Agents,
+			Skills:           req.Skills,
+			McpServers:       req.McpServers,
+			Package:          req.Package,
+			Expose:           req.Expose,
+			ChannelPolicy:    req.ChannelPolicy,
+			ContainerManaged: &containerManaged,
+			State:            req.State,
 		},
 	}
 
@@ -278,6 +285,9 @@ func (h *ResourceHandler) UpdateWorker(w http.ResponseWriter, r *http.Request) {
 	}
 	if req.ChannelPolicy != nil {
 		worker.Spec.ChannelPolicy = req.ChannelPolicy
+	}
+	if req.ContainerManaged != nil {
+		worker.Spec.ContainerManaged = req.ContainerManaged
 	}
 	if req.State != nil {
 		worker.Spec.State = req.State
@@ -781,6 +791,9 @@ func workerToResponse(w *v1beta1.Worker) WorkerResponse {
 		MatrixUserID:   w.Status.MatrixUserID,
 		RoomID:         w.Status.RoomID,
 		Message:        w.Status.Message,
+	}
+	if w.Spec.ContainerManaged != nil {
+		resp.ContainerManaged = *w.Spec.ContainerManaged
 	}
 	if resp.Phase == "" {
 		resp.Phase = "Pending"
