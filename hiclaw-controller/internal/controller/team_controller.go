@@ -10,6 +10,7 @@ import (
 	"time"
 
 	v1beta1 "github.com/hiclaw/hiclaw-controller/api/v1beta1"
+	"github.com/hiclaw/hiclaw-controller/internal/agentconfig"
 	"github.com/hiclaw/hiclaw-controller/internal/auth"
 	"github.com/hiclaw/hiclaw-controller/internal/backend"
 	"github.com/hiclaw/hiclaw-controller/internal/executor"
@@ -680,6 +681,17 @@ func buildDesiredMembers(t *v1beta1.Team, controllerName string) []MemberContext
 
 	leaderSpec := leaderWorkerSpec(t)
 	leaderObserved := isObserved(t.Spec.Leader.Name)
+	var leaderHeartbeat *agentconfig.HeartbeatConfig
+	if t.Spec.Leader.Heartbeat != nil && t.Spec.Leader.Heartbeat.Enabled {
+		every := t.Spec.Leader.Heartbeat.Every
+		if every == "" {
+			every = "30m"
+		}
+		leaderHeartbeat = &agentconfig.HeartbeatConfig{
+			Enabled: true,
+			Every:   every,
+		}
+	}
 	members = append(members, MemberContext{
 		Name:              t.Spec.Leader.Name,
 		Namespace:         t.Namespace,
@@ -693,6 +705,7 @@ func buildDesiredMembers(t *v1beta1.Team, controllerName string) []MemberContext
 		TeamAdminMatrixID: teamAdminMatrixID(t),
 		PodLabels:         memberLabels(RoleTeamLeader, t.Spec.Leader.Labels),
 		Owner:             t,
+		Heartbeat:         leaderHeartbeat,
 	})
 
 	for _, w := range t.Spec.Workers {

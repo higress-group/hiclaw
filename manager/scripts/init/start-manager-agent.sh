@@ -624,7 +624,7 @@ log "Generating Manager openclaw.json..."
 export MANAGER_MATRIX_TOKEN="${MANAGER_TOKEN}"
 export MANAGER_GATEWAY_KEY="${HICLAW_MANAGER_GATEWAY_KEY}"
 # Resolve model parameters based on model name
-MODEL_NAME="${HICLAW_DEFAULT_MODEL:-qwen3.5-plus}"
+MODEL_NAME="${HICLAW_DEFAULT_MODEL:-qwen3.6-plus}"
 case "${MODEL_NAME}" in
     gpt-5.3-codex|gpt-5-mini|gpt-5-nano)
         export MODEL_CONTEXT_WINDOW=400000 MODEL_MAX_TOKENS=128000 ;;
@@ -634,7 +634,7 @@ case "${MODEL_NAME}" in
         export MODEL_CONTEXT_WINDOW=1000000 MODEL_MAX_TOKENS=64000 ;;
     claude-haiku-4-5)
         export MODEL_CONTEXT_WINDOW=200000 MODEL_MAX_TOKENS=64000 ;;
-    qwen3.5-plus)
+    qwen3.6-plus|qwen3.5-plus)
         export MODEL_CONTEXT_WINDOW=200000 MODEL_MAX_TOKENS=64000 ;;
     deepseek-chat|deepseek-reasoner|kimi-k2.5)
         export MODEL_CONTEXT_WINDOW=256000 MODEL_MAX_TOKENS=128000 ;;
@@ -660,7 +660,7 @@ log "Matrix E2EE: ${MATRIX_E2EE_ENABLED}"
 
 # Resolve input modalities: only vision-capable models get "image"
 case "${MODEL_NAME}" in
-    gpt-5.4|gpt-5.3-codex|gpt-5-mini|gpt-5-nano|claude-opus-4-6|claude-sonnet-4-6|claude-haiku-4-5|qwen3.5-plus|kimi-k2.5)
+    gpt-5.4|gpt-5.3-codex|gpt-5-mini|gpt-5-nano|claude-opus-4-6|claude-sonnet-4-6|claude-haiku-4-5|qwen3.6-plus|qwen3.5-plus|kimi-k2.5)
         export MODEL_INPUT='["text", "image"]' ;;
     *)
         export MODEL_INPUT='["text"]' ;;
@@ -714,22 +714,25 @@ if [ -f /root/manager-workspace/openclaw.json ]; then
         | .channels.matrix.encryption = $e2ee
         | .channels.matrix.network = ((.channels.matrix.network // {}) + {"dangerouslyAllowPrivateNetwork": true})
         | .channels.matrix.autoJoin = "always"
+        # OpenClaw YOLO defaults: host exec without approval prompts (see openclaw docs tools/exec-approvals)
+        | .tools = (.tools // {})
+        | .tools.exec = ((.tools.exec // {}) + {"host":"gateway","security":"full","ask":"off"})
+        | .tools.elevated = (.tools.elevated // {})
+        | .tools.elevated.enabled = true
+        | .tools.elevated.allowFrom |= ((. // {}) | .matrix = ["*"])
+        | .agents.defaults.elevatedDefault = "full"
         # Ensure memorySearch config exists (embedding model for memory) — skip if embedding model is empty
         | if $emb_model != "" then .agents.defaults.memorySearch //= {"provider":"openai","model":$emb_model,"remote":{"baseUrl":("http://" + $aigw_domain + ":8080/v1"),"apiKey":$key}} else . end
        ' \
        /root/manager-workspace/openclaw.json > /tmp/openclaw.json.tmp && \
         mv /tmp/openclaw.json.tmp /root/manager-workspace/openclaw.json
-    # Anti-tampering bypass: openclaw's config-observe-recovery clobbers the file
-    # back to .bak whenever it sees "missing-meta-vs-last-good", which strips
-    # external edits like channels.matrix.network.dangerouslyAllowPrivateNetwork.
-    # Stamp meta and mirror to .bak so our edits survive.
-    _oc_ver=$(openclaw --version 2>/dev/null | head -1 | awk '{print $NF}')
-    [ -z "${_oc_ver}" ] && _oc_ver="hiclaw-bootstrap"
-    jq --arg ver "${_oc_ver}" --arg ts "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
-       '.meta = ((.meta // {}) + {lastTouchedVersion: $ver, lastTouchedAt: $ts})' \
-       /root/manager-workspace/openclaw.json > /tmp/openclaw.meta.json && \
-        mv /tmp/openclaw.meta.json /root/manager-workspace/openclaw.json
-    cp -f /root/manager-workspace/openclaw.json /root/manager-workspace/openclaw.json.bak
+    # Disable openclaw's observe-recovery mechanism which compares config against
+    # a lastKnownGood baseline in config-health.json. When meta is missing from the
+    # current file but present in the baseline, observe-recovery restores from .bak,
+    # undoing user customizations (plugins, channels, etc).
+    # Clearing config-health.json removes the baseline so observe-recovery won't
+    # interfere, while preserving .bak as a backup.
+    rm -f /root/manager-workspace/.openclaw/logs/config-health.json
     # Verify the token was written correctly
     _written_token=$(jq -r '.channels.matrix.accessToken' /root/manager-workspace/openclaw.json 2>/dev/null)
     if [ -z "${_written_token}" ] || [ "${_written_token}" = "null" ]; then
@@ -944,6 +947,12 @@ if [ -f "${REGISTRY_FILE}" ]; then
                     | .agents.defaults.models = ((.agents.defaults.models // {}) + $aliases)
                     | .channels.matrix.encryption = $e2ee
                     | .channels.matrix.autoJoin = "always"
+                    | .tools = (.tools // {})
+                    | .tools.exec = ((.tools.exec // {}) + {"host":"gateway","security":"full","ask":"off"})
+                    | .tools.elevated = (.tools.elevated // {})
+                    | .tools.elevated.enabled = true
+                    | .tools.elevated.allowFrom |= ((. // {}) | .matrix = ["*"])
+                    | .agents.defaults.elevatedDefault = "full"
                 ' "${_tmp_in}" > "${_tmp_out}" 2>/dev/null
                 if ! diff -q "${_tmp_in}" "${_tmp_out}" > /dev/null 2>&1; then
                     if mc cp "${_tmp_out}" "${_minio_path}" 2>/dev/null; then
@@ -1024,7 +1033,7 @@ if container_api_available; then
                         --arg controller_url "${HICLAW_CONTROLLER_URL:-}" \
                         '{
                             "HICLAW_WORKER_NAME": $name,
-                            "HICLAW_FS_ENDPOINT": ("http://" + ($fs_domain | split(":")[0]) + ":8080"),
+                            "HICLAW_FS_ENDPOINT": ("http://" + ($fs_domain | split(":")[0]) + ":9000"),
                             "HICLAW_FS_ACCESS_KEY": $fak,
                             "HICLAW_FS_SECRET_KEY": $fsk
                         }

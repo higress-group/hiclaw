@@ -242,7 +242,7 @@ _setup_manager_identity() {
                     -X POST "${_gw_url}/v1/chat/completions" \
                     -H "Authorization: Bearer ${_mgr_key}" \
                     -H "Content-Type: application/json" \
-                    -d '{"model":"'"${HICLAW_DEFAULT_MODEL:-qwen3.5-plus}"'","messages":[{"role":"user","content":"hi"}],"max_tokens":1}' 2>/dev/null || echo -e "\n000")
+                    -d '{"model":"'"${HICLAW_DEFAULT_MODEL:-qwen3.6-plus}"'","messages":[{"role":"user","content":"hi"}],"max_tokens":1}' 2>/dev/null || echo -e "\n000")
                 _gw_code=$(echo "${_gw_resp}" | tail -1)
                 if [ "${_gw_code}" = "200" ]; then
                     _gw_ready=true

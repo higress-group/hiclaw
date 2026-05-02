@@ -17,7 +17,7 @@ func NewGenerator(cfg Config) *Generator {
 		cfg.AdminUser = "admin"
 	}
 	if cfg.DefaultModel == "" {
-		cfg.DefaultModel = "qwen3.5-plus"
+		cfg.DefaultModel = "qwen3.6-plus"
 	}
 	return &Generator{config: cfg}
 }
@@ -157,8 +157,27 @@ func (g *Generator) GenerateOpenClawConfig(req WorkerConfigRequest) ([]byte, err
 			},
 			"entries": map[string]interface{}{
 				"matrix": map[string]interface{}{"enabled": true},
+				"memory-core": map[string]interface{}{
+					"enabled": true,
+					"config": map[string]interface{}{
+						"dreaming": map[string]interface{}{
+							"enabled": true,
+						},
+					},
+				},
 			},
 		},
+	}
+
+	// Add heartbeat config for team leaders
+	if req.Heartbeat != nil && req.Heartbeat.Enabled {
+		agents := config["agents"].(map[string]interface{})
+		defaults := agents["defaults"].(map[string]interface{})
+		hb := map[string]interface{}{"enabled": true}
+		if req.Heartbeat.Every != "" {
+			hb["every"] = req.Heartbeat.Every
+		}
+		defaults["heartbeat"] = hb
 	}
 
 	// Add embedding model for memory search if configured
@@ -213,6 +232,9 @@ func (g *Generator) buildMatrixChannelConfig(req WorkerConfigRequest, serverURL,
 		"groups": map[string]interface{}{
 			"*": map[string]interface{}{"allow": true, "requireMention": true},
 		},
+		// Matrix plugin: editable preview while the LLM streams; one message per assistant block.
+		"streaming":      "partial",
+		"blockStreaming": true,
 		// openclaw 2026.4.x onwards forwards the SSRF policy to the matrix-js-sdk
 		// fetch path. Without this opt-in, /sync to private hosts (the embedded
 		// `matrix-local.hiclaw.io` alias resolves to 127.0.0.1, k8s service DNS
@@ -362,6 +384,7 @@ func defaultModelSpec(modelName string) ModelSpec {
 		"claude-opus-4-6":   {1000000, 128000, true, true},
 		"claude-sonnet-4-6": {1000000, 64000, true, true},
 		"claude-haiku-4-5":  {200000, 64000, true, true},
+		"qwen3.6-plus":      {200000, 64000, true, true},
 		"qwen3.5-plus":      {200000, 64000, true, true},
 		"deepseek-chat":     {256000, 128000, false, true},
 		"deepseek-reasoner": {256000, 128000, false, true},
@@ -427,7 +450,7 @@ func (g *Generator) allModelSpecs(selectedModel string) []ModelSpec {
 	allModels := []string{
 		"gpt-5.4", "gpt-5.3-codex", "gpt-5-mini", "gpt-5-nano",
 		"claude-opus-4-6", "claude-sonnet-4-6", "claude-haiku-4-5",
-		"qwen3.5-plus",
+		"qwen3.6-plus", "qwen3.5-plus",
 		"deepseek-chat", "deepseek-reasoner",
 		"kimi-k2.5", "glm-5",
 		"MiniMax-M2.7", "MiniMax-M2.7-highspeed", "MiniMax-M2.5",
@@ -451,7 +474,7 @@ func (g *Generator) allModelAliases(selectedModel string) map[string]interface{}
 	allModels := []string{
 		"gpt-5.4", "gpt-5.3-codex", "gpt-5-mini", "gpt-5-nano",
 		"claude-opus-4-6", "claude-sonnet-4-6", "claude-haiku-4-5",
-		"qwen3.5-plus",
+		"qwen3.6-plus", "qwen3.5-plus",
 		"deepseek-chat", "deepseek-reasoner",
 		"kimi-k2.5", "glm-5",
 		"MiniMax-M2.7", "MiniMax-M2.7-highspeed", "MiniMax-M2.5",

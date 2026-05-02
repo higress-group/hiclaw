@@ -30,7 +30,9 @@
       ],
       "groups": {
         "*": { "allow": true, "requireMention": true }
-      }
+      },
+      "streaming": "partial",
+      "blockStreaming": true
     }
   },
 
@@ -89,6 +91,21 @@
       "maxConcurrent": 4,
       "subagents": {
         "maxConcurrent": 8
+      },
+      "elevatedDefault": "full"
+    }
+  },
+
+  "tools": {
+    "exec": {
+      "host": "gateway",
+      "security": "full",
+      "ask": "off"
+    },
+    "elevated": {
+      "enabled": true,
+      "allowFrom": {
+        "matrix": ["*"]
       }
     }
   },
@@ -105,7 +122,15 @@
       "paths": ["/opt/openclaw/extensions/matrix"]
     },
     "entries": {
-      "matrix": { "enabled": true }
+      "matrix": { "enabled": true },
+      "memory-core": {
+        "enabled": true,
+        "config": {
+          "dreaming": {
+            "enabled": true
+          }
+        }
+      }
     }
   }
 }

@@ -262,7 +262,7 @@ func LoadConfig() *Config {
 		K8sWorkerMemory: envOrDefault("HICLAW_K8S_WORKER_MEMORY", "2Gi"),
 
 		ManagerEnabled:          envOrDefault("HICLAW_MANAGER_ENABLED", "true") == "true",
-		ManagerModel:            firstNonEmpty(os.Getenv("HICLAW_MANAGER_MODEL"), envOrDefault("HICLAW_DEFAULT_MODEL", "qwen3.5-plus")),
+		ManagerModel:            firstNonEmpty(os.Getenv("HICLAW_MANAGER_MODEL"), envOrDefault("HICLAW_DEFAULT_MODEL", "qwen3.6-plus")),
 		ManagerRuntime:          envOrDefault("HICLAW_MANAGER_RUNTIME", "openclaw"),
 		ManagerImage:            os.Getenv("HICLAW_MANAGER_IMAGE"),
 		DefaultWorkerRuntime:    os.Getenv("HICLAW_DEFAULT_WORKER_RUNTIME"),
@@ -289,7 +289,7 @@ func LoadConfig() *Config {
 
 		OSSStoragePrefix: envOrDefault("HICLAW_STORAGE_PREFIX", "hiclaw/hiclaw-storage"),
 
-		DefaultModel:       envOrDefault("HICLAW_DEFAULT_MODEL", "qwen3.5-plus"),
+		DefaultModel:       envOrDefault("HICLAW_DEFAULT_MODEL", "qwen3.6-plus"),
 		EmbeddingModel:     os.Getenv("HICLAW_EMBEDDING_MODEL"),
 		Runtime:            envOrDefault("HICLAW_RUNTIME", "docker"),
 		ModelContextWindow: envOrDefaultInt("HICLAW_MODEL_CONTEXT_WINDOW", 0),
@@ -342,6 +342,9 @@ func LoadConfig() *Config {
 			cfg.WorkerEnv.FSEndpoint = replaceHost(cfg.WorkerEnv.FSEndpoint, ctrlHost)
 		}
 	}
+	// S3/MinIO API is never on the Higress HTTP gateway port (8080). Misconfigured
+	// HICLAW_FS_DOMAIN:8080 URLs are rewritten to the MinIO object port.
+	cfg.WorkerEnv.FSEndpoint = normalizeMinIOS3Endpoint(cfg.WorkerEnv.FSEndpoint)
 
 	if specJSON := os.Getenv("HICLAW_MANAGER_SPEC"); specJSON != "" {
 		if err := applyManagerSpec(cfg, specJSON); err != nil {
@@ -540,6 +543,25 @@ func replaceHost(rawURL, newHost string) string {
 	return u.String()
 }
 
+// normalizeMinIOS3Endpoint rewrites a common misconfiguration: the S3/MinIO API
+// is served on the object store port (9000 in HiClaw), not the Higress HTTP
+// gateway (8080). A URL like http://fs-local.hiclaw.io:8080 breaks mc silently.
+func normalizeMinIOS3Endpoint(raw string) string {
+	if raw == "" {
+		return raw
+	}
+	u, err := url.Parse(raw)
+	if err != nil || u.Port() != "8080" {
+		return raw
+	}
+	hostname := u.Hostname()
+	if hostname == "" {
+		return raw
+	}
+	u.Host = hostname + ":9000"
+	return u.String()
+}
+
 func (c *Config) MatrixConfig() matrix.Config {
 	return matrix.Config{
 		ServerURL:         c.MatrixServerURL,
@@ -563,10 +585,11 @@ func (c *Config) GatewayConfig() gateway.Config {
 func (c *Config) OSSConfig() oss.Config {
 	accessKey := firstNonEmpty(os.Getenv("HICLAW_FS_ACCESS_KEY"), os.Getenv("HICLAW_MINIO_USER"))
 	secretKey := firstNonEmpty(os.Getenv("HICLAW_FS_SECRET_KEY"), os.Getenv("HICLAW_MINIO_PASSWORD"))
+	endpoint := firstNonEmpty(os.Getenv("HICLAW_FS_ENDPOINT"), c.WorkerEnv.FSEndpoint)
 	return oss.Config{
 		StoragePrefix: c.OSSStoragePrefix,
 		Bucket:        c.OSSBucket,
-		Endpoint:      firstNonEmpty(os.Getenv("HICLAW_FS_ENDPOINT"), c.WorkerEnv.FSEndpoint),
+		Endpoint:      normalizeMinIOS3Endpoint(endpoint),
 		AccessKey:     accessKey,
 		SecretKey:     secretKey,
 	}

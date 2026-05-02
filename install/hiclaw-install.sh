@@ -13,8 +13,9 @@
 #
 # Environment variables (for automation):
 #   HICLAW_NON_INTERACTIVE    Skip all prompts, use defaults  (default: 0)
-#   HICLAW_LLM_PROVIDER      LLM provider       (default: alibaba-cloud)
-#   HICLAW_DEFAULT_MODEL      Default model       (default: qwen3.5-plus)
+#   HICLAW_LLM_PROVIDER      LLM provider       (default: openai-compat for zh non-interactive Token Plan; qwen for en)
+#   HICLAW_DEFAULT_MODEL      Default model       (default: qwen3.6-plus for zh Token Plan and en non-interactive)
+#   HICLAW_OPENAI_BASE_URL    OpenAI-compatible base URL (default for zh non-interactive: Alibaba Token Plan endpoint)
 #   HICLAW_LLM_API_KEY        LLM API key         (required)
 #   HICLAW_ADMIN_USER         Admin username       (default: admin)
 #   HICLAW_ADMIN_PASSWORD     Admin password       (auto-generated if not set, min 8 chars)
@@ -49,7 +50,7 @@
 set -e
 
 HICLAW_VERSION="${HICLAW_VERSION:-}"
-HICLAW_KNOWN_STABLE_VERSION="v1.0.9"   # fallback if GitHub API is unreachable
+HICLAW_KNOWN_STABLE_VERSION="v1.1.0"   # fallback if GitHub API is unreachable
 HICLAW_NON_INTERACTIVE="${HICLAW_NON_INTERACTIVE:-0}"
 HICLAW_MOUNT_SOCKET="${HICLAW_MOUNT_SOCKET:-1}"
 HICLAW_DOCKER_PROXY="${HICLAW_DOCKER_PROXY:-1}"
@@ -209,14 +210,14 @@ msg() {
         "install.mode.title.en") text="--- Onboarding Mode ---" ;;
         "install.mode.choose.zh") text="选择安装模式:" ;;
         "install.mode.choose.en") text="Choose your installation mode:" ;;
-        "install.mode.quickstart.zh") text="  1) 快速开始  - 使用阿里云百炼快速安装（推荐）" ;;
-        "install.mode.quickstart.en") text="  1) Quick Start  - Fast installation with Alibaba Cloud CodingPlan (recommended)" ;;
+        "install.mode.quickstart.zh") text="  1) 快速开始  - 使用阿里云通义 Token 套餐快速安装（推荐）" ;;
+        "install.mode.quickstart.en") text="  1) Quick Start  - Fast installation with Qwen Cloud (recommended)" ;;
         "install.mode.manual.zh") text="  2) 手动配置  - 选择 LLM 提供商并自定义选项" ;;
         "install.mode.manual.en") text="  2) Manual       - Choose LLM provider and customize options" ;;
         "install.mode.prompt.zh") text="请选择 [1/2]" ;;
         "install.mode.prompt.en") text="Enter choice [1/2]" ;;
-        "install.mode.quickstart_selected.zh") text="已选择快速开始模式 - 使用阿里云百炼" ;;
-        "install.mode.quickstart_selected.en") text="Quick Start mode selected - using Alibaba Cloud CodingPlan" ;;
+        "install.mode.quickstart_selected.zh") text="已选择快速开始模式 - 使用阿里云通义 Token 套餐" ;;
+        "install.mode.quickstart_selected.en") text="Quick Start mode selected - using Qwen Cloud" ;;
         "install.mode.manual_selected.zh") text="已选择手动配置模式 - 您将选择 LLM 提供商并自定义选项" ;;
         "install.mode.manual_selected.en") text="Manual mode selected - you will choose LLM provider and customize options" ;;
         "install.mode.invalid.zh") text="无效选择，默认使用快速开始模式" ;;
@@ -361,32 +362,48 @@ msg() {
         "llm.provider.qwen_default.en") text="  Provider: %s (default)" ;;
         "llm.model.default.zh") text="  模型: %s（默认）" ;;
         "llm.model.default.en") text="  Model: %s (default)" ;;
-        "llm.apikey_hint.zh") text="  💡 获取阿里云百炼 API Key:" ;;
-        "llm.apikey_hint.en") text="  💡 Get your Alibaba Cloud CodingPlan API Key from:" ;;
-        "llm.apikey_url.zh") text="     https://www.aliyun.com/product/bailian" ;;
-        "llm.apikey_url.en") text="     https://www.alibabacloud.com/en/campaign/ai-scene-coding" ;;
+        "llm.apikey_hint_bailian.zh") text="  💡 获取阿里云百炼（DashScope）API Key:" ;;
+        "llm.apikey_hint_bailian.en") text="  💡 Get your Alibaba Cloud Bailian (DashScope) API Key:" ;;
+        "llm.apikey_url_bailian.zh") text="     https://www.aliyun.com/product/bailian" ;;
+        "llm.apikey_url_bailian.en") text="     https://www.aliyun.com/product/bailian" ;;
+        "llm.apikey_hint_qwencloud.zh") text="  💡 从 Qwen Cloud（国际站）获取 DASHSCOPE_API_KEY:" ;;
+        "llm.apikey_hint_qwencloud.en") text="  💡 Get your DASHSCOPE_API_KEY for Qwen Cloud (international) from:" ;;
+        "llm.apikey_url_qwencloud.zh") text="     https://home.qwencloud.com/api-keys  （文档: https://docs.qwencloud.com/）" ;;
+        "llm.apikey_url_qwencloud.en") text="     https://home.qwencloud.com/api-keys  |  Docs: https://docs.qwencloud.com/" ;;
+        "llm.apikey_hint_tokenplan.zh") text="  💡 获取 DashScope API Key 或开通通义 Token 套餐，请参考:" ;;
+        "llm.apikey_hint_tokenplan.en") text="  💡 Get your DashScope or Token Plan API key (Alibaba Model Studio):" ;;
+        "llm.apikey_url_tokenplan.zh") text="     https://help.aliyun.com/zh/model-studio/token-plan-quickstart" ;;
+        "llm.apikey_url_tokenplan.en") text="     https://common-buy.aliyun.com/token-plan/  |  https://help.aliyun.com/zh/model-studio/token-plan-quickstart" ;;
+        "llm.apikey_hint_codingplan.zh") text="  💡 获取 DashScope API Key（Coding 套餐 / coding.dashscope 接口）:" ;;
+        "llm.apikey_hint_codingplan.en") text="  💡 Get your DashScope API key for Coding Plan (coding.dashscope endpoint):" ;;
+        "llm.apikey_url_codingplan.zh") text="     https://help.aliyun.com/zh/model-studio/get-api-key" ;;
+        "llm.apikey_url_codingplan.en") text="     https://help.aliyun.com/zh/model-studio/get-api-key" ;;
         "llm.apikey_prompt.zh") text="LLM API Key" ;;
         "llm.apikey_prompt.en") text="LLM API Key" ;;
         "llm.providers_title.zh") text="可用 LLM 提供商:" ;;
         "llm.providers_title.en") text="Available LLM Providers:" ;;
-        "llm.provider.alibaba.zh") text="  1) 阿里云百炼  - 推荐中国用户使用" ;;
-        "llm.provider.alibaba.en") text="  1) Alibaba Cloud CodingPlan  - Optimized for coding tasks (recommended)" ;;
+        "llm.provider.alibaba.zh") text="  1) 阿里云通义 Token 套餐  - 推荐中国用户使用" ;;
+        "llm.provider.alibaba.en") text="  1) Qwen Cloud  - International (OpenAI-compatible API, recommended)" ;;
         "llm.provider.openai_compat.zh") text="  2) OpenAI 兼容 API  - 自定义 Base URL（OpenAI、DeepSeek 等）" ;;
         "llm.provider.openai_compat.en") text="  2) OpenAI-compatible API  - Custom Base URL (OpenAI, DeepSeek, etc.)" ;;
         "llm.provider.select.zh") text="选择提供商 [1/2]" ;;
         "llm.provider.select.en") text="Select provider [1/2]" ;;
-        "llm.alibaba.models_title.zh") text="选择百炼模型系列:" ;;
-        "llm.alibaba.models_title.en") text="Select Bailian model series:" ;;
-        "llm.alibaba.model.codingplan.zh") text="  1) CodingPlan  - 专为编程任务优化（推荐）" ;;
-        "llm.alibaba.model.codingplan.en") text="  1) CodingPlan  - Optimized for coding tasks (recommended)" ;;
-        "llm.alibaba.model.qwen.zh") text="  2) 百炼通用接口" ;;
-        "llm.alibaba.model.qwen.en") text="  2) qwen general  - General purpose LLM" ;;
-        "llm.alibaba.model.select.zh") text="选择模型系列 [1/2]" ;;
-        "llm.alibaba.model.select.en") text="Select model series [1/2]" ;;
-        "llm.codingplan.models_title.zh") text="选择 CodingPlan 默认模型:" ;;
-        "llm.codingplan.models_title.en") text="Select CodingPlan default model:" ;;
-        "llm.codingplan.model.qwen35plus.zh") text="  1) qwen3.5-plus  - 千问 3.5（速度最快）" ;;
-        "llm.codingplan.model.qwen35plus.en") text="  1) qwen3.5-plus  - Qwen 3.5 (fastest)" ;;
+        "llm.alibaba.models_title.zh") text="选择阿里云模型接入方式:" ;;
+        "llm.alibaba.models_title.en") text="Select Alibaba Cloud model access:" ;;
+        "llm.alibaba.model.tokenplan.zh") text="  1) 阿里云通义 Token 套餐  - 兼容模式（推荐）" ;;
+        "llm.alibaba.model.tokenplan.en") text="  1) Alibaba Cloud Token Plan  - compatible-mode (recommended)" ;;
+        "llm.alibaba.model.bailian.zh") text="  2) 阿里云百炼  - DashScope 通用兼容接口" ;;
+        "llm.alibaba.model.bailian.en") text="  2) Alibaba Cloud Bailian  - DashScope compatible mode" ;;
+        "llm.alibaba.model.codingplan_legacy.zh") text="  3) 阿里云 Coding 套餐  - 旧版端点（兼容保留）" ;;
+        "llm.alibaba.model.codingplan_legacy.en") text="  3) Alibaba Cloud Coding Plan  - legacy endpoint (backward compatible)" ;;
+        "llm.alibaba.model.select.zh") text="选择接入方式 [1/2/3]" ;;
+        "llm.alibaba.model.select.en") text="Select access option [1/2/3]" ;;
+        "llm.alibaba.model.invalid.zh") text="无效选择: %s（请输入 1、2 或 3）" ;;
+        "llm.alibaba.model.invalid.en") text="Invalid choice: %s (please enter 1, 2, or 3)" ;;
+        "llm.codingplan.models_title.zh") text="选择通义 Token 套餐默认模型:" ;;
+        "llm.codingplan.models_title.en") text="Select Qwen Cloud default model:" ;;
+        "llm.codingplan.model.qwen36plus.zh") text="  1) qwen3.6-plus  - 千问 3.6（推荐）" ;;
+        "llm.codingplan.model.qwen36plus.en") text="  1) qwen3.6-plus  - Qwen 3.6 (recommended)" ;;
         "llm.codingplan.model.glm5.zh") text="  2) glm-5  - 智谱 GLM-5（编程推荐）" ;;
         "llm.codingplan.model.glm5.en") text="  2) glm-5  - Zhipu GLM-5 (recommended for coding)" ;;
         "llm.codingplan.model.kimi.zh") text="  3) kimi-k2.5  - Moonshot Kimi K2.5" ;;
@@ -395,16 +412,20 @@ msg() {
         "llm.codingplan.model.minimax.en") text="  4) MiniMax-M2.5  - MiniMax M2.5" ;;
         "llm.codingplan.model.select.zh") text="选择模型 [1/2/3/4]" ;;
         "llm.codingplan.model.select.en") text="Select model [1/2/3/4]" ;;
-        "llm.provider.selected_codingplan.zh") text="  提供商: 阿里云百炼 CodingPlan" ;;
-        "llm.provider.selected_codingplan.en") text="  Provider: Alibaba Cloud CodingPlan" ;;
+        "llm.provider.selected_tokenplan.zh") text="  提供商: 阿里云通义 Token 套餐（兼容模式）" ;;
+        "llm.provider.selected_tokenplan.en") text="  Provider: Alibaba Cloud Token Plan (compatible mode)" ;;
+        "llm.provider.selected_codingplan.zh") text="  提供商: 阿里云通义 Token 套餐（alibaba-cloud）" ;;
+        "llm.provider.selected_codingplan.en") text="  Provider: Qwen Cloud (international) (alibaba-cloud)" ;;
+        "llm.provider.selected_codingplan_legacy.zh") text="  提供商: 阿里云 Coding 套餐（coding.dashscope）" ;;
+        "llm.provider.selected_codingplan_legacy.en") text="  Provider: Alibaba Cloud Coding Plan (coding.dashscope)" ;;
         "llm.provider.selected_qwen.zh") text="  提供商: 阿里云百炼" ;;
         "llm.provider.selected_qwen.en") text="  Provider: Alibaba Cloud Bailian" ;;
         "llm.provider.selected_openai.zh") text="  提供商: %s（OpenAI 兼容）" ;;
         "llm.provider.selected_openai.en") text="  Provider: %s (OpenAI-compatible)" ;;
         "llm.provider.invalid.zh") text="无效选择: %s（请输入 1 或 2）" ;;
         "llm.provider.invalid.en") text="Invalid choice: %s (please enter 1 or 2)" ;;
-        "llm.qwen.model_prompt.zh") text="默认模型 ID [qwen3.5-plus]" ;;
-        "llm.qwen.model_prompt.en") text="Default Model ID [qwen3.5-plus]" ;;
+        "llm.qwen.model_prompt.zh") text="默认模型 ID [qwen3.6-plus]" ;;
+        "llm.qwen.model_prompt.en") text="Default Model ID [qwen3.6-plus]" ;;
         "llm.openai.base_url_prompt.zh") text="Base URL（例如 https://api.openai.com/v1）" ;;
         "llm.openai.base_url_prompt.en") text="Base URL (e.g., https://api.openai.com/v1)" ;;
         "llm.openai.model_prompt.zh") text="默认模型 ID [gpt-5.4]" ;;
@@ -656,8 +677,12 @@ msg() {
         "llm.openai.test.ok.en") text="✅ API connectivity test passed" ;;
         "llm.openai.test.fail.zh") text="⚠️  API 联通性测试失败（HTTP %s）。响应内容:\n%s\n请根据以上错误信息联系您的模型服务商解决。" ;;
         "llm.openai.test.fail.en") text="⚠️  API connectivity test failed (HTTP %s). Response body:\n%s\nPlease contact your model provider to resolve the issue." ;;
-        "llm.openai.test.fail.codingplan.zh") text="⚠️  提示: 请确认您的 API Key 已开通阿里云百炼 CodingPlan 服务。开通地址: https://www.aliyun.com/benefit/scene/codingplan" ;;
-        "llm.openai.test.fail.codingplan.en") text="⚠️  Hint: Please verify that your API Key has CodingPlan service enabled. Enable at: https://www.alibabacloud.com/en/campaign/ai-scene-coding" ;;
+        "llm.openai.test.fail.tokenplan.zh") text="⚠️  提示: 请确认 API Key 有效且已开通通义 Token 套餐。文档: https://help.aliyun.com/zh/model-studio/token-plan-quickstart" ;;
+        "llm.openai.test.fail.tokenplan.en") text="⚠️  Hint: Verify your Token Plan API key and compatible-mode access. Docs: https://help.aliyun.com/zh/model-studio/token-plan-quickstart" ;;
+        "llm.openai.test.fail.codingplan.zh") text="⚠️  提示: 请确认 API Key 有效且已开通通义 Token 套餐。文档: https://help.aliyun.com/zh/model-studio/token-plan-quickstart" ;;
+        "llm.openai.test.fail.codingplan.en") text="⚠️  Hint: Verify your DASHSCOPE_API_KEY for Qwen Cloud. API keys: https://home.qwencloud.com/api-keys  Docs: https://docs.qwencloud.com/" ;;
+        "llm.openai.test.fail.codingplan_legacy.zh") text="⚠️  提示: 请确认 API Key 有效且 Coding 套餐接口可用。文档: https://help.aliyun.com/zh/model-studio/get-api-key" ;;
+        "llm.openai.test.fail.codingplan_legacy.en") text="⚠️  Hint: Verify your DashScope API key and Coding Plan access. Docs: https://help.aliyun.com/zh/model-studio/get-api-key" ;;
         "llm.openai.test.no_curl.zh") text="⚠️  未找到 curl，跳过 API 联通性测试" ;;
         "llm.openai.test.no_curl.en") text="⚠️  curl not found, skipping API connectivity test" ;;
         "llm.openai.test.confirm.zh") text="是否仍要继续安装？[y/N/b] " ;;
@@ -1008,7 +1033,7 @@ resolve_embedded_image() {
 # ============================================================
 # Known models list — used to detect custom models during install
 # ============================================================
-KNOWN_MODELS="gpt-5.4 gpt-5.3-codex gpt-5-mini gpt-5-nano claude-opus-4-6 claude-sonnet-4-6 claude-haiku-4-5 qwen3.5-plus deepseek-chat deepseek-reasoner kimi-k2.5 glm-5 MiniMax-M2.7 MiniMax-M2.7-highspeed MiniMax-M2.5"
+KNOWN_MODELS="gpt-5.4 gpt-5.3-codex gpt-5-mini gpt-5-nano claude-opus-4-6 claude-sonnet-4-6 claude-haiku-4-5 qwen3.6-plus qwen3.5-plus deepseek-chat deepseek-reasoner kimi-k2.5 glm-5 MiniMax-M2.7 MiniMax-M2.7-highspeed MiniMax-M2.5"
 
 is_known_model() {
     local model="$1"
@@ -1111,6 +1136,42 @@ wait_matrix_ready() {
 
     echo ""
     error "$(msg install.wait_matrix.timeout "${timeout}" "${container}")"
+}
+
+# Read KEY=value from /data/hiclaw-secrets.env on a Docker volume (manager container not required).
+# Requires EMBEDDED_IMAGE (resolved earlier in install_manager). Uses ${DOCKER_CMD}.
+hiclaw_read_secret_from_data_volume() {
+    local _vol="$1" _key="$2"
+    if [ -z "${_vol}" ] || [ -z "${_key}" ] || [ -z "${EMBEDDED_IMAGE:-}" ]; then
+        echo ""
+        return 0
+    fi
+    ${DOCKER_CMD} run --rm --entrypoint sh \
+        -v "${_vol}:/data:ro" \
+        "${EMBEDDED_IMAGE}" -c "grep \"^${_key}=\" /data/hiclaw-secrets.env 2>/dev/null | cut -d= -f2- | head -1 | tr -d '\r'" 2>/dev/null
+}
+
+# Read KEY=value from /data/worker-creds/<worker>.env on a Docker volume.
+hiclaw_read_worker_creds_value_from_volume() {
+    local _vol="$1" _worker="$2" _key="$3"
+    if [ -z "${_vol}" ] || [ -z "${_worker}" ] || [ -z "${_key}" ] || [ -z "${EMBEDDED_IMAGE:-}" ]; then
+        echo ""
+        return 0
+    fi
+    ${DOCKER_CMD} run --rm --entrypoint sh \
+        -v "${_vol}:/data:ro" \
+        "${EMBEDDED_IMAGE}" -c "grep \"^${_key}=\" \"/data/worker-creds/${_worker}.env\" 2>/dev/null | cut -d= -f2- | head -1 | tr -d \"\\r\"" 2>/dev/null
+}
+
+# Read admin_dm_room_id from host workspace state.json (fallback when Matrix API is unavailable).
+hiclaw_read_admin_dm_room_from_workspace() {
+    local _ws="$1"
+    local _f="${_ws}/state.json"
+    if [ ! -f "${_f}" ] || ! command -v jq >/dev/null 2>&1; then
+        echo ""
+        return 0
+    fi
+    jq -r '.admin_dm_room_id // empty | select(. != "null")' "${_f}" 2>/dev/null
 }
 
 # Read secret input with masked echo (shows * per keystroke, supports backspace)
@@ -1668,12 +1729,23 @@ step_existing() {
 step_llm() {
     log "$(msg llm.title)"
     if [ "${HICLAW_NON_INTERACTIVE}" = "1" ]; then
-        HICLAW_LLM_PROVIDER="${HICLAW_LLM_PROVIDER:-qwen}"
-        HICLAW_DEFAULT_MODEL="${HICLAW_DEFAULT_MODEL:-qwen3.5-plus}"
-        log "$(msg llm.provider.qwen_default "${HICLAW_LLM_PROVIDER}")"
+        if [ "${HICLAW_LANGUAGE}" = "zh" ]; then
+            HICLAW_LLM_PROVIDER="${HICLAW_LLM_PROVIDER:-openai-compat}"
+            HICLAW_DEFAULT_MODEL="${HICLAW_DEFAULT_MODEL:-qwen3.6-plus}"
+            HICLAW_OPENAI_BASE_URL="${HICLAW_OPENAI_BASE_URL:-https://token-plan.cn-beijing.maas.aliyuncs.com/compatible-mode/v1}"
+            log "$(msg llm.provider.label "${HICLAW_LLM_PROVIDER}")"
+            log "$(msg llm.openai.base_url_label "${HICLAW_OPENAI_BASE_URL}")"
+        else
+            HICLAW_LLM_PROVIDER="${HICLAW_LLM_PROVIDER:-qwen}"
+            HICLAW_DEFAULT_MODEL="${HICLAW_DEFAULT_MODEL:-qwen3.6-plus}"
+            HICLAW_OPENAI_BASE_URL="${HICLAW_OPENAI_BASE_URL:-}"
+            log "$(msg llm.provider.qwen_default "${HICLAW_LLM_PROVIDER}")"
+        fi
         log "$(msg llm.model.default "${HICLAW_DEFAULT_MODEL}")"
         prompt HICLAW_LLM_API_KEY "$(msg llm.apikey_prompt)" "" "true"
         HICLAW_EMBEDDING_MODEL="${HICLAW_EMBEDDING_MODEL-text-embedding-v4}"
+        export HICLAW_LLM_PROVIDER HICLAW_DEFAULT_MODEL HICLAW_EMBEDDING_MODEL
+        [ -n "${HICLAW_OPENAI_BASE_URL+x}" ] && export HICLAW_OPENAI_BASE_URL
         return 0
     fi
     echo ""
@@ -1691,15 +1763,16 @@ step_llm() {
     fi
     if [ "${PROVIDER_CHOICE}" = "b" ]; then STEP_RESULT="back"; return 0; fi
     local ALIBABA_MODEL_CHOICE=""
+    local ALIBABA_ACCESS=""
     case "${PROVIDER_CHOICE}" in
         1|alibaba-cloud)
             if [ "${HICLAW_LANGUAGE}" = "en" ]; then
                 HICLAW_LLM_PROVIDER="openai-compat"
-                HICLAW_OPENAI_BASE_URL="https://coding-intl.dashscope.aliyuncs.com/v1"
-                ALIBABA_MODEL_CHOICE="codingplan"
+                HICLAW_OPENAI_BASE_URL="https://dashscope-intl.aliyuncs.com/compatible-mode/v1"
+                ALIBABA_ACCESS="tokenplan"
                 echo ""
                 echo "$(msg llm.codingplan.models_title)"
-                echo "$(msg llm.codingplan.model.qwen35plus)"
+                echo "$(msg llm.codingplan.model.qwen36plus)"
                 echo "$(msg llm.codingplan.model.glm5)"
                 echo "$(msg llm.codingplan.model.kimi)"
                 echo "$(msg llm.codingplan.model.minimax)"
@@ -1714,19 +1787,20 @@ step_llm() {
                 fi
                 if [ "${CODINGPLAN_MODEL_CHOICE}" = "b" ]; then STEP_RESULT="back"; return 0; fi
                 case "${CODINGPLAN_MODEL_CHOICE}" in
-                    1|qwen3.5-plus) HICLAW_DEFAULT_MODEL="qwen3.5-plus" ;;
+                    1|qwen3.6-plus) HICLAW_DEFAULT_MODEL="qwen3.6-plus" ;;
                     2|glm-5)        HICLAW_DEFAULT_MODEL="glm-5" ;;
                     3|kimi-k2.5)    HICLAW_DEFAULT_MODEL="kimi-k2.5" ;;
                     4|MiniMax-M2.5) HICLAW_DEFAULT_MODEL="MiniMax-M2.5" ;;
-                    *)              HICLAW_DEFAULT_MODEL="qwen3.5-plus" ;;
+                    *)              HICLAW_DEFAULT_MODEL="qwen3.6-plus" ;;
                 esac
                 log "$(msg llm.provider.selected_codingplan)"
                 log "$(msg llm.model.label "${HICLAW_DEFAULT_MODEL}")"
             else
                 echo ""
                 echo "$(msg llm.alibaba.models_title)"
-                echo "$(msg llm.alibaba.model.codingplan)"
-                echo "$(msg llm.alibaba.model.qwen)"
+                echo "$(msg llm.alibaba.model.tokenplan)"
+                echo "$(msg llm.alibaba.model.bailian)"
+                echo "$(msg llm.alibaba.model.codingplan_legacy)"
                 echo ""
                 if [ "${HICLAW_QUICKSTART}" = "1" ]; then
                     read -e -p "$(msg llm.alibaba.model.select) [1]: " ALIBABA_MODEL_CHOICE
@@ -1737,23 +1811,13 @@ step_llm() {
                 fi
                 if [ "${ALIBABA_MODEL_CHOICE}" = "b" ]; then STEP_RESULT="back"; return 0; fi
                 case "${ALIBABA_MODEL_CHOICE}" in
-                    2|qwen)
-                        HICLAW_LLM_PROVIDER="qwen"
-                        HICLAW_OPENAI_BASE_URL=""
-                        echo ""
-                        read -e -p "$(msg llm.qwen.model_prompt): " HICLAW_DEFAULT_MODEL
-                        if [ "${HICLAW_DEFAULT_MODEL}" = "b" ]; then STEP_RESULT="back"; return 0; fi
-                        HICLAW_DEFAULT_MODEL="${HICLAW_DEFAULT_MODEL:-qwen3.5-plus}"
-                        log "$(msg llm.provider.selected_qwen)"
-                        log "$(msg llm.model.label "${HICLAW_DEFAULT_MODEL}")"
-                        prompt_custom_model_params "${HICLAW_DEFAULT_MODEL}" || return 0
-                        ;;
-                    *)
+                    1|token-plan|tokenplan)
+                        ALIBABA_ACCESS="tokenplan"
                         HICLAW_LLM_PROVIDER="openai-compat"
-                        HICLAW_OPENAI_BASE_URL="https://coding.dashscope.aliyuncs.com/v1"
+                        HICLAW_OPENAI_BASE_URL="https://token-plan.cn-beijing.maas.aliyuncs.com/compatible-mode/v1"
                         echo ""
                         echo "$(msg llm.codingplan.models_title)"
-                        echo "$(msg llm.codingplan.model.qwen35plus)"
+                        echo "$(msg llm.codingplan.model.qwen36plus)"
                         echo "$(msg llm.codingplan.model.glm5)"
                         echo "$(msg llm.codingplan.model.kimi)"
                         echo "$(msg llm.codingplan.model.minimax)"
@@ -1768,26 +1832,67 @@ step_llm() {
                         fi
                         if [ "${CODINGPLAN_MODEL_CHOICE}" = "b" ]; then STEP_RESULT="back"; return 0; fi
                         case "${CODINGPLAN_MODEL_CHOICE}" in
-                            1|qwen3.5-plus) HICLAW_DEFAULT_MODEL="qwen3.5-plus" ;;
+                            1|qwen3.6-plus) HICLAW_DEFAULT_MODEL="qwen3.6-plus" ;;
                             2|glm-5)        HICLAW_DEFAULT_MODEL="glm-5" ;;
                             3|kimi-k2.5)    HICLAW_DEFAULT_MODEL="kimi-k2.5" ;;
                             4|MiniMax-M2.5) HICLAW_DEFAULT_MODEL="MiniMax-M2.5" ;;
-                            *)              HICLAW_DEFAULT_MODEL="qwen3.5-plus" ;;
+                            *)              HICLAW_DEFAULT_MODEL="qwen3.6-plus" ;;
                         esac
-                        log "$(msg llm.provider.selected_codingplan)"
+                        log "$(msg llm.provider.selected_tokenplan)"
                         log "$(msg llm.model.label "${HICLAW_DEFAULT_MODEL}")"
+                        ;;
+                    2|qwen|bailian)
+                        ALIBABA_ACCESS="bailian"
+                        HICLAW_LLM_PROVIDER="qwen"
+                        HICLAW_OPENAI_BASE_URL=""
+                        echo ""
+                        read -e -p "$(msg llm.qwen.model_prompt): " HICLAW_DEFAULT_MODEL
+                        if [ "${HICLAW_DEFAULT_MODEL}" = "b" ]; then STEP_RESULT="back"; return 0; fi
+                        HICLAW_DEFAULT_MODEL="${HICLAW_DEFAULT_MODEL:-qwen3.6-plus}"
+                        log "$(msg llm.provider.selected_qwen)"
+                        log "$(msg llm.model.label "${HICLAW_DEFAULT_MODEL}")"
+                        prompt_custom_model_params "${HICLAW_DEFAULT_MODEL}" || return 0
+                        ;;
+                    3|coding-plan|codingplan)
+                        ALIBABA_ACCESS="codingplan_legacy"
+                        HICLAW_LLM_PROVIDER="openai-compat"
+                        HICLAW_OPENAI_BASE_URL="https://coding.dashscope.aliyuncs.com/v1"
+                        echo ""
+                        read -e -p "$(msg llm.qwen.model_prompt): " HICLAW_DEFAULT_MODEL
+                        if [ "${HICLAW_DEFAULT_MODEL}" = "b" ]; then STEP_RESULT="back"; return 0; fi
+                        HICLAW_DEFAULT_MODEL="${HICLAW_DEFAULT_MODEL:-qwen3.6-plus}"
+                        log "$(msg llm.provider.selected_codingplan_legacy)"
+                        log "$(msg llm.model.label "${HICLAW_DEFAULT_MODEL}")"
+                        prompt_custom_model_params "${HICLAW_DEFAULT_MODEL}" || return 0
+                        ;;
+                    *)
+                        error "$(msg llm.alibaba.model.invalid "${ALIBABA_MODEL_CHOICE}")"
                         ;;
                 esac
             fi
-            log ""
-            log "$(msg llm.apikey_hint)"
-            log "$(msg llm.apikey_url)"
+            if [ "${ALIBABA_ACCESS}" = "bailian" ]; then
+                log "$(msg llm.apikey_hint_bailian)"
+                log "$(msg llm.apikey_url_bailian)"
+            elif [ "${HICLAW_LANGUAGE}" = "en" ]; then
+                log "$(msg llm.apikey_hint_qwencloud)"
+                log "$(msg llm.apikey_url_qwencloud)"
+            elif [ "${ALIBABA_ACCESS}" = "codingplan_legacy" ]; then
+                log "$(msg llm.apikey_hint_codingplan)"
+                log "$(msg llm.apikey_url_codingplan)"
+            else
+                log "$(msg llm.apikey_hint_tokenplan)"
+                log "$(msg llm.apikey_url_tokenplan)"
+            fi
             log ""
             prompt HICLAW_LLM_API_KEY "$(msg llm.apikey_prompt)" "" "true" || return 0
-            if [ "${ALIBABA_MODEL_CHOICE}" = "2" ] || [ "${ALIBABA_MODEL_CHOICE}" = "qwen" ]; then
+            if [ "${ALIBABA_ACCESS}" = "bailian" ]; then
                 test_llm_connectivity "https://dashscope.aliyuncs.com/compatible-mode/v1" "${HICLAW_LLM_API_KEY}" "${HICLAW_DEFAULT_MODEL}" || return 0
-            else
+            elif [ "${ALIBABA_ACCESS}" = "codingplan_legacy" ]; then
+                test_llm_connectivity "https://coding.dashscope.aliyuncs.com/v1" "${HICLAW_LLM_API_KEY}" "${HICLAW_DEFAULT_MODEL}" "$(msg llm.openai.test.fail.codingplan_legacy)" || return 0
+            elif [ "${HICLAW_LANGUAGE}" = "en" ]; then
                 test_llm_connectivity "${HICLAW_OPENAI_BASE_URL}" "${HICLAW_LLM_API_KEY}" "${HICLAW_DEFAULT_MODEL}" "$(msg llm.openai.test.fail.codingplan)" || return 0
+            else
+                test_llm_connectivity "${HICLAW_OPENAI_BASE_URL}" "${HICLAW_LLM_API_KEY}" "${HICLAW_DEFAULT_MODEL}" "$(msg llm.openai.test.fail.tokenplan)" || return 0
             fi
             ;;
         2|openai-compat)
@@ -2541,8 +2646,26 @@ EOF
         if [ "${_is_old_arch}" = "1" ]; then
         _creds_tmp=$(mktemp -d)
 
-        # Manager password (stored in container env as HICLAW_MANAGER_PASSWORD)
+        # docker exec for Matrix/minio paths only works while hiclaw-manager is running.
+        _mgr_creds_tempstart=0
+        if ${DOCKER_CMD} ps -a --format '{{.Names}}' 2>/dev/null | grep -q '^hiclaw-manager$'; then
+            if ! ${DOCKER_CMD} ps --format '{{.Names}}' 2>/dev/null | grep -q '^hiclaw-manager$'; then
+                log "hiclaw-manager is stopped; starting it temporarily to extract Matrix credentials for upgrade..."
+                ${DOCKER_CMD} start hiclaw-manager 2>/dev/null || true
+                wait_matrix_ready "hiclaw-manager"
+                _mgr_creds_tempstart=1
+            fi
+        fi
+
+        # Manager password (container Config.Env, then secrets file inside running manager, then data volume)
         _mgr_pw=$(${DOCKER_CMD} inspect hiclaw-manager --format '{{range .Config.Env}}{{println .}}{{end}}' 2>/dev/null | grep '^HICLAW_MANAGER_PASSWORD=' | cut -d= -f2-)
+        if [ -z "${_mgr_pw}" ] && ${DOCKER_CMD} ps --format '{{.Names}}' 2>/dev/null | grep -q '^hiclaw-manager$'; then
+            _mgr_pw=$(${DOCKER_CMD} exec hiclaw-manager bash -c 'source /data/hiclaw-secrets.env 2>/dev/null && echo "${HICLAW_MANAGER_PASSWORD}"' 2>/dev/null)
+        fi
+        if [ -z "${_mgr_pw}" ] && ${DOCKER_CMD} volume ls -q 2>/dev/null | grep -q "^${HICLAW_DATA_DIR}$"; then
+            _mgr_pw=$(hiclaw_read_secret_from_data_volume "${HICLAW_DATA_DIR}" HICLAW_MANAGER_PASSWORD)
+        fi
+
         # Manager admin DM room ID: login as admin, find DM room with @manager
         _mgr_room=""
         if [ -n "${_mgr_pw}" ]; then
@@ -2550,7 +2673,7 @@ EOF
             _admin_user=$(grep HICLAW_ADMIN_USER "${HICLAW_ENV_FILE:-${HOME}/hiclaw-manager.env}" 2>/dev/null | cut -d= -f2-)
             _admin_user="${_admin_user:-admin}"
             _matrix_domain=$(grep HICLAW_MATRIX_DOMAIN "${HICLAW_ENV_FILE:-${HOME}/hiclaw-manager.env}" 2>/dev/null | cut -d= -f2-)
-            if [ -n "${_admin_pw}" ]; then
+            if [ -n "${_admin_pw}" ] && ${DOCKER_CMD} ps --format '{{.Names}}' 2>/dev/null | grep -q '^hiclaw-manager$'; then
                 _admin_token=$(${DOCKER_CMD} exec hiclaw-manager curl -sf -X POST http://127.0.0.1:6167/_matrix/client/v3/login \
                     -H "Content-Type: application/json" \
                     -d '{"type":"m.login.password","identifier":{"type":"m.id.user","user":"'"${_admin_user}"'"},"password":"'"${_admin_pw}"'"}' 2>/dev/null | python3 -c "import sys,json; print(json.load(sys.stdin).get('access_token',''))" 2>/dev/null || true)
@@ -2575,6 +2698,9 @@ for room_id in rooms:
 " 2>/dev/null || true)
                 fi
             fi
+            if [ -z "${_mgr_room}" ]; then
+                _mgr_room=$(hiclaw_read_admin_dm_room_from_workspace "${HICLAW_WORKSPACE_DIR}")
+            fi
             cat > "${_creds_tmp}/default.env" <<CREDEOF
 WORKER_PASSWORD="${_mgr_pw}"
 WORKER_MINIO_PASSWORD="$(openssl rand -hex 24)"
@@ -2588,8 +2714,17 @@ CREDEOF
         if [ -f "${HICLAW_WORKSPACE_DIR}/workers-registry.json" ]; then
             _worker_names=$(python3 -c "import json; d=json.load(open('${HICLAW_WORKSPACE_DIR}/workers-registry.json')); print(' '.join(d.get('workers',{}).keys()))" 2>/dev/null || true)
             for _wname in ${_worker_names}; do
-                _wpw=$(${DOCKER_CMD} exec hiclaw-manager cat "/root/hiclaw-fs/agents/${_wname}/credentials/matrix/password" 2>/dev/null || true)
+                _wpw=""
+                if ${DOCKER_CMD} ps --format '{{.Names}}' 2>/dev/null | grep -q '^hiclaw-manager$'; then
+                    _wpw=$(${DOCKER_CMD} exec hiclaw-manager cat "/root/hiclaw-fs/agents/${_wname}/credentials/matrix/password" 2>/dev/null || true)
+                fi
+                if [ -z "${_wpw}" ] && ${DOCKER_CMD} volume ls -q 2>/dev/null | grep -q "^${HICLAW_DATA_DIR}$"; then
+                    _wpw=$(hiclaw_read_worker_creds_value_from_volume "${HICLAW_DATA_DIR}" "${_wname}" WORKER_PASSWORD)
+                fi
                 _wroom=$(python3 -c "import json; d=json.load(open('${HICLAW_WORKSPACE_DIR}/workers-registry.json')); print(d.get('workers',{}).get('${_wname}',{}).get('room_id',''))" 2>/dev/null || true)
+                if [ -z "${_wroom}" ] && ${DOCKER_CMD} volume ls -q 2>/dev/null | grep -q "^${HICLAW_DATA_DIR}$"; then
+                    _wroom=$(hiclaw_read_worker_creds_value_from_volume "${HICLAW_DATA_DIR}" "${_wname}" WORKER_ROOM_ID)
+                fi
                 if [ -n "${_wpw}" ]; then
                     cat > "${_creds_tmp}/${_wname}.env" <<CREDEOF
 WORKER_PASSWORD="${_wpw}"
@@ -2600,6 +2735,11 @@ CREDEOF
                     log "Extracted ${_wname} Matrix password${_wroom:+ and room ID}"
                 fi
             done
+        fi
+
+        if [ "${_mgr_creds_tempstart}" = "1" ]; then
+            log "Stopping hiclaw-manager after credential extraction (upgrade will recreate containers)..."
+            ${DOCKER_CMD} stop hiclaw-manager 2>/dev/null || true
         fi
         fi  # _is_old_arch
     fi

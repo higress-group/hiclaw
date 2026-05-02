@@ -20,7 +20,7 @@ HiClaw does not compete with other xxClaw projects. Instead of implementing Agen
 
 - 🧬 **Manager-Workers Architecture**: Eliminates the need for human oversight of individual Worker Claws by enabling Agents to manage other Agents.
 
-- 🦞 **Customizable Agents**: Each Agent supports flexible configurations including OpenClaw, Copaw, NanoClaw, ZeroClaw, and enterprise-built Agents—scaling from individual "shrimp farming" to full-scale "shrimp farm" operations.HiClaw Provides Worker and Team template marketplaces.
+- 🤝 **Multi-Runtime Collaboration**: OpenClaw, QwenPaw, and Hermes Workers coexist in the same IM room. Use deterministic agents (OpenClaw/QwenPaw) as Leaders to orchestrate tasks, and Hermes Workers for autonomous code execution — each runtime does what it's best at.
 
 - 📦 **MinIO Shared File System**: Introduces a shared file system for inter-Agent information exchange, significantly reducing token consumption in multi-Agent collaboration scenarios.
 
@@ -30,6 +30,7 @@ HiClaw does not compete with other xxClaw projects. Instead of implementing Agen
 
 ## News
 
+- **2026-04-24**: [English](blog/hiclaw-1.1.0-release.md) | [中文](blog/zh-cn/hiclaw-1.1.0-release.md) — HiClaw v1.1.0: Kubernetes-native control plane, Hermes autonomous coding agent runtime, 1.7 GB image shrink, hiclaw CLI replaces shell scripts.
 - **2026-04-14**: [English](blog/hiclaw-k8s-native-multi-agent-collaboration.md) | [中文](blog/zh-cn/hiclaw-k8s-native-multi-agent-collaboration.zh-CN.md) — Deep dive: HiClaw as a Kubernetes-native multi-agent collaboration orchestration system.
 - **2026-04-03**: [English](docs/declarative-resource-management.md) | [中文](docs/zh-cn/declarative-resource-management.md) — HiClaw 1.0.9: Kubernetes-style declarative resource management (YAML for Worker, Team, Human); Worker Template Marketplace; Manager CoPaw runtime; Nacos Skills Registry and more.
 - **2026-03-14**: [English](blog/hiclaw-1.0.6-release.md) | [中文](blog/zh-cn/hiclaw-1.0.6-release.md) — HiClaw 1.0.6: enterprise-grade MCP Server management, zero credential exposure.
@@ -286,28 +287,49 @@ Alice: Frontend validation updated too.
 
 No hidden agent-to-agent calls. Everything is visible and intervenable.
 
+## Multi-Runtime Collaboration
+
+HiClaw supports three Worker runtimes that can **coexist in the same IM room**, collaborating on tasks together:
+
+- **OpenClaw** (Node.js) — General-purpose agent with rich skills ecosystem, ideal for task orchestration and tool calling
+- **QwenPaw** (Python) — Lightweight runtime, suited for browser automation and quick tasks
+- **Hermes** ([hermes-agent](https://github.com/NousResearch/hermes-agent)) — Autonomous coding agent with terminal sandbox, self-improving skills, and persistent memory
+
+Each runtime excels at different tasks. A common pattern: use deterministic agents (OpenClaw/QwenPaw) as Leaders to decompose and assign work, and Hermes Workers for autonomous code execution. All runtimes communicate via Matrix `m.mentions` in the same room — fully visible, fully intervenable.
+
+```bash
+# Switch any worker's runtime in place
+hiclaw update worker --runtime hermes
+```
+
 ## Architecture
 
 ```
-┌─────────────────────────────────────────────┐
-│         hiclaw-manager-agent                │
-│  Higress │ Tuwunel │ MinIO │ Element Web    │
-│  Manager Agent (OpenClaw)                   │
-└──────────────────┬──────────────────────────┘
+┌───────────────────────────────────────────────┐
+│            hiclaw-controller                  │
+│  Higress │ Tuwunel │ MinIO │ Element Web      │
+└──────────────────┬────────────────────────────┘
                    │ Matrix + HTTP Files
-┌──────────────────┴──────┐  ┌────────────────┐
-│  hiclaw-worker-agent    │  │  hiclaw-worker │
-│  Worker Alice (OpenClaw)│  │  Worker Bob    │
-└─────────────────────────┘  └────────────────┘
+┌──────────────────┴──────────┐
+│     hiclaw-manager-agent     │
+│     Manager (OpenClaw/       │
+│       QwenPaw)               │
+└──────────────────┬──────────┘
+                   │
+┌──────────────────┼────────────────────────────┐
+│                  │                            │
+▼                  ▼                            ▼
+Worker Alice    Worker Bob              Worker Charlie
+(OpenClaw)      (QwenPaw)               (Hermes)
 ```
 
 | Component | Role |
 |-----------|------|
+| hiclaw-controller | Kubernetes-native control plane, reconciles Worker/Team/Manager CRs |
 | Higress AI Gateway | LLM proxy, MCP Server hosting, credential management |
 | Tuwunel (Matrix) | Self-hosted IM server for all Agent + Human communication |
 | Element Web | Browser client, zero setup |
 | MinIO | Centralized file storage, Workers are stateless |
-| OpenClaw | Agent runtime with Matrix plugin and skills |
 
 ## HiClaw vs OpenClaw Native
 

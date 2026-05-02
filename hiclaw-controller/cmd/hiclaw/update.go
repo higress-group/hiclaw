@@ -30,7 +30,6 @@ func updateWorkerCmd() *cobra.Command {
 		identity         string
 		soul             string
 		skills           string
-		mcpServers       string
 		packageURI       string
 		expose           string
 		containerManaged bool
@@ -44,7 +43,8 @@ func updateWorkerCmd() *cobra.Command {
   hiclaw update worker --name alice --model claude-sonnet-4-6
   hiclaw update worker --name alice --image hiclaw/worker-agent:v1.2.0
   hiclaw update worker --name alice --skills github-operations,code-review
-  hiclaw update worker --name remote-worker --container-managed=false`,
+  hiclaw update worker --name remote-worker --container-managed=false
+  To update mcpServers, use a YAML manifest and pass it with 'hiclaw apply -f worker.yaml'.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if name == "" {
 				return fmt.Errorf("--name is required")
@@ -71,9 +71,6 @@ func updateWorkerCmd() *cobra.Command {
 			if skills != "" {
 				req["skills"] = splitCSV(skills)
 			}
-			if mcpServers != "" {
-				req["mcpServers"] = splitCSV(mcpServers)
-			}
 			if expose != "" {
 				req["expose"] = parseExposePorts(expose)
 			}
@@ -99,7 +96,6 @@ func updateWorkerCmd() *cobra.Command {
 	cmd.Flags().StringVar(&identity, "identity", "", "Worker identity description")
 	cmd.Flags().StringVar(&soul, "soul", "", "Worker SOUL.md content")
 	cmd.Flags().StringVar(&skills, "skills", "", "Comma-separated built-in skills")
-	cmd.Flags().StringVar(&mcpServers, "mcp-servers", "", "Comma-separated MCP servers")
 	cmd.Flags().StringVar(&packageURI, "package", "", "Package URI")
 	cmd.Flags().StringVar(&expose, "expose", "", "Comma-separated ports to expose")
 	cmd.Flags().BoolVar(&containerManaged, "container-managed", true, "Whether controller manages container lifecycle (default true; set false for remote/pip workers)")

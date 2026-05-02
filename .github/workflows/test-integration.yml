@@ -55,7 +55,7 @@ on:
       model:
         description: 'LLM model to use'
         required: false
-        default: 'qwen3.5-plus'
+        default: 'qwen3.6-plus'
 
 env:
   # Tests that do not require a GitHub token, split into four shards for parallel execution
@@ -386,7 +386,7 @@ jobs:
         env:
           HICLAW_LLM_API_KEY: ${{ secrets.HICLAW_LLM_API_KEY }}
           HICLAW_LLM_PROVIDER: qwen
-          HICLAW_DEFAULT_MODEL: ${{ inputs.model || 'qwen3.5-plus' }}
+          HICLAW_DEFAULT_MODEL: ${{ inputs.model || 'qwen3.6-plus' }}
           HICLAW_MANAGER_RUNTIME: ${{ matrix.manager_runtime }}
           # Propagate the worker runtime to worker-creating tests too. Without
           # this the apply-zip path (test-15) silently falls back to openclaw
@@ -615,7 +615,7 @@ jobs:
           echo "- Tests: \`${{ env[matrix.filter_env] }}\`" >> $GITHUB_STEP_SUMMARY
           echo "- Manager Runtime: \`${{ matrix.manager_runtime }}\`" >> $GITHUB_STEP_SUMMARY
           echo "- Worker Runtime: \`${{ matrix.worker_runtime }}\`" >> $GITHUB_STEP_SUMMARY
-          echo "- Model: \`${{ inputs.model || 'qwen3.5-plus' }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- Model: \`${{ inputs.model || 'qwen3.6-plus' }}\`" >> $GITHUB_STEP_SUMMARY
           echo "- Install Mode: embedded (make test-embedded)" >> $GITHUB_STEP_SUMMARY
 
 # ============================================================

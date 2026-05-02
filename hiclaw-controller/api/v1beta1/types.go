@@ -39,7 +39,25 @@ type AccessEntry struct {
 	Scope       *apiextensionsv1.JSON `json:"scope,omitempty"`
 }
 
+// MCPServer declares one MCP server the agent can call via mcporter.
+// Name maps to the key in mcporter-servers.json (used by tool calls as <name>.<tool>).
+// URL is the full endpoint (e.g. https://apig.example.com/mcp-servers/github/mcp).
+// Transport: "http" (Streamable HTTP, default) | "sse".
+//
+// The controller translates this slice directly into mcporter-servers.json and
+// injects an Authorization: Bearer <consumer-key> header using the same
+// gateway consumer key the agent uses for LLM access. The controller does not
+// perform any gateway-side authorization for MCP servers — upstream access
+// control is the gateway operator's responsibility (or, for local Higress
+// deployments, handled out-of-band by Manager skills).
+type MCPServer struct {
+	Name      string `json:"name"`
+	URL       string `json:"url"`
+	Transport string `json:"transport,omitempty"`
+}
+
 // +genclient
+// +kubebuilder:subresource:status
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
 // Worker represents an AI agent worker in HiClaw.
@@ -58,7 +76,7 @@ type WorkerSpec struct {
 	Soul          string             `json:"soul,omitempty"`
 	Agents        string             `json:"agents,omitempty"`
 	Skills        []string           `json:"skills,omitempty"`
-	McpServers    []string           `json:"mcpServers,omitempty"`
+	McpServers    []MCPServer        `json:"mcpServers,omitempty"`
 	Package       string             `json:"package,omitempty"` // file://, http(s)://, or nacos:// URI
 	Expose        []ExposePort       `json:"expose,omitempty"`  // ports to expose via Higress gateway
 	ChannelPolicy *ChannelPolicySpec `json:"channelPolicy,omitempty"`
@@ -149,6 +167,7 @@ type WorkerList struct {
 }
 
 // +genclient
+// +kubebuilder:subresource:status
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
 // Team represents a group of workers led by a Team Leader.
@@ -213,7 +232,7 @@ type TeamWorkerSpec struct {
 	Soul          string             `json:"soul,omitempty"`
 	Agents        string             `json:"agents,omitempty"`
 	Skills        []string           `json:"skills,omitempty"`
-	McpServers    []string           `json:"mcpServers,omitempty"`
+	McpServers    []MCPServer        `json:"mcpServers,omitempty"`
 	Package       string             `json:"package,omitempty"`
 	Expose        []ExposePort       `json:"expose,omitempty"`
 	ChannelPolicy *ChannelPolicySpec `json:"channelPolicy,omitempty"`
@@ -320,6 +339,7 @@ type TeamList struct {
 }
 
 // +genclient
+// +kubebuilder:subresource:status
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
 // Human represents a real human user with configurable access permissions.
@@ -357,6 +377,7 @@ type HumanList struct {
 }
 
 // +genclient
+// +kubebuilder:subresource:status
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
 // Manager represents the HiClaw Manager Agent — the coordinator that receives
@@ -376,7 +397,7 @@ type ManagerSpec struct {
 	Soul       string        `json:"soul,omitempty"`       // custom SOUL.md content
 	Agents     string        `json:"agents,omitempty"`     // custom AGENTS.md content
 	Skills     []string      `json:"skills,omitempty"`     // on-demand skills to enable
-	McpServers []string      `json:"mcpServers,omitempty"` // MCP servers to authorize via Gateway
+	McpServers []MCPServer   `json:"mcpServers,omitempty"` // MCP servers callable by the Manager via mcporter
 	Package    string        `json:"package,omitempty"`    // file://, http(s)://, or nacos:// URI
 	Config     ManagerConfig `json:"config,omitempty"`
 

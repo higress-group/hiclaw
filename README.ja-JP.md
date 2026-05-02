@@ -20,7 +20,7 @@
 
 - 🧬 **Manager-Workers アーキテクチャ**: 個々の Worker Claw を人間が監視する必要がなくなり、Agent が Agent を管理することを実現します。
 
-- 🦞 **カスタマイズ可能な Agent**: 各 Agent は OpenClaw、Copaw、NanoClaw、ZeroClaw、企業独自の Agent など、柔軟な構成をサポートし、個別の「エビ養殖」からフルスケールの「エビ農場」運営まで対応します。
+- 🤝 **マルチランタイム協調**: OpenClaw、QwenPaw、Hermes の Worker が同じ IM ルーム内で共存します。決定論的な Agent（OpenClaw/QwenPaw）をリーダーとしてタスクを編成し、Hermes Worker に自律的なコード実行を担当させる — それぞれのランタイムが得意なことを担当します。
 
 - 📦 **MinIO 共有ファイルシステム**: Agent 間の情報共有のための共有ファイルシステムを導入し、マルチエージェント連携シナリオにおけるトークン消費を大幅に削減します。
 
@@ -30,6 +30,7 @@
 
 ## ニュース
 
+- **2026-04-24**: [English](blog/hiclaw-1.1.0-release.md) | [中文](blog/zh-cn/hiclaw-1.1.0-release.md) — HiClaw v1.1.0：Kubernetes ネイティブコントロールプレーン、Hermes 自律コーディング Agent ランタイム、1.7 GB イメージ縮小、hiclaw CLI がシェルスクリプトに代わる。
 - **2026-04-14**: [English](blog/hiclaw-k8s-native-multi-agent-collaboration.md) | [中文](blog/zh-cn/hiclaw-k8s-native-multi-agent-collaboration.zh-CN.md) — Kubernetes ネイティブなマルチ Agent 協調オーケストレーションとしての HiClaw の解説。
 - **2026-04-03**: [English](docs/declarative-resource-management.md) | [中文](docs/zh-cn/declarative-resource-management.md) — HiClaw 1.0.9：宣言型リソース管理、Worker テンプレートマーケット、Manager CoPaw、Nacos Skills 登録センターなど。
 - **2026-03-14**: [English](blog/hiclaw-1.0.6-release.md) | [中文](blog/zh-cn/hiclaw-1.0.6-release.md) — HiClaw 1.0.6：エンタープライズ MCP Server 管理、認証情報ゼロ露出。
@@ -286,29 +287,49 @@ Alice: フロントエンドのバリデーションも更新しました。
 
 隠れた Agent 間通信はありません。すべてが可視化され、介入可能です。
 
+## マルチランタイム協調
+
+HiClaw は 3 つの Worker ランタイムをサポートし、**同じ IM ルーム内で共存・協調**できます：
+
+- **OpenClaw**（Node.js）— 豊富なスキルエコシステムを持つ汎用 Agent、タスクオーケストレーションやツール呼び出しに最適
+- **QwenPaw**（Python）— 軽量ランタイム、ブラウザ自動化やクイックタスクに適している
+- **Hermes**（[hermes-agent](https://github.com/NousResearch/hermes-agent)）— ターミナルサンドボックス、自己改善スキル、永続メモリを備えた自律コーディング Agent
+
+各ランタイムは異なるタスクに優れています。推奨パターン：決定論的な Agent（OpenClaw/QwenPaw）をリーダーとしてタスク分解と割り当てを行い、Hermes Worker に自律的なコード実行を担当させる。すべてのランタイムは同じルーム内で Matrix `m.mentions` を介して通信し、完全に可視で、いつでも介入可能です。
+
+```bash
+# 任意の Worker のランタイムをその場で切り替え
+hiclaw update worker --runtime hermes
+```
+
 ## アーキテクチャ
 
 ```
-┌─────────────────────────────────────────────┐
-│         hiclaw-manager-agent                │
-│  Higress │ Tuwunel │ MinIO │ Element Web    │
-│  Manager Agent (OpenClaw)                   │
-└──────────────────┬──────────────────────────┘
+┌───────────────────────────────────────────────┐
+│            hiclaw-controller                  │
+│  Higress │ Tuwunel │ MinIO │ Element Web      │
+└──────────────────┬────────────────────────────┘
                    │ Matrix + HTTP Files
-┌──────────────────┴──────┐  ┌────────────────┐
-│  hiclaw-worker-agent    │  │  hiclaw-worker │
-│  Worker Alice (OpenClaw)│  │  Worker Bob    │
-└─────────────────────────┘  └────────────────┘
+┌──────────────────┴──────────┐
+│     hiclaw-manager-agent     │
+│     Manager (OpenClaw/       │
+│       QwenPaw)               │
+└──────────────────┬──────────┘
+                   │
+┌──────────────────┼────────────────────────────┐
+│                  │                            │
+▼                  ▼                            ▼
+Worker Alice    Worker Bob              Worker Charlie
+(OpenClaw)      (QwenPaw)               (Hermes)
 ```
 
 | コンポーネント | 役割 |
 |-----------|------|
+| hiclaw-controller | Kubernetes ネイティブコントロールプレーン、Worker/Team/Manager CR を調整 |
 | Higress AI ゲートウェイ | LLM プロキシ、MCP Server ホスティング、認証情報管理 |
 | Tuwunel（Matrix） | すべての Agent + 人間のコミュニケーション用セルフホスト IM サーバー |
 | Element Web | ブラウザクライアント、ゼロ設定 |
 | MinIO | 一元化ファイルストレージ、Worker はステートレス |
-| OpenClaw | Matrix プラグインとスキルを備えた Agent ランタイム |
-
 ## HiClaw vs OpenClaw ネイティブ
 
 | | OpenClaw ネイティブ | HiClaw |

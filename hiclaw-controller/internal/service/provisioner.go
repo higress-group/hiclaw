@@ -24,7 +24,6 @@ type WorkerProvisionRequest struct {
 	Role           string // "standalone" | "team_leader" | "worker"
 	TeamName       string
 	TeamLeaderName string
-	McpServers     []string
 }
 
 // WorkerProvisionResult contains all outputs from a successful provision.
@@ -35,14 +34,12 @@ type WorkerProvisionResult struct {
 	GatewayKey     string
 	MinIOPassword  string
 	MatrixPassword string
-	AuthorizedMCPs []string
 }
 
 // WorkerDeprovisionRequest describes which infrastructure to clean up.
 type WorkerDeprovisionRequest struct {
 	Name         string
 	IsTeamWorker bool
-	McpServers   []string
 	ExposedPorts []v1beta1.ExposedPortStatus
 	ExposeSpec   []v1beta1.ExposePort
 }
@@ -117,7 +114,7 @@ type ProvisionerConfig struct {
 	// this model so a 200 response proves the entire path the manager
 	// will exercise (auth filter → route → upstream → model resolution)
 	// is live. Sourced from Config.ManagerModel which already resolves
-	// HICLAW_MANAGER_MODEL → HICLAW_DEFAULT_MODEL → "qwen3.5-plus".
+	// HICLAW_MANAGER_MODEL → HICLAW_DEFAULT_MODEL → "qwen3.6-plus".
 	ManagerModel string
 
 	// ManagerEnabled reflects HICLAW_MANAGER_ENABLED. When false, no Manager
@@ -448,14 +445,6 @@ func (p *Provisioner) ProvisionWorker(ctx context.Context, req WorkerProvisionRe
 	// Without this, the worker's first LLM call may get 401.
 	time.Sleep(2 * time.Second)
 
-	var authorizedMCPs []string
-	if len(req.McpServers) > 0 {
-		authorizedMCPs, err = p.gateway.AuthorizeMCPServers(ctx, consumerName, req.McpServers)
-		if err != nil {
-			logger.Error(err, "MCP authorization partial failure (non-fatal)")
-		}
-	}
-
 	return &WorkerProvisionResult{
 		MatrixUserID:   workerMatrixID,
 		MatrixToken:    userCreds.AccessToken,
@@ -463,7 +452,6 @@ func (p *Provisioner) ProvisionWorker(ctx context.Context, req WorkerProvisionRe
 		GatewayKey:     creds.GatewayKey,
 		MinIOPassword:  creds.MinIOPassword,
 		MatrixPassword: creds.MatrixPassword,
-		AuthorizedMCPs: authorizedMCPs,
 	}, nil
 }
 
@@ -493,11 +481,6 @@ func (p *Provisioner) DeprovisionWorker(ctx context.Context, req WorkerDeprovisi
 	// Deauthorize gateway
 	if err := p.gateway.DeauthorizeAIRoutes(ctx, consumerName); err != nil {
 		logger.Error(err, "failed to deauthorize AI routes (non-fatal)")
-	}
-	if len(req.McpServers) > 0 {
-		if err := p.gateway.DeauthorizeMCPServers(ctx, consumerName, req.McpServers); err != nil {
-			logger.Error(err, "failed to deauthorize MCP servers (non-fatal)")
-		}
 	}
 	if err := p.gateway.DeleteConsumer(ctx, consumerName); err != nil {
 		logger.Error(err, "failed to delete gateway consumer (non-fatal)")
@@ -629,14 +612,6 @@ func (p *Provisioner) EnsureWorkerGatewayAuth(ctx context.Context, workerName, g
 	return nil
 }
 
-// ReconcileMCPAuth reauthorizes MCP servers for a consumer. Returns the list of
-// successfully authorized server names.
-func (p *Provisioner) ReconcileMCPAuth(ctx context.Context, consumerName string, mcpServers []string) ([]string, error) {
-	if len(mcpServers) == 0 {
-		return nil, nil
-	}
-	return p.gateway.AuthorizeMCPServers(ctx, consumerName, mcpServers)
-}
 
 // ProvisionTeamRooms creates (or resolves) the team room and leader DM room
 // and reconciles their Matrix memberships against the desired member set.
@@ -831,8 +806,7 @@ func (p *Provisioner) DeleteManagerRoomAlias(ctx context.Context, managerName st
 
 // ManagerProvisionRequest describes the infrastructure to provision for a Manager.
 type ManagerProvisionRequest struct {
-	Name       string
-	McpServers []string
+	Name string
 }
 
 // ManagerProvisionResult contains all outputs from a successful Manager provision.
@@ -843,7 +817,6 @@ type ManagerProvisionResult struct {
 	GatewayKey     string
 	MinIOPassword  string
 	MatrixPassword string
-	AuthorizedMCPs []string
 }
 
 // ProvisionManager executes the full infrastructure setup for a Manager Agent:
@@ -955,14 +928,6 @@ func (p *Provisioner) ProvisionManager(ctx context.Context, req ManagerProvision
 	// Without this, the worker's first LLM call may get 401.
 	time.Sleep(2 * time.Second)
 
-	var authorizedMCPs []string
-	if len(req.McpServers) > 0 {
-		authorizedMCPs, err = p.gateway.AuthorizeMCPServers(ctx, consumerName, req.McpServers)
-		if err != nil {
-			logger.Error(err, "MCP authorization partial failure (non-fatal)")
-		}
-	}
-
 	return &ManagerProvisionResult{
 		MatrixUserID:   managerMatrixID,
 		MatrixToken:    userCreds.AccessToken,
@@ -970,7 +935,6 @@ func (p *Provisioner) ProvisionManager(ctx context.Context, req ManagerProvision
 		GatewayKey:     creds.GatewayKey,
 		MinIOPassword:  creds.MinIOPassword,
 		MatrixPassword: creds.MatrixPassword,
-		AuthorizedMCPs: authorizedMCPs,
 	}, nil
 }
 
@@ -1169,17 +1133,12 @@ The human admin will start chatting shortly.`, language, timezone, language, tim
 }
 
 // DeprovisionManager cleans up infrastructure for a deleted Manager.
-func (p *Provisioner) DeprovisionManager(ctx context.Context, name string, mcpServers []string) error {
+func (p *Provisioner) DeprovisionManager(ctx context.Context, name string) error {
 	logger := log.FromContext(ctx)
 	consumerName := "manager"
 
 	if err := p.gateway.DeauthorizeAIRoutes(ctx, consumerName); err != nil {
 		logger.Error(err, "failed to deauthorize AI routes (non-fatal)")
-	}
-	if len(mcpServers) > 0 {
-		if err := p.gateway.DeauthorizeMCPServers(ctx, consumerName, mcpServers); err != nil {
-			logger.Error(err, "failed to deauthorize MCP servers (non-fatal)")
-		}
 	}
 	if err := p.gateway.DeleteConsumer(ctx, consumerName); err != nil {
 		logger.Error(err, "failed to delete gateway consumer (non-fatal)")

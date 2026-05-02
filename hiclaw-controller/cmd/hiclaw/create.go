@@ -37,7 +37,6 @@ func createWorkerCmd() *cobra.Command {
 		soul             string
 		soulFile         string
 		skills           string
-		mcpServers       string
 		packageURI       string
 		expose           string
 		team             string
@@ -53,11 +52,11 @@ func createWorkerCmd() *cobra.Command {
 		Short: "Create a Worker",
 		Long: `Create a new Worker resource via the controller REST API.
 
-  hiclaw create worker --name alice --model qwen3.5-plus
+  hiclaw create worker --name alice --model qwen3.6-plus
   hiclaw create worker --name alice --soul-file /path/to/SOUL.md --skills github-operations
-  hiclaw create worker --name bob --model claude-sonnet-4-6 --mcp-servers github -o json
   hiclaw create worker --name charlie --runtime copaw --expose 8080,3000
-  hiclaw create worker --name remote-worker --runtime copaw --container-managed=false`,
+  hiclaw create worker --name remote-worker --runtime copaw --container-managed=false
+  To configure mcpServers, use a YAML manifest and pass it with 'hiclaw apply -f worker.yaml'.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if name == "" {
 				return fmt.Errorf("--name is required")
@@ -100,9 +99,6 @@ func createWorkerCmd() *cobra.Command {
 			if skills != "" {
 				req["skills"] = splitCSV(skills)
 			}
-			if mcpServers != "" {
-				req["mcpServers"] = splitCSV(mcpServers)
-			}
 			if expose != "" {
 				req["expose"] = parseExposePorts(expose)
 			}
@@ -137,14 +133,13 @@ func createWorkerCmd() *cobra.Command {
 	}
 
 	cmd.Flags().StringVar(&name, "name", "", "Worker name (required)")
-	cmd.Flags().StringVar(&model, "model", "", "LLM model ID (default: $HICLAW_DEFAULT_MODEL, else qwen3.5-plus)")
+	cmd.Flags().StringVar(&model, "model", "", "LLM model ID (default: $HICLAW_DEFAULT_MODEL, else qwen3.6-plus)")
 	cmd.Flags().StringVar(&runtime, "runtime", "", "Agent runtime (openclaw|copaw|hermes)")
 	cmd.Flags().StringVar(&image, "image", "", "Container image override")
 	cmd.Flags().StringVar(&identity, "identity", "", "Worker identity description")
 	cmd.Flags().StringVar(&soul, "soul", "", "Worker SOUL.md content (inline)")
 	cmd.Flags().StringVar(&soulFile, "soul-file", "", "Path to SOUL.md file (overrides --soul)")
 	cmd.Flags().StringVar(&skills, "skills", "", "Comma-separated built-in skills")
-	cmd.Flags().StringVar(&mcpServers, "mcp-servers", "", "Comma-separated MCP servers")
 	cmd.Flags().StringVar(&packageURI, "package", "", "Package URI (nacos://, http://, oss://) or shorthand")
 	cmd.Flags().StringVar(&expose, "expose", "", "Comma-separated ports to expose (e.g. 8080,3000)")
 	cmd.Flags().StringVar(&team, "team", "", "Team name (assigns worker to a team)")
@@ -383,7 +378,7 @@ func createManagerCmd() *cobra.Command {
 		Short: "Create a Manager agent",
 		Long: `Create a new Manager resource.
 
-  hiclaw create manager --name default --model qwen3.5-plus
+  hiclaw create manager --name default --model qwen3.6-plus
   hiclaw create manager --name default --model claude-sonnet-4-6 --runtime copaw`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if name == "" {
@@ -429,14 +424,14 @@ var workerNamePattern = regexp.MustCompile(`^[a-z0-9][a-z0-9-]*$`)
 // specify --model. It prefers the install-time configured model
 // (HICLAW_DEFAULT_MODEL, propagated by the controller into both the manager
 // and worker containers via WorkerEnvBuilder); only when the env var is unset
-// does it fall back to the historical "qwen3.5-plus" default. Without this
+// does it fall back to the "qwen3.6-plus" default. Without this
 // fallback every `hiclaw create worker` / `hiclaw apply worker` invoked by the
 // Manager Agent would silently override the admin's install-time model choice.
 func defaultWorkerModel() string {
 	if m := strings.TrimSpace(os.Getenv("HICLAW_DEFAULT_MODEL")); m != "" {
 		return m
 	}
-	return "qwen3.5-plus"
+	return "qwen3.6-plus"
 }
 
 func validateWorkerName(name string) error {
