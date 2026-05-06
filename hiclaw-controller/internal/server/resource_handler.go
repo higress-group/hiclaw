@@ -163,14 +163,6 @@ func (h *ResourceHandler) GetWorker(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if ok, err := h.findStandaloneWorkerByRuntimeName(r.Context(), name, &worker); err != nil {
-		writeK8sError(w, "get worker", err)
-		return
-	} else if ok {
-		httputil.WriteJSON(w, http.StatusOK, workerToResponse(&worker))
-		return
-	}
-
 	// Fall back to synthesizing a response from the Team CR.
 	team, member, ok, terr := h.findTeamMember(r.Context(), name)
 	if terr != nil {
@@ -966,39 +958,16 @@ func (h *ResourceHandler) findTeamMember(ctx context.Context, name string) (*v1b
 	}
 	for i := range list.Items {
 		t := &list.Items[i]
-		if teamLeaderMatches(t.Spec.Leader, name) {
+		if t.Spec.Leader.Name == name {
 			return t, t.Spec.Leader.Name, true, nil
 		}
 		for _, w := range t.Spec.Workers {
-			if teamWorkerMatches(w, name) {
+			if w.Name == name {
 				return t, w.Name, true, nil
 			}
 		}
 	}
 	return nil, "", false, nil
-}
-
-func teamLeaderMatches(leader v1beta1.LeaderSpec, name string) bool {
-	return leader.Name == name || (leader.WorkerName != "" && leader.WorkerName == name)
-}
-
-func teamWorkerMatches(worker v1beta1.TeamWorkerSpec, name string) bool {
-	return worker.Name == name || (worker.WorkerName != "" && worker.WorkerName == name)
-}
-
-func (h *ResourceHandler) findStandaloneWorkerByRuntimeName(ctx context.Context, name string, out *v1beta1.Worker) (bool, error) {
-	var list v1beta1.WorkerList
-	if err := h.client.List(ctx, &list, client.InNamespace(h.namespace)); err != nil {
-		return false, err
-	}
-	for i := range list.Items {
-		w := &list.Items[i]
-		if w.Spec.WorkerName == name {
-			*out = *w
-			return true, nil
-		}
-	}
-	return false, nil
 }
 
 // teamMemberToResponse synthesizes a WorkerResponse for a Team member without

@@ -11,7 +11,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
 
-func TestCREnricher_StandaloneWorkerCRNameMapsToRuntimeWorkerName(t *testing.T) {
+func TestCREnricher_StandaloneWorkerKeepsCRNameAndStoresRuntimeWorkerName(t *testing.T) {
 	scheme := newAuthTestScheme(t)
 	worker := &v1beta1.Worker{
 		ObjectMeta: metav1.ObjectMeta{
@@ -38,12 +38,12 @@ func TestCREnricher_StandaloneWorkerCRNameMapsToRuntimeWorkerName(t *testing.T) 
 		t.Fatalf("EnrichIdentity: %v", err)
 	}
 
-	if identity.Username != "testmcp" || identity.WorkerName != "testmcp" {
-		t.Fatalf("identity=%+v, want runtime workerName testmcp", identity)
+	if identity.Username != "alpha-worker-testmcp" || identity.WorkerName != "testmcp" {
+		t.Fatalf("identity=%+v, want CR username alpha-worker-testmcp and runtime workerName testmcp", identity)
 	}
 }
 
-func TestCREnricher_TeamMemberCRNameMapsToRuntimeWorkerName(t *testing.T) {
+func TestCREnricher_TeamMemberKeepsCRNameAndStoresRuntimeWorkerName(t *testing.T) {
 	scheme := newAuthTestScheme(t)
 	team := &v1beta1.Team{}
 	team.Name = "alpha-team"
@@ -76,12 +76,12 @@ func TestCREnricher_TeamMemberCRNameMapsToRuntimeWorkerName(t *testing.T) {
 	if identity.Team != "alpha-team" {
 		t.Fatalf("Team=%q, want alpha-team", identity.Team)
 	}
-	if identity.Username != "dev" || identity.WorkerName != "dev" {
-		t.Fatalf("identity=%+v, want runtime workerName dev", identity)
+	if identity.Username != "alpha-worker-dev" || identity.WorkerName != "dev" {
+		t.Fatalf("identity=%+v, want CR username alpha-worker-dev and runtime workerName dev", identity)
 	}
 }
 
-func TestCREnricher_TeamLeaderCRNameMapsToRuntimeWorkerName(t *testing.T) {
+func TestCREnricher_TeamLeaderKeepsCRNameAndStoresRuntimeWorkerName(t *testing.T) {
 	scheme := newAuthTestScheme(t)
 	team := &v1beta1.Team{}
 	team.Name = "alpha-team"
@@ -111,8 +111,8 @@ func TestCREnricher_TeamLeaderCRNameMapsToRuntimeWorkerName(t *testing.T) {
 	if identity.Role != RoleTeamLeader || identity.Team != "alpha-team" {
 		t.Fatalf("identity=%+v, want team leader in alpha-team", identity)
 	}
-	if identity.Username != "lead" || identity.WorkerName != "lead" {
-		t.Fatalf("identity=%+v, want runtime workerName lead", identity)
+	if identity.Username != "alpha-worker-lead" || identity.WorkerName != "lead" {
+		t.Fatalf("identity=%+v, want CR username alpha-worker-lead and runtime workerName lead", identity)
 	}
 }
 

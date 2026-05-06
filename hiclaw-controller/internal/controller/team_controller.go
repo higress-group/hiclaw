@@ -526,7 +526,7 @@ func (r *TeamReconciler) handleDelete(ctx context.Context, t *v1beta1.Team) erro
 	// leave on their own schedule), but a fresh Team CR with the same name
 	// must get a clean alias so CreateRoom resolves a new room instead of
 	// reattaching to the old one.
-	if err := r.Provisioner.DeleteTeamRoomAliases(ctx, t.Name, t.Spec.Leader.Name); err != nil {
+	if err := r.Provisioner.DeleteTeamRoomAliases(ctx, t.Name, t.Spec.Leader.EffectiveWorkerName()); err != nil {
 		logger.Error(err, "failed to delete team room aliases (non-fatal)")
 	}
 

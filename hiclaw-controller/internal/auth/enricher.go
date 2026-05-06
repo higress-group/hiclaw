@@ -54,7 +54,6 @@ func (e *CREnricher) EnrichIdentity(ctx context.Context, identity *CallerIdentit
 	switch {
 	case err == nil:
 		runtimeName := worker.Spec.EffectiveWorkerName(worker.Name)
-		identity.Username = runtimeName
 		identity.WorkerName = runtimeName
 		if role := worker.Annotations["hiclaw.io/role"]; role == "team_leader" {
 			identity.Role = RoleTeamLeader
@@ -76,7 +75,6 @@ func (e *CREnricher) EnrichIdentity(ctx context.Context, identity *CallerIdentit
 		identity.Role = RoleTeamLeader
 		identity.Team = team.Name
 		runtimeName := team.Spec.Leader.EffectiveWorkerName()
-		identity.Username = runtimeName
 		identity.WorkerName = runtimeName
 		return nil
 	}
@@ -88,7 +86,6 @@ func (e *CREnricher) EnrichIdentity(ctx context.Context, identity *CallerIdentit
 		for _, w := range team.Spec.Workers {
 			if w.Name == identity.Username {
 				runtimeName := w.EffectiveWorkerName()
-				identity.Username = runtimeName
 				identity.WorkerName = runtimeName
 				break
 			}
