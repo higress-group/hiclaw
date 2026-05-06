@@ -16,6 +16,7 @@ set -e
 source /opt/hiclaw/scripts/lib/hiclaw-env.sh 2>/dev/null || true
 
 WORKER_NAME="${HICLAW_WORKER_NAME:?HICLAW_WORKER_NAME is required}"
+WORKER_CR_NAME="${HICLAW_WORKER_CR_NAME:-${WORKER_NAME}}"
 INSTALL_DIR="/root/.hiclaw-worker"
 
 log() {
@@ -82,13 +83,14 @@ _start_readiness_reporter() {
         fi
 
         # Report ready to controller via hiclaw CLI
-        hiclaw worker report-ready
+        hiclaw worker report-ready --name "${WORKER_CR_NAME}"
     ) &
     log "Background readiness reporter started (PID: $!)"
 }
 
 VENV="/opt/venv/copaw"
 log "Starting copaw-worker: ${WORKER_NAME}"
+log "  Worker CR name: ${WORKER_CR_NAME}"
 log "  FS endpoint: ${FS_ENDPOINT}"
 log "  Install dir: ${INSTALL_DIR}"
 log "  CoPaw venv: ${VENV}"
@@ -128,6 +130,7 @@ CONSOLE_PORT="${HICLAW_CONSOLE_PORT:-8088}"
 # Build command
 CMD_ARGS=(
     --name "${WORKER_NAME}"
+    --cr-name "${WORKER_CR_NAME}"
     --fs "${FS_ENDPOINT}"
     --fs-key "${FS_ACCESS_KEY}"
     --fs-secret "${FS_SECRET_KEY}"

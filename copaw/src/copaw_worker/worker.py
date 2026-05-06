@@ -81,6 +81,7 @@ class Worker:
             secret_key=self.config.minio_secret_key,
             bucket=self.config.minio_bucket,
             worker_name=self.worker_name,
+            worker_cr_name=self.config.worker_cr_name,
             secure=self.config.minio_secure,
             local_dir=self.config.install_dir / self.worker_name,
         )

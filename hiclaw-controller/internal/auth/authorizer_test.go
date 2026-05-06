@@ -33,6 +33,7 @@ func TestAuthorizer_TeamLeaderOwnTeam(t *testing.T) {
 		{Action: ActionWake, ResourceKind: "worker", ResourceName: "alpha-dev", ResourceTeam: "alpha-team"},
 		{Action: ActionSleep, ResourceKind: "worker", ResourceName: "alpha-dev", ResourceTeam: "alpha-team"},
 		{Action: ActionEnsureReady, ResourceKind: "worker", ResourceName: "alpha-dev", ResourceTeam: "alpha-team"},
+		{Action: ActionReady, ResourceKind: "worker", ResourceName: "alpha-dev", ResourceTeam: "alpha-team"},
 		{Action: ActionList, ResourceKind: "worker"},
 		{Action: ActionGet, ResourceKind: "status"},
 	}
@@ -49,6 +50,7 @@ func TestAuthorizer_TeamLeaderCrossTeamDenied(t *testing.T) {
 
 	deniedCases := []AuthzRequest{
 		{Action: ActionGet, ResourceKind: "worker", ResourceName: "beta-dev", ResourceTeam: "beta-team"},
+		{Action: ActionReady, ResourceKind: "worker", ResourceName: "beta-dev", ResourceTeam: "beta-team"},
 		{Action: ActionWake, ResourceKind: "worker", ResourceName: "beta-dev", ResourceTeam: "beta-team"},
 		{Action: ActionDelete, ResourceKind: "team", ResourceName: "beta-team"},
 		{Action: ActionGateway, ResourceKind: "gateway"},

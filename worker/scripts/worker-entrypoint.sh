@@ -346,7 +346,7 @@ if [ -n "${HICLAW_CONTROLLER_URL:-}" ]; then
         fi
 
         # Report ready to controller via hiclaw CLI
-        hiclaw worker report-ready
+        hiclaw worker report-ready --name "${HICLAW_WORKER_CR_NAME:-${WORKER_NAME}}"
     ) &
     log "Background readiness reporter started (PID: $!)"
 fi

@@ -370,6 +370,7 @@ func createMemberContainer(ctx context.Context, d MemberDeps, m MemberContext, s
 	}
 
 	workerEnv := d.EnvBuilder.Build(m.RuntimeName, prov)
+	workerEnv["HICLAW_WORKER_CR_NAME"] = m.Name
 	mergeUserEnv(workerEnv, m.Spec.Env, logger, string(m.Role)+"/"+m.Name)
 	saName := d.ResourcePrefix.SAName(authpkg.RoleWorker, m.Name)
 

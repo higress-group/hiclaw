@@ -90,7 +90,7 @@ func (a *Authorizer) authorizeTeamLeaderWorkerAction(caller *CallerIdentity, req
 		return nil // handler filters by team
 	case ActionCreate, ActionUpdate:
 		return a.requireSameTeam(caller, req)
-	case ActionWake, ActionSleep, ActionEnsureReady, ActionStatus:
+	case ActionWake, ActionSleep, ActionEnsureReady, ActionReady, ActionStatus:
 		return a.requireSameTeam(caller, req)
 	default:
 		return deny(caller, req)

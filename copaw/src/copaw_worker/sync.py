@@ -121,6 +121,7 @@ class FileSync:
         secret_key: str,
         bucket: str,
         worker_name: str,
+        worker_cr_name: Optional[str] = None,
         secure: bool = False,
         local_dir: Optional[Path] = None,
     ) -> None:
@@ -129,12 +130,14 @@ class FileSync:
         self.secret_key = secret_key
         self.bucket = bucket
         self.worker_name = worker_name
+        self.worker_cr_name = worker_cr_name or worker_name
         self._secure = secure
         self.local_dir = local_dir or Path.home() / ".copaw-worker" / worker_name
         self.local_dir.mkdir(parents=True, exist_ok=True)
         self._prefix = f"agents/{worker_name}"
         self._alias_set = False
         self._cloud_mode = os.environ.get("HICLAW_RUNTIME") == "aliyun"
+        self._worker_info: dict[str, Any] | None = None
 
     # ------------------------------------------------------------------
     # mc alias management
@@ -265,6 +268,34 @@ class FileSync:
     # ------------------------------------------------------------------
     # Public API
     # ------------------------------------------------------------------
+
+    def _get_worker_info(self) -> dict[str, Any]:
+        """Return authoritative worker metadata from the HiClaw controller."""
+        if self._worker_info is not None:
+            return self._worker_info
+
+        hiclaw_bin = shutil.which("hiclaw")
+        if not hiclaw_bin:
+            raise RuntimeError("hiclaw CLI not found; cannot resolve worker storage scope")
+
+        try:
+            result = subprocess.run(
+                [hiclaw_bin, "get", "workers", self.worker_cr_name, "-o", "json"],
+                capture_output=True,
+                text=True,
+                check=True,
+                timeout=10,
+            )
+            worker = json.loads(result.stdout)
+        except Exception as exc:
+            raise RuntimeError(
+                f"failed to query worker metadata for {self.worker_cr_name}: {exc}",
+            ) from exc
+
+        if not isinstance(worker, dict):
+            raise RuntimeError(f"invalid worker metadata for {self.worker_cr_name}")
+        self._worker_info = worker
+        return worker
 
     def _get_team_id(self) -> Optional[str]:
         """Read team name from AGENTS.md team-context section."""

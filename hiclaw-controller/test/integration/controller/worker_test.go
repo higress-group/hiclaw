@@ -670,6 +670,9 @@ func TestWorkerCreate_EnvPassesToBackend(t *testing.T) {
 	if got := req.Env["HICLAW_WORKER_NAME"]; got != workerName {
 		t.Errorf("HICLAW_WORKER_NAME=%q, want %q (system wins)", got, workerName)
 	}
+	if got := req.Env["HICLAW_WORKER_CR_NAME"]; got != workerName {
+		t.Errorf("HICLAW_WORKER_CR_NAME=%q, want %q", got, workerName)
+	}
 	if got := req.Env["MOCK_ENV"]; got != "true" {
 		t.Errorf("MOCK_ENV=%q, want %q (system env preserved)", got, "true")
 	}
