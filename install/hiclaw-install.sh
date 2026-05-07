@@ -2078,6 +2078,14 @@ step_skills() {
 
 step_volume() {
     log "$(msg data.title)"
+    # ── Non-interactive guard (deep defense) ──────────────────────────
+    if [ "${HICLAW_NON_INTERACTIVE}" = "1" ]; then
+        HICLAW_DATA_DIR="${HICLAW_DATA_DIR:-hiclaw-data}"
+        log "  $(msg data.volume_using "${HICLAW_DATA_DIR}") (non-interactive, skipped)"
+        export HICLAW_DATA_DIR
+        return 0
+    fi
+    # ─────────────────────────────────────────────────────────────────
     if [ -z "${HICLAW_DATA_DIR+x}" ]; then
         local _input
         read -e -p "$(msg data.volume_prompt): " _input
@@ -2091,6 +2099,16 @@ step_volume() {
 
 step_workspace() {
     log "$(msg workspace.title)"
+    # ── Non-interactive guard (deep defense) ──────────────────────────
+    if [ "${HICLAW_NON_INTERACTIVE}" = "1" ]; then
+        HICLAW_WORKSPACE_DIR="${HICLAW_WORKSPACE_DIR:-${HOME}/hiclaw-manager}"
+        HICLAW_WORKSPACE_DIR="$(cd "${HICLAW_WORKSPACE_DIR}" 2>/dev/null && pwd || echo "${HICLAW_WORKSPACE_DIR}")"
+        mkdir -p "${HICLAW_WORKSPACE_DIR}"
+        log "  $(msg workspace.dir_label "${HICLAW_WORKSPACE_DIR}") (non-interactive, skipped)"
+        export HICLAW_WORKSPACE_DIR
+        return 0
+    fi
+    # ─────────────────────────────────────────────────────────────────
     if [ -z "${HICLAW_WORKSPACE_DIR+x}" ]; then
         local _input
         read -e -p "$(msg workspace.dir_prompt "${HOME}/hiclaw-manager"): " _input
@@ -2185,6 +2203,14 @@ step_manager_runtime() {
 step_e2ee() {
     log ""
     log "$(msg matrix_e2ee.title)"
+    # ── Non-interactive guard (deep defense) ──────────────────────────
+    if [ "${HICLAW_NON_INTERACTIVE}" = "1" ]; then
+        HICLAW_MATRIX_E2EE="${HICLAW_MATRIX_E2EE:-0}"
+        log "  $(msg matrix_e2ee.title_short) = ${HICLAW_MATRIX_E2EE} (non-interactive, skipped)"
+        export HICLAW_MATRIX_E2EE
+        return 0
+    fi
+    # ─────────────────────────────────────────────────────────────────
     echo ""
     echo -e "  $(msg matrix_e2ee.desc)"
     echo ""
@@ -2228,6 +2254,15 @@ step_docker_proxy() {
         HICLAW_DOCKER_PROXY="0"
         return 0
     fi
+
+    # ── Non-interactive guard (deep defense) ──────────────────────────
+    if [ "${HICLAW_NON_INTERACTIVE}" = "1" ]; then
+        HICLAW_DOCKER_PROXY="${HICLAW_DOCKER_PROXY:-0}"
+        log "  $(msg docker_proxy.title_short) = ${HICLAW_DOCKER_PROXY} (non-interactive, skipped)"
+        export HICLAW_DOCKER_PROXY
+        return 0
+    fi
+    # ─────────────────────────────────────────────────────────────────
 
     echo ""
     echo -e "  \033[1m$(msg docker_proxy.title)\033[0m"
@@ -2288,6 +2323,14 @@ step_docker_proxy() {
 }
 
 step_idle() {
+    # ── Non-interactive guard (deep defense) ──────────────────────────
+    if [ "${HICLAW_NON_INTERACTIVE}" = "1" ]; then
+        HICLAW_WORKER_IDLE_TIMEOUT="${HICLAW_WORKER_IDLE_TIMEOUT:-720}"
+        log "  $(msg idle_timeout.label) = ${HICLAW_WORKER_IDLE_TIMEOUT} (non-interactive, skipped)"
+        export HICLAW_WORKER_IDLE_TIMEOUT
+        return 0
+    fi
+    # ─────────────────────────────────────────────────────────────────
     if [ "${HICLAW_UPGRADE}" = "1" ] && [ -n "${HICLAW_WORKER_IDLE_TIMEOUT}" ]; then
         log "$(msg prompt.upgrade_keep "$(msg idle_timeout.label)" "${HICLAW_WORKER_IDLE_TIMEOUT}")"
         local _idle_timeout
@@ -2306,6 +2349,14 @@ step_idle() {
 }
 
 step_hostshare() {
+    # ── Non-interactive guard (deep defense) ──────────────────────────
+    if [ "${HICLAW_NON_INTERACTIVE}" = "1" ]; then
+        HICLAW_HOST_SHARE_DIR="${HICLAW_HOST_SHARE_DIR:-${HOME}}"
+        log "  $(msg host_share.label) = ${HICLAW_HOST_SHARE_DIR} (non-interactive, skipped)"
+        export HICLAW_HOST_SHARE_DIR
+        return 0
+    fi
+    # ─────────────────────────────────────────────────────────────────
     local _share_dir
     read -e -p "$(msg host_share.prompt "$HOME"): " _share_dir
     if [ "${_share_dir}" = "b" ]; then STEP_RESULT="back"; return 0; fi
