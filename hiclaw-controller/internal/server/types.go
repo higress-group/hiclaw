@@ -98,6 +98,7 @@ type TeamLeaderRequest struct {
 	Soul              string                      `json:"soul,omitempty"`
 	Agents            string                      `json:"agents,omitempty"`
 	Package           string                      `json:"package,omitempty"`
+	McpServers        []v1beta1.MCPServer         `json:"mcpServers,omitempty"`
 	Heartbeat         *TeamLeaderHeartbeatRequest `json:"heartbeat,omitempty"`
 	WorkerIdleTimeout string                      `json:"workerIdleTimeout,omitempty"`
 	ChannelPolicy     *v1beta1.ChannelPolicySpec  `json:"channelPolicy,omitempty"`

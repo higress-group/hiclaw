@@ -375,6 +375,7 @@ func (h *ResourceHandler) CreateTeam(w http.ResponseWriter, r *http.Request) {
 				Soul:              req.Leader.Soul,
 				Agents:            req.Leader.Agents,
 				Package:           req.Leader.Package,
+				McpServers:        req.Leader.McpServers,
 				Heartbeat:         toHeartbeatSpec(req.Leader.Heartbeat),
 				WorkerIdleTimeout: req.Leader.WorkerIdleTimeout,
 				ChannelPolicy:     req.Leader.ChannelPolicy,
@@ -496,6 +497,9 @@ func (h *ResourceHandler) UpdateTeam(w http.ResponseWriter, r *http.Request) {
 			}
 			if req.Leader.WorkerIdleTimeout != "" {
 				team.Spec.Leader.WorkerIdleTimeout = req.Leader.WorkerIdleTimeout
+			}
+			if req.Leader.McpServers != nil {
+				team.Spec.Leader.McpServers = req.Leader.McpServers
 			}
 			if req.Leader.ChannelPolicy != nil {
 				team.Spec.Leader.ChannelPolicy = req.Leader.ChannelPolicy
@@ -960,16 +964,23 @@ func (h *ResourceHandler) findTeamMember(ctx context.Context, name string) (*v1b
 // creating a Worker CR. Runtime fields (Phase, ContainerState, ExposedPorts)
 // are populated from Team.Status and the backend so existing consumers of
 // /api/v1/workers see consistent data.
+//
+// Runtime resolution mirrors the response contract of standalone Worker CRs
+// (see ListWorkers/GetWorker at the top of this file, which return
+// w.Spec.Runtime verbatim): leader is hardcoded "copaw" to match the
+// projection in leaderWorkerSpec(); worker is passed through from
+// TeamWorkerSpec.Runtime (possibly empty, meaning "defer to installer
+// default"), so Manager skills and `hiclaw get worker` observe the same
+// value for Team workers as they would for standalone Workers.
 func (h *ResourceHandler) teamMemberToResponse(ctx context.Context, t *v1beta1.Team, memberName string) WorkerResponse {
 	isLeader := t.Spec.Leader.Name == memberName
 	ms := t.Status.MemberByName(memberName)
 
 	resp := WorkerResponse{
-		Name:    memberName,
-		Team:    t.Name,
-		Phase:   "Pending",
-		State:   "Running",
-		Runtime: "copaw",
+		Name:  memberName,
+		Team:  t.Name,
+		Phase: "Pending",
+		State: "Running",
 	}
 	if ms != nil {
 		resp.RoomID = ms.RoomID
@@ -977,6 +988,7 @@ func (h *ResourceHandler) teamMemberToResponse(ctx context.Context, t *v1beta1.T
 	}
 	if isLeader {
 		resp.Role = "team_leader"
+		resp.Runtime = "copaw"
 		resp.Model = t.Spec.Leader.Model
 		if t.Spec.Leader.State != nil {
 			resp.State = *t.Spec.Leader.State
@@ -989,9 +1001,7 @@ func (h *ResourceHandler) teamMemberToResponse(ctx context.Context, t *v1beta1.T
 			}
 			resp.Model = wk.Model
 			resp.Image = wk.Image
-			if wk.Runtime != "" {
-				resp.Runtime = wk.Runtime
-			}
+			resp.Runtime = wk.Runtime
 			if wk.State != nil {
 				resp.State = *wk.State
 			}
