@@ -1241,12 +1241,12 @@ read_secret() {
 load_current_params_from_env() {
     local env_file="${HICLAW_ENV_FILE:-${HOME}/hiclaw-manager.env}"
     if [ -f "${env_file}" ]; then
-        HICLAW_LLM_PROVIDER=$(grep '^HICLAW_LLM_PROVIDER=' "${env_file}" 2>/dev/null | cut -d= -f2-)
-        HICLAW_OPENAI_BASE_URL=$(grep '^HICLAW_OPENAI_BASE_URL=' "${env_file}" 2>/dev/null | cut -d= -f2-)
-        HICLAW_DEFAULT_MODEL=$(grep '^HICLAW_DEFAULT_MODEL=' "${env_file}" 2>/dev/null | cut -d= -f2-)
-        HICLAW_EMBEDDING_MODEL=$(grep '^HICLAW_EMBEDDING_MODEL=' "${env_file}" 2>/dev/null | cut -d= -f2-)
-        HICLAW_WORKSPACE_DIR=$(grep '^HICLAW_WORKSPACE_DIR=' "${env_file}" 2>/dev/null | cut -d= -f2-)
-        HICLAW_HOST_SHARE_DIR=$(grep '^HICLAW_HOST_SHARE_DIR=' "${env_file}" 2>/dev/null | cut -d= -f2-)
+        [ -z "${HICLAW_LLM_PROVIDER:+x}" ] && HICLAW_LLM_PROVIDER="$(grep '^HICLAW_LLM_PROVIDER=' "${env_file}" 2>/dev/null | cut -d= -f2- | tr -d '\r')"
+        [ -z "${HICLAW_OPENAI_BASE_URL:+x}" ] && HICLAW_OPENAI_BASE_URL="$(grep '^HICLAW_OPENAI_BASE_URL=' "${env_file}" 2>/dev/null | cut -d= -f2- | tr -d '\r')"
+        [ -z "${HICLAW_DEFAULT_MODEL:+x}" ] && HICLAW_DEFAULT_MODEL="$(grep '^HICLAW_DEFAULT_MODEL=' "${env_file}" 2>/dev/null | cut -d= -f2- | tr -d '\r')"
+        [ -z "${HICLAW_EMBEDDING_MODEL:+x}" ] && HICLAW_EMBEDDING_MODEL="$(grep '^HICLAW_EMBEDDING_MODEL=' "${env_file}" 2>/dev/null | cut -d= -f2- | tr -d '\r')"
+        [ -z "${HICLAW_WORKSPACE_DIR:+x}" ] && HICLAW_WORKSPACE_DIR="$(grep '^HICLAW_WORKSPACE_DIR=' "${env_file}" 2>/dev/null | cut -d= -f2- | tr -d '\r')"
+        [ -z "${HICLAW_HOST_SHARE_DIR:+x}" ] && HICLAW_HOST_SHARE_DIR="$(grep '^HICLAW_HOST_SHARE_DIR=' "${env_file}" 2>/dev/null | cut -d= -f2- | tr -d '\r')"
     fi
 }
 
@@ -1484,13 +1484,14 @@ should_skip_step() {
             local _env="${HICLAW_ENV_FILE:-${HOME}/hiclaw-manager.env}"
             [ ! -f "${_env}" ] && return 0
             ;;
-        # Keep-All upgrade mode: skip all config steps, values are already loaded
-        step_llm|step_admin|step_network|step_ports|step_domains|step_github|step_skills|step_volume|step_workspace|step_runtime|step_manager_runtime|step_e2ee|step_docker_proxy|step_idle|step_hostshare)
+        # Keep-All upgrade mode: skip all config steps (step_volume/step_workspace handled separately)
+        step_llm|step_admin|step_network|step_ports|step_domains|step_github|step_skills|step_runtime|step_manager_runtime|step_e2ee|step_docker_proxy|step_idle|step_hostshare)
             [ "${HICLAW_UPGRADE}" = "1" ] && [ "${HICLAW_UPGRADE_KEEP_ALL}" = "1" ] && return 0
             ;;
         step_volume|step_workspace)
             [ "${HICLAW_NON_INTERACTIVE}" = "1" ] && return 0
             [ "${HICLAW_QUICKSTART}" = "1" ] && return 0
+            [ "${HICLAW_UPGRADE}" = "1" ] && [ "${HICLAW_UPGRADE_KEEP_ALL}" = "1" ] && return 0
             ;;
         step_e2ee|step_idle)
             [ "${HICLAW_NON_INTERACTIVE}" = "1" ] && return 0
@@ -1869,7 +1870,7 @@ step_llm() {
     local ALIBABA_MODEL_CHOICE=""
     local ALIBABA_ACCESS=""
     case "${PROVIDER_CHOICE}" in
-        1|alibaba-cloud)
+        1|alibaba-cloud|openai-compat)
             if [ "${HICLAW_LANGUAGE}" = "en" ]; then
                 HICLAW_LLM_PROVIDER="openai-compat"
                 HICLAW_OPENAI_BASE_URL="https://dashscope-intl.aliyuncs.com/compatible-mode/v1"
@@ -2268,6 +2269,7 @@ step_workspace() {
         return 0
     fi
     # ─────────────────────────────────────────────────────────────────
+    local _input
     if [ "${HICLAW_UPGRADE}" = "1" ] && [ "${HICLAW_UPGRADE_KEEP_ALL}" = "1" ]; then
         log "$(msg prompt.upgrade_keep "$(msg workspace.dir_prompt "${HOME}/hiclaw-manager")" "${HICLAW_WORKSPACE_DIR}")"
         _input="${HICLAW_WORKSPACE_DIR}"

@@ -1413,13 +1413,14 @@ function Test-ShouldSkipStep {
         }
         # Keep-All upgrade mode: skip all config steps, values are already loaded
         { $_ -in @("Step-Llm", "Step-Admin", "Step-Network", "Step-Ports", "Step-Domains",
-                    "Step-Github", "Step-Skills", "Step-Volume", "Step-Workspace",
+                    "Step-Github", "Step-Skills",
                     "Step-Runtime", "Step-ManagerRuntime", "Step-E2ee", "Step-DockerProxy",
                     "Step-Idle", "Step-Hostshare") } {
             if ($script:HICLAW_UPGRADE -and $env:HICLAW_UPGRADE_KEEP_ALL -eq "1") { return $true }
             return $false
         }
         { $_ -in @("Step-Volume", "Step-Workspace") } {
+            if ($script:HICLAW_UPGRADE -and $env:HICLAW_UPGRADE_KEEP_ALL -eq "1") { return $true }
             if ($script:HICLAW_NON_INTERACTIVE) { return $true }
             if ($script:HICLAW_QUICKSTART) { return $true }
             return $false
@@ -1948,9 +1949,8 @@ function Step-Llm {
                 Write-Log (Get-Msg "prompt.upgrade_keep" -f (Get-Msg "llm.openai.model_prompt"), $script:config.DEFAULT_MODEL)
             } else {
                 $currentModel = $script:config.DEFAULT_MODEL
-                # Use base prompt without embedded default when showing current value
                 if ($currentModel) {
-                    $modelInput = Read-Host "Default Model ID [${currentModel}]"
+                    $modelInput = Read-Host "$(Get-Msg 'llm.openai.model_prompt') [${currentModel}]"
                 } else {
                     $modelInput = Read-Host (Get-Msg 'llm.openai.model_prompt')
                 }
