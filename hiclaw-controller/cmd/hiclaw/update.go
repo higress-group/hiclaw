@@ -109,6 +109,7 @@ func updateWorkerCmd() *cobra.Command {
 func updateTeamCmd() *cobra.Command {
 	var (
 		name                 string
+		teamName             string
 		description          string
 		leaderModel          string
 		leaderHeartbeatEvery string
@@ -129,6 +130,7 @@ func updateTeamCmd() *cobra.Command {
 			}
 
 			req := map[string]interface{}{}
+			setIfNotEmpty(req, "teamName", teamName)
 			setIfNotEmpty(req, "description", description)
 			leader := map[string]interface{}{}
 			setIfNotEmpty(leader, "model", leaderModel)
@@ -158,6 +160,7 @@ func updateTeamCmd() *cobra.Command {
 	}
 
 	cmd.Flags().StringVar(&name, "name", "", "Team name (required)")
+	cmd.Flags().StringVar(&teamName, "team-name", "", "Runtime/storage team name")
 	cmd.Flags().StringVar(&description, "description", "", "Team description")
 	cmd.Flags().StringVar(&leaderModel, "leader-model", "", "Leader LLM model")
 	cmd.Flags().StringVar(&leaderHeartbeatEvery, "leader-heartbeat-every", "", "Leader heartbeat interval (e.g. 30m)")

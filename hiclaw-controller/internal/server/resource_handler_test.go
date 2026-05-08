@@ -277,6 +277,7 @@ func TestCreateTeamPersistsRuntimeWorkerNames(t *testing.T) {
 
 	body := []byte(`{
 		"name":"alpha-team",
+		"teamName":"alpha",
 		"leader":{"name":"lead-cr","workerName":"lead-runtime"},
 		"workers":[{"name":"dev-cr","workerName":"dev-runtime"}]
 	}`)
@@ -293,6 +294,9 @@ func TestCreateTeamPersistsRuntimeWorkerNames(t *testing.T) {
 	}
 	if got := stored.Spec.Leader.WorkerName; got != "lead-runtime" {
 		t.Fatalf("leader.workerName = %q, want lead-runtime", got)
+	}
+	if got := stored.Spec.TeamName; got != "alpha" {
+		t.Fatalf("teamName = %q, want alpha", got)
 	}
 	if got := stored.Spec.Workers[0].WorkerName; got != "dev-runtime" {
 		t.Fatalf("workers[0].workerName = %q, want dev-runtime", got)

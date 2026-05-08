@@ -136,11 +136,12 @@ func (r *TeamReconciler) reconcileTeamNormal(ctx context.Context, t *v1beta1.Tea
 	if err := validateTeamRuntimeNames(t); err != nil {
 		return r.failTeam(ctx, t, patchBase, err.Error())
 	}
+	teamRuntimeName := t.Spec.EffectiveTeamName(t.Name)
 	leaderRuntimeName := t.Spec.Leader.EffectiveWorkerName()
 
 	// --- Step 1: Team-level infrastructure ---
 	rooms, err := r.Provisioner.ProvisionTeamRooms(ctx, service.TeamRoomRequest{
-		TeamName:    t.Name,
+		TeamName:    teamRuntimeName,
 		LeaderName:  leaderRuntimeName,
 		WorkerNames: workerRuntimeNames,
 		AdminSpec:   t.Spec.Admin,
@@ -151,8 +152,8 @@ func (r *TeamReconciler) reconcileTeamNormal(ctx context.Context, t *v1beta1.Tea
 	t.Status.TeamRoomID = rooms.TeamRoomID
 	t.Status.LeaderDMRoomID = rooms.LeaderDMRoomID
 
-	if err := r.Deployer.EnsureTeamStorage(ctx, t.Name); err != nil {
-		logger.Error(err, "team shared storage init failed (non-fatal)", "name", t.Name)
+	if err := r.Deployer.EnsureTeamStorage(ctx, teamRuntimeName); err != nil {
+		logger.Error(err, "team shared storage init failed (non-fatal)", "name", t.Name, "teamName", teamRuntimeName)
 	}
 
 	// --- Step 2: Write local inline configs (shared FS with agents) ---
@@ -198,7 +199,7 @@ func (r *TeamReconciler) reconcileTeamNormal(ctx context.Context, t *v1beta1.Tea
 			RuntimeName:         runtimeName,
 			Namespace:           t.Namespace,
 			Role:                role,
-			TeamName:            t.Name,
+			TeamName:            teamRuntimeName,
 			TeamLeaderName:      leaderRuntimeName,
 			ExistingRoomID:      ms.RoomID,
 			CurrentExposedPorts: ms.ExposedPorts,
@@ -221,7 +222,7 @@ func (r *TeamReconciler) reconcileTeamNormal(ctx context.Context, t *v1beta1.Tea
 	if err := r.Deployer.InjectCoordinationContext(ctx, service.CoordinationDeployRequest{
 		LeaderName:        leaderRuntimeName,
 		Role:              RoleTeamLeader.String(),
-		TeamName:          t.Name,
+		TeamName:          teamRuntimeName,
 		TeamRoomID:        rooms.TeamRoomID,
 		LeaderDMRoomID:    rooms.LeaderDMRoomID,
 		HeartbeatEvery:    leaderHeartbeatEvery(t),
@@ -280,7 +281,7 @@ func (r *TeamReconciler) reconcileTeamNormal(ctx context.Context, t *v1beta1.Tea
 			logger.Error(err, "failed to update Manager groupAllowFrom for team leader (non-fatal)")
 		}
 		if err := r.Legacy.UpdateTeamsRegistry(service.TeamRegistryEntry{
-			Name:           t.Name,
+			Name:           teamRuntimeName,
 			Leader:         t.Spec.Leader.Name,
 			Workers:        workerNames,
 			TeamRoomID:     rooms.TeamRoomID,
@@ -438,6 +439,7 @@ func (r *TeamReconciler) writeInlineConfigs(t *v1beta1.Team) error {
 func (r *TeamReconciler) handleDelete(ctx context.Context, t *v1beta1.Team) error {
 	logger := log.FromContext(ctx)
 	logger.Info("deleting team", "name", t.Name)
+	teamRuntimeName := t.Spec.EffectiveTeamName(t.Name)
 
 	deps := MemberDeps{
 		Provisioner:    r.Provisioner,
@@ -478,7 +480,7 @@ func (r *TeamReconciler) handleDelete(ctx context.Context, t *v1beta1.Team) erro
 			RuntimeName:         name,
 			Namespace:           t.Namespace,
 			Role:                role,
-			TeamName:            t.Name,
+			TeamName:            teamRuntimeName,
 			TeamLeaderName:      t.Spec.Leader.EffectiveWorkerName(),
 			ExistingRoomID:      existingRoomID,
 			CurrentExposedPorts: exposed,
@@ -516,7 +518,7 @@ func (r *TeamReconciler) handleDelete(ctx context.Context, t *v1beta1.Team) erro
 				logger.Error(err, "failed to revoke Manager groupAllowFrom (non-fatal)")
 			}
 		}
-		if err := r.Legacy.RemoveFromTeamsRegistry(ctx, t.Name); err != nil {
+		if err := r.Legacy.RemoveFromTeamsRegistry(ctx, teamRuntimeName); err != nil {
 			logger.Error(err, "failed to remove team from registry (non-fatal)")
 		}
 	}
@@ -526,7 +528,7 @@ func (r *TeamReconciler) handleDelete(ctx context.Context, t *v1beta1.Team) erro
 	// leave on their own schedule), but a fresh Team CR with the same name
 	// must get a clean alias so CreateRoom resolves a new room instead of
 	// reattaching to the old one.
-	if err := r.Provisioner.DeleteTeamRoomAliases(ctx, t.Name, t.Spec.Leader.EffectiveWorkerName()); err != nil {
+	if err := r.Provisioner.DeleteTeamRoomAliases(ctx, teamRuntimeName, t.Spec.Leader.EffectiveWorkerName()); err != nil {
 		logger.Error(err, "failed to delete team room aliases (non-fatal)")
 	}
 
@@ -579,7 +581,7 @@ func (r *TeamReconciler) reconcileLegacyMember(ctx context.Context, t *v1beta1.T
 		Deployment:   "local",
 		Skills:       m.Spec.Skills,
 		Role:         m.Role.String(),
-		TeamID:       nilIfEmpty(t.Name),
+		TeamID:       nilIfEmpty(t.Spec.EffectiveTeamName(t.Name)),
 		Image:        nilIfEmpty(m.Spec.Image),
 	}
 	if err := r.Legacy.UpdateWorkersRegistry(entry); err != nil {
@@ -687,6 +689,7 @@ func observedMemberNames(s *v1beta1.TeamStatus) []string {
 // is intentionally excluded so adding/removing a peer does NOT recreate the
 // other members — only the newly added member gets a fresh container.
 func buildDesiredMembers(t *v1beta1.Team, controllerName string) []MemberContext {
+	teamRuntimeName := t.Spec.EffectiveTeamName(t.Name)
 	isObserved := func(name string) bool {
 		if ms := t.Status.MemberByName(name); ms != nil {
 			return ms.Observed
@@ -737,7 +740,7 @@ func buildDesiredMembers(t *v1beta1.Team, controllerName string) []MemberContext
 		Generation:        t.Generation,
 		SpecChanged:       memberSpecChanged(t, RoleTeamLeader, t.Spec.Leader.Name),
 		IsUpdate:          leaderObserved,
-		TeamName:          t.Name,
+		TeamName:          teamRuntimeName,
 		TeamLeaderName:    "",
 		TeamAdminMatrixID: teamAdminMatrixID(t),
 		PodLabels:         memberLabels(RoleTeamLeader, t.Spec.Leader.Labels),
@@ -757,7 +760,7 @@ func buildDesiredMembers(t *v1beta1.Team, controllerName string) []MemberContext
 			Generation:        t.Generation,
 			SpecChanged:       memberSpecChanged(t, RoleTeamWorker, w.Name),
 			IsUpdate:          workerObserved,
-			TeamName:          t.Name,
+			TeamName:          teamRuntimeName,
 			TeamLeaderName:    t.Spec.Leader.EffectiveWorkerName(),
 			TeamAdminMatrixID: teamAdminMatrixID(t),
 			PodLabels:         memberLabels(RoleTeamWorker, w.Labels),

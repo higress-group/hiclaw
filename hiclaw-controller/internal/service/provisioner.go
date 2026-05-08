@@ -642,7 +642,6 @@ func (p *Provisioner) EnsureWorkerGatewayAuth(ctx context.Context, workerName, g
 	return nil
 }
 
-
 // ProvisionTeamRooms creates (or resolves) the team room and leader DM room
 // and reconciles their Matrix memberships against the desired member set.
 // Idempotency is guaranteed by the Matrix alias: repeated calls always land
@@ -1004,6 +1003,7 @@ type ManagerWelcomeRequest struct {
 //   - (true, nil)  — message was successfully delivered.
 //   - (false, nil) — manager not yet joined; caller should requeue.
 //   - (false, err) — unrecoverable error (admin login / Matrix API).
+//
 // llmAuthProbePromptTemplate renders the chat-completions body the
 // readiness probe sends. It uses the same model the Manager Agent will
 // use for its real first reply, and asks for a one-word answer so the

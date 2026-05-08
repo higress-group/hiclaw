@@ -85,6 +85,7 @@ type WorkerListResponse struct {
 
 type CreateTeamRequest struct {
 	Name          string                     `json:"name"`
+	TeamName      string                     `json:"teamName,omitempty"`
 	Description   string                     `json:"description,omitempty"`
 	Admin         *v1beta1.TeamAdminSpec     `json:"admin,omitempty"`
 	Leader        TeamLeaderRequest          `json:"leader"`
@@ -131,6 +132,7 @@ type TeamWorkerRequest struct {
 }
 
 type UpdateTeamRequest struct {
+	TeamName      string                     `json:"teamName,omitempty"`
 	Description   string                     `json:"description,omitempty"`
 	Admin         *v1beta1.TeamAdminSpec     `json:"admin,omitempty"`
 	Leader        *TeamLeaderRequest         `json:"leader,omitempty"`
@@ -141,6 +143,7 @@ type UpdateTeamRequest struct {
 
 type TeamResponse struct {
 	Name               string                           `json:"name"`
+	TeamName           string                           `json:"teamName,omitempty"`
 	Phase              string                           `json:"phase"`
 	Description        string                           `json:"description,omitempty"`
 	LeaderName         string                           `json:"leaderName"`

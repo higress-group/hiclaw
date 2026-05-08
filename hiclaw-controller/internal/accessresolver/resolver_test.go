@@ -501,6 +501,30 @@ func TestResolveTeamLeader_DefaultEntriesUseRuntimeWorkerName(t *testing.T) {
 	}
 }
 
+func TestResolveTeamLeader_DefaultEntriesUseRuntimeTeamName(t *testing.T) {
+	team := newAlphaTeam()
+	team.Name = "magic-cn-plt4rw3f909-team001"
+	team.Spec.TeamName = "team001"
+	c := newFakeClient(t, team)
+
+	r := New(c, testNS, "hiclaw-test", "", auth.DefaultResourcePrefix)
+	_, entries, err := r.ResolveForCaller(context.Background(), &auth.CallerIdentity{
+		Role:     auth.RoleTeamLeader,
+		Username: "lead",
+		Team:     "magic-cn-plt4rw3f909-team001",
+	})
+	if err != nil {
+		t.Fatalf("resolve: %v", err)
+	}
+	got := entries[0].Scope.Prefixes
+	if !hasPrefix(got, "teams/team001/*") {
+		t.Fatalf("runtime teamName prefix not found in %+v", got)
+	}
+	if hasPrefix(got, "teams/magic-cn-plt4rw3f909-team001/*") {
+		t.Fatalf("CR team name leaked into OSS prefixes: %+v", got)
+	}
+}
+
 func TestResolveTeamWorker_DefaultEntries(t *testing.T) {
 	team := newAlphaTeam()
 	c := newFakeClient(t, team)

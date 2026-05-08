@@ -223,6 +223,7 @@ func renderWorkerStatusSummary(resp *workerResp) string {
 func createTeamCmd() *cobra.Command {
 	var (
 		name                 string
+		teamName             string
 		leaderName           string
 		leaderModel          string
 		leaderHeartbeatEvery string
@@ -274,6 +275,7 @@ func createTeamCmd() *cobra.Command {
 				"leader":  leader,
 				"workers": workerList,
 			}
+			setIfNotEmpty(req, "teamName", teamName)
 			setIfNotEmpty(req, "description", description)
 
 			client := NewAPIClient()
@@ -287,6 +289,7 @@ func createTeamCmd() *cobra.Command {
 	}
 
 	cmd.Flags().StringVar(&name, "name", "", "Team name (required)")
+	cmd.Flags().StringVar(&teamName, "team-name", "", "Runtime/storage team name (defaults to --name)")
 	cmd.Flags().StringVar(&leaderName, "leader-name", "", "Leader worker name (required)")
 	cmd.Flags().StringVar(&leaderModel, "leader-model", "", "Leader LLM model")
 	cmd.Flags().StringVar(&leaderHeartbeatEvery, "leader-heartbeat-every", "", "Leader heartbeat interval (e.g. 30m)")

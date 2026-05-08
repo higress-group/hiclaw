@@ -217,11 +217,19 @@ type Team struct {
 
 type TeamSpec struct {
 	Description   string             `json:"description,omitempty"`
+	TeamName      string             `json:"teamName,omitempty"`
 	Admin         *TeamAdminSpec     `json:"admin,omitempty"`
 	Leader        LeaderSpec         `json:"leader"`
 	Workers       []TeamWorkerSpec   `json:"workers,omitempty"`
 	PeerMentions  *bool              `json:"peerMentions,omitempty"`  // default true
 	ChannelPolicy *ChannelPolicySpec `json:"channelPolicy,omitempty"` // team-wide overrides
+}
+
+func (s TeamSpec) EffectiveTeamName(metadataName string) string {
+	if s.TeamName != "" {
+		return s.TeamName
+	}
+	return metadataName
 }
 
 type TeamAdminSpec struct {

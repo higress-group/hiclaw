@@ -116,6 +116,7 @@ func TestTeamWorkerSpecToWorkerSpec_RuntimePassthrough(t *testing.T) {
 func TestBuildDesiredMembers_RuntimeWorkerNamesDriveMatrixPolicy(t *testing.T) {
 	team := &v1beta1.Team{}
 	team.Name = "alpha"
+	team.Spec.TeamName = "runtime-alpha"
 	team.Spec.Leader = v1beta1.LeaderSpec{
 		Name:       "alpha-worker-lead",
 		WorkerName: "lead",
@@ -144,6 +145,11 @@ func TestBuildDesiredMembers_RuntimeWorkerNamesDriveMatrixPolicy(t *testing.T) {
 	}
 	if got := byName["alpha-worker-dev"].TeamLeaderName; got != "lead" {
 		t.Fatalf("worker TeamLeaderName=%q, want lead", got)
+	}
+	for _, m := range members {
+		if got := m.TeamName; got != "runtime-alpha" {
+			t.Fatalf("member %s TeamName=%q, want runtime-alpha", m.Name, got)
+		}
 	}
 
 	leaderAllow := byName["alpha-worker-lead"].Spec.ChannelPolicy.GroupAllowExtra

@@ -149,7 +149,11 @@ func (r *Resolver) resolveTeamMember(ctx context.Context, name, teamName string)
 		crEntries = DefaultEntriesForTeamMember()
 	}
 
-	tmpl := templateCtx{kind: kind, name: runtimeName, namespace: r.namespace, team: teamName}
+	runtimeTeamName := teamName
+	if team.Name != "" {
+		runtimeTeamName = team.Spec.EffectiveTeamName(team.Name)
+	}
+	tmpl := templateCtx{kind: kind, name: runtimeName, namespace: r.namespace, team: runtimeTeamName}
 	resolved, err := r.resolveEntries(crEntries, tmpl)
 	if err != nil {
 		return "", nil, fmt.Errorf("team member %q (team %q): %w", name, teamName, err)
