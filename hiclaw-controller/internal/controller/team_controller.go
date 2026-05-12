@@ -830,6 +830,11 @@ func hashMemberSourceSpec(t *v1beta1.Team, role MemberRole, name string) string 
 
 // leaderWorkerSpec projects a LeaderSpec into WorkerSpec with merged channel
 // policy (team leader can @ all members + admin).
+// Note: Runtime is hardcoded to "copaw" intentionally because:
+//   1. LeaderSpec has no runtime field defined
+//   2. The team-leader-agent/ template only ships a CoPaw build
+// To support other runtimes, runtime field needs to be added to LeaderSpec
+// and corresponding leader templates need to be shipped for hermes/openclaw.
 func leaderWorkerSpec(t *v1beta1.Team) v1beta1.WorkerSpec {
 	policy := mergeChannelPolicy(t.Spec.ChannelPolicy, t.Spec.Leader.ChannelPolicy)
 	workerNames := make([]string, 0, len(t.Spec.Workers))
