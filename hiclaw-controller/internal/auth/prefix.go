@@ -78,16 +78,15 @@ func (p ResourcePrefix) ManagerAppLabel() string {
 	return p.effective() + "manager"
 }
 
-// WorkerSessionName returns the STS session name for a worker, e.g.
-// "hiclaw-worker-alice". This value is forwarded to cloud STS providers
-// (Alibaba Cloud AssumeRole RoleSessionName) — changing the prefix in a
-// live deployment requires matching RAM policy / audit-log updates.
+// WorkerSessionName returns the controller log label for a worker STS
+// request, e.g. "hiclaw-worker-alice". Cloud STS RoleSessionName uses a
+// generated UUID to stay below provider length limits.
 func (p ResourcePrefix) WorkerSessionName(name string) string {
 	return p.WorkerNamePrefix() + name
 }
 
-// ManagerSessionName returns the STS session name for a manager, e.g.
-// "hiclaw-manager-default".
+// ManagerSessionName returns the controller log label for a manager STS
+// request, e.g. "hiclaw-manager-default".
 func (p ResourcePrefix) ManagerSessionName(name string) string {
 	return p.ManagerNamePrefix() + name
 }

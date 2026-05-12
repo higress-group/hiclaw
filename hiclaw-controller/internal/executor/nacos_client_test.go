@@ -8,6 +8,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/google/uuid"
+
 	"github.com/hiclaw/hiclaw-controller/internal/credprovider"
 )
 
@@ -113,8 +115,11 @@ func TestNewNacosAIClient_STS_IssueUsesAIRegistryForNamespace(t *testing.T) {
 		t.Fatalf("NewNacosAIClient: %v", err)
 	}
 
-	if rec.last.SessionName != "hiclaw-nacos-my-nacos-ns" {
-		t.Errorf("SessionName = %q, want hiclaw-nacos-my-nacos-ns", rec.last.SessionName)
+	if _, err := uuid.Parse(rec.last.SessionName); err != nil {
+		t.Errorf("SessionName = %q, want UUID: %v", rec.last.SessionName, err)
+	}
+	if len(rec.last.SessionName) != 36 {
+		t.Errorf("SessionName length = %d, want 36", len(rec.last.SessionName))
 	}
 	if len(rec.last.Entries) != 1 {
 		t.Fatalf("Entries: %+v", rec.last.Entries)

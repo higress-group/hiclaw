@@ -50,8 +50,9 @@ func New(c client.Client, namespace, defaultBucket, defaultGatewayID string, pre
 // logical refs, and returns a list of fully-resolved entries ready
 // for credprovider.IssueRequest.
 //
-// The returned sessionName is a canonical identifier the caller can
-// forward to Alibaba Cloud AssumeRole as RoleSessionName.
+// The returned sessionName is a canonical caller label for controller
+// logs. The STS sidecar request uses a generated UUID as RoleSessionName
+// to stay below cloud-provider length limits.
 func (r *Resolver) ResolveForCaller(ctx context.Context, caller *auth.CallerIdentity) (sessionName string, entries []credprovider.AccessEntry, err error) {
 	if caller == nil {
 		return "", nil, errors.New("accessresolver: caller is nil")

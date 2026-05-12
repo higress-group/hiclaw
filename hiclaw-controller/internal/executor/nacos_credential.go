@@ -15,6 +15,9 @@ import (
 	"sync"
 	"time"
 
+	"github.com/google/uuid"
+	"sigs.k8s.io/controller-runtime/pkg/log"
+
 	"github.com/hiclaw/hiclaw-controller/internal/credprovider"
 )
 
@@ -160,15 +163,17 @@ func (c *nacosUserPassCredential) applyLoginMap(data map[string]interface{}) boo
 // ── nacosSTSCredential ────────────────────────────────────────────────────
 
 type nacosSTSCredential struct {
-	namespace string
-	tm        *credprovider.TokenManager
-	mu        sync.RWMutex
-	cached    *credprovider.IssueResponse
+	namespace   string
+	sessionName string
+	tm          *credprovider.TokenManager
+	mu          sync.RWMutex
+	cached      *credprovider.IssueResponse
 }
 
 func newNacosSTSCredential(namespace string, client credprovider.Client) *nacosSTSCredential {
+	sessionName := uuid.NewString()
 	tm := credprovider.NewTokenManager(client, credprovider.IssueRequest{
-		SessionName: "hiclaw-nacos-" + namespace,
+		SessionName: sessionName,
 		Entries: []credprovider.AccessEntry{
 			{
 				Service:     credprovider.ServiceAIRegistry,
@@ -180,10 +185,15 @@ func newNacosSTSCredential(namespace string, client credprovider.Client) *nacosS
 			},
 		},
 	})
-	return &nacosSTSCredential{namespace: namespace, tm: tm}
+	return &nacosSTSCredential{namespace: namespace, sessionName: sessionName, tm: tm}
 }
 
 func (c *nacosSTSCredential) Refresh(ctx context.Context) error {
+	log.FromContext(ctx).Info("refreshing Nacos STS token",
+		"sessionName", c.sessionName,
+		"callerSessionName", "hiclaw-nacos-"+c.namespace,
+		"namespace", c.namespace,
+	)
 	tok, err := c.tm.Token(ctx)
 	if err != nil {
 		return err

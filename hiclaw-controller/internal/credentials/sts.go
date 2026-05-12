@@ -4,6 +4,9 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/google/uuid"
+	"sigs.k8s.io/controller-runtime/pkg/log"
+
 	"github.com/hiclaw/hiclaw-controller/internal/accessresolver"
 	"github.com/hiclaw/hiclaw-controller/internal/auth"
 	"github.com/hiclaw/hiclaw-controller/internal/credprovider"
@@ -66,10 +69,19 @@ func (s *STSService) IssueForCaller(ctx context.Context, caller *auth.CallerIden
 	if !s.Configured() {
 		return nil, fmt.Errorf("STS service not configured: no credential provider URL set")
 	}
-	sessionName, entries, err := s.resolver.ResolveForCaller(ctx, caller)
+	callerSessionName, entries, err := s.resolver.ResolveForCaller(ctx, caller)
 	if err != nil {
 		return nil, fmt.Errorf("resolve access entries: %w", err)
 	}
+	sessionName := uuid.NewString()
+	log.FromContext(ctx).Info("issuing STS token",
+		"sessionName", sessionName,
+		"callerSessionName", callerSessionName,
+		"callerRole", caller.Role,
+		"callerUsername", caller.Username,
+		"callerTeam", caller.Team,
+		"entries", len(entries),
+	)
 	resp, err := s.provider.Issue(ctx, credprovider.IssueRequest{
 		SessionName: sessionName,
 		Entries:     entries,
