@@ -335,7 +335,7 @@ func (a *App) initFieldIndexers(ctx context.Context) error {
 	return nil
 }
 
-func (a *App) initAuth(_ context.Context) error {
+func (a *App) initAuth(ctx context.Context) error {
 	logger := ctrl.Log.WithName("app")
 
 	if a.restCfg != nil {
@@ -345,6 +345,7 @@ func (a *App) initAuth(_ context.Context) error {
 			return fmt.Errorf("create kubernetes client: %w", err)
 		}
 		authenticator := authpkg.NewTokenReviewAuthenticator(a.k8sClient, a.cfg.AuthAudience, authpkg.ResourcePrefix(a.cfg.ResourcePrefix))
+		go authenticator.StartCleanup(ctx)
 		enricher := authpkg.NewCREnricher(a.mgr.GetClient(), a.namespace)
 		authorizer := authpkg.NewAuthorizer()
 		a.authMw = authpkg.NewMiddleware(authenticator, enricher, authorizer, a.mgr.GetClient(), a.namespace)
