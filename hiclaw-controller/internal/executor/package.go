@@ -3,8 +3,10 @@ package executor
 import (
 	"context"
 	"crypto/sha256"
+	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"net/http"
 	"net/url"
 	"os"
@@ -13,6 +15,7 @@ import (
 	"strings"
 
 	"github.com/hiclaw/hiclaw-controller/internal/credprovider"
+	"github.com/hiclaw/hiclaw-controller/internal/oss"
 )
 
 // PackageResolver handles file://, http(s)://, and nacos:// package URIs.
@@ -131,7 +134,7 @@ func (p *PackageResolver) ResolveAndExtract(ctx context.Context, uri, name strin
 // To avoid a race with the background MinIO→local sync (which could overwrite local
 // files between the local write and the mc mirror push), we push to MinIO FIRST from
 // the extracted directory (immune to background sync), then copy to the local agent dir.
-func (p *PackageResolver) DeployToMinIO(ctx context.Context, extractedDir, workerName string, excludeMemory bool) error {
+func (p *PackageResolver) DeployToMinIO(ctx context.Context, extractedDir, workerName string, excludeMemory bool, storage oss.StorageClient) error {
 	agentDir := fmt.Sprintf("/root/hiclaw-fs/agents/%s", workerName)
 	if err := os.MkdirAll(agentDir, 0755); err != nil {
 		return fmt.Errorf("create agent dir: %w", err)
@@ -142,6 +145,7 @@ func (p *PackageResolver) DeployToMinIO(ctx context.Context, extractedDir, worke
 		storagePrefix = "hiclaw/hiclaw-storage"
 	}
 	minioBase := fmt.Sprintf("%s/agents/%s", storagePrefix, workerName)
+	agentPrefix := fmt.Sprintf("agents/%s", workerName)
 
 	// Collect transformed config files and subdirectory names from the package.
 	type fileEntry struct {
@@ -203,8 +207,35 @@ func (p *PackageResolver) DeployToMinIO(ctx context.Context, extractedDir, worke
 		if excludeMemory && (f.name == "SOUL.md" || f.name == "AGENTS.md") {
 			continue
 		}
-		if err := mcPut(ctx, minioBase+"/"+f.name, f.data); err != nil {
+		useStorageClient := storage != nil
+		target := agentPrefix + "/" + f.name
+		if !useStorageClient {
+			target = minioBase + "/" + f.name
+		}
+		if _, err := putPackageObjectSeedOnly(ctx, storage, useStorageClient, target, f.data); err != nil {
 			return fmt.Errorf("push %s to MinIO: %w", f.name, err)
+		}
+	}
+	if len(configSubdirs) > 0 && storage != nil {
+		for _, dirName := range configSubdirs {
+			srcDir := filepath.Join(configDir, dirName)
+			if err := filepath.WalkDir(srcDir, func(path string, entry fs.DirEntry, walkErr error) error {
+				if walkErr != nil {
+					return walkErr
+				}
+				if entry.IsDir() || entry.Type()&os.ModeSymlink != 0 {
+					return nil
+				}
+				rel, err := filepath.Rel(configDir, path)
+				if err != nil {
+					return err
+				}
+				target := agentPrefix + "/" + filepath.ToSlash(rel)
+				_, err = putPackageFileSeedOnly(ctx, storage, path, target)
+				return err
+			}); err != nil {
+				return fmt.Errorf("seed config directory %s to storage: %w", dirName, err)
+			}
 		}
 	}
 
@@ -276,6 +307,27 @@ func mcPut(ctx context.Context, minioPath string, data []byte) error {
 		return fmt.Errorf("mc cp to %s: %s: %w", minioPath, string(out), err)
 	}
 	return nil
+}
+
+func putPackageObjectSeedOnly(ctx context.Context, storage oss.StorageClient, useStorageClient bool, target string, data []byte) (bool, error) {
+	if !useStorageClient {
+		return true, mcPut(ctx, target, data)
+	}
+	if err := storage.Stat(ctx, target); err == nil {
+		return false, nil
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return false, err
+	}
+	return true, storage.PutObject(ctx, target, data)
+}
+
+func putPackageFileSeedOnly(ctx context.Context, storage oss.StorageClient, localPath, target string) (bool, error) {
+	if err := storage.Stat(ctx, target); err == nil {
+		return false, nil
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return false, err
+	}
+	return true, storage.PutFile(ctx, localPath, target)
 }
 
 // wrapWithBuiltinMarkers wraps user AGENTS.md content with hiclaw-builtin markers.
@@ -540,7 +592,9 @@ func (p *PackageResolver) resolveNacos(ctx context.Context, u *url.URL) (string,
 
 // ValidateNacosURIOptions configures Nacos preflight so it matches runtime
 // PackageResolver behavior. The auth type is read from the nacos:// URI query:
-//   ?authType=nacos|sts-hiclaw|none
+//
+//	?authType=nacos|sts-hiclaw|none
+//
 // or omitted for the same auto-detection as NewNacosAIClient.
 type ValidateNacosURIOptions struct {
 	// CredClient is required when the URI includes authType=sts-hiclaw; it

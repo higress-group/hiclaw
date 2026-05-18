@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io/fs"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -119,7 +120,7 @@ func (d *Deployer) DeployPackage(ctx context.Context, name, uri string, isUpdate
 		return nil
 	}
 
-	if err := d.packages.DeployToMinIO(ctx, extractedDir, name, isUpdate); err != nil {
+	if err := d.packages.DeployToMinIO(ctx, extractedDir, name, isUpdate, d.oss); err != nil {
 		return fmt.Errorf("package deploy failed: %w", err)
 	}
 
@@ -148,9 +149,10 @@ func (d *Deployer) DeployWorkerConfig(ctx context.Context, req WorkerDeployReque
 	agentPrefix := fmt.Sprintf("agents/%s", req.Name)
 	localAgentDir := fmt.Sprintf("%s/%s", d.agentFSDir, req.Name)
 
-	// --- Sync local agent files to storage FIRST (base layer) ---
-	// Mirror provides the base: package files, memory, custom skills, etc.
-	// All subsequent PutObject calls overwrite on top with authoritative content.
+	// --- Seed local agent files to storage FIRST (base layer) ---
+	// Local/package files provide defaults only. They must not overwrite
+	// runtime-mutated OSS state during reconcile; authoritative files are
+	// written explicitly below via the overwrite whitelist.
 	//
 	// Always exclude SOUL.md, AGENTS.md, HEARTBEAT.md from the mirror — each
 	// has a dedicated authoritative writer below (PutObject for SOUL.md,
@@ -165,8 +167,8 @@ func (d *Deployer) DeployWorkerConfig(ctx context.Context, req WorkerDeployReque
 		return fmt.Errorf("create agent dir: %w", err)
 	}
 	logger.Info("syncing agent files to storage", "name", req.Name)
-	mirrorExcludes := []string{"SOUL.md", "AGENTS.md", "HEARTBEAT.md"}
-	if err := d.oss.Mirror(ctx, localAgentDir+"/", agentPrefix+"/", oss.MirrorOptions{Overwrite: true, Exclude: mirrorExcludes}); err != nil {
+	seedExcludes := map[string]struct{}{"SOUL.md": {}, "AGENTS.md": {}, "HEARTBEAT.md": {}}
+	if err := d.seedLocalAgentFiles(ctx, localAgentDir, agentPrefix, seedExcludes); err != nil {
 		logger.Error(err, "agent file sync failed (non-fatal)")
 	}
 
@@ -355,6 +357,61 @@ func (d *Deployer) PushOnDemandSkills(ctx context.Context, workerName string, sk
 	}
 	_, err := d.executor.RunSimple(ctx, scriptPath, "--worker", workerName, "--no-notify")
 	return err
+}
+
+func (d *Deployer) seedLocalAgentFiles(ctx context.Context, localAgentDir, agentPrefix string, excludedTopLevel map[string]struct{}) error {
+	info, err := os.Stat(localAgentDir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return err
+	}
+	if !info.IsDir() {
+		return nil
+	}
+
+	logger := log.FromContext(ctx)
+	var seeded []string
+	err = filepath.WalkDir(localAgentDir, func(path string, entry fs.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		if entry.IsDir() {
+			return nil
+		}
+		if entry.Type()&os.ModeSymlink != 0 {
+			return nil
+		}
+
+		rel, err := filepath.Rel(localAgentDir, path)
+		if err != nil {
+			return err
+		}
+		rel = filepath.ToSlash(rel)
+		if _, excluded := excludedTopLevel[rel]; excluded {
+			return nil
+		}
+
+		key := agentPrefix + "/" + rel
+		if _, err := d.oss.GetObject(ctx, key); err == nil {
+			return nil
+		} else if !os.IsNotExist(err) {
+			return err
+		}
+		if err := d.oss.PutFile(ctx, path, key); err != nil {
+			return err
+		}
+		seeded = append(seeded, rel)
+		return nil
+	})
+	if err != nil {
+		return err
+	}
+	if len(seeded) > 0 {
+		logger.Info("agent seed-only files pushed to storage", "target", agentPrefix, "files", seeded)
+	}
+	return nil
 }
 
 type nacosClientKey struct {

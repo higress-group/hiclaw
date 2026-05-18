@@ -12,6 +12,7 @@ import (
 	"testing"
 
 	"github.com/hiclaw/hiclaw-controller/internal/credprovider"
+	"github.com/hiclaw/hiclaw-controller/internal/oss/ossfake"
 )
 
 func TestWriteInlineConfigs_AllFields_OpenClaw(t *testing.T) {
@@ -622,6 +623,45 @@ func TestValidateNacosURI_STSHiclaw_SucceedsWithCredClient(t *testing.T) {
 	})
 	if err != nil {
 		t.Fatalf("expected success, got: %v", err)
+	}
+}
+
+func TestPutPackageObjectSeedOnlyPreservesExistingStorageObject(t *testing.T) {
+	ctx := context.Background()
+	store := ossfake.NewMemory()
+	if err := store.PutObject(ctx, "agents/alice/config/credagent.json", []byte("runtime")); err != nil {
+		t.Fatal(err)
+	}
+
+	seeded, err := putPackageObjectSeedOnly(ctx, store, true, "agents/alice/config/credagent.json", []byte("template"))
+	if err != nil {
+		t.Fatalf("putPackageObjectSeedOnly failed: %v", err)
+	}
+	if seeded {
+		t.Fatalf("existing object should not be seeded")
+	}
+
+	got, err := store.GetObject(ctx, "agents/alice/config/credagent.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(got) != "runtime" {
+		t.Fatalf("seed-only object overwritten: %q", got)
+	}
+
+	seeded, err = putPackageObjectSeedOnly(ctx, store, true, "agents/alice/config/new.json", []byte("template"))
+	if err != nil {
+		t.Fatalf("putPackageObjectSeedOnly new object failed: %v", err)
+	}
+	if !seeded {
+		t.Fatalf("new object should be seeded")
+	}
+	got, err = store.GetObject(ctx, "agents/alice/config/new.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(got) != "template" {
+		t.Fatalf("new seed object = %q", got)
 	}
 }
 
