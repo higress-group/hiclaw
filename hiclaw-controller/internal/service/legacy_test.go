@@ -97,3 +97,65 @@ func TestPutManagerConfig_PreservesUserPluginEntries(t *testing.T) {
 		t.Errorf("groupAllowFrom merge broken: got %v", allow)
 	}
 }
+
+func TestPutManagerConfig_NoExistingOSSObject(t *testing.T) {
+	fake := ossfake.NewMemory()
+	lc := NewLegacyCompat(LegacyConfig{
+		OSS:          fake,
+		MatrixDomain: "hiclaw.local",
+		ManagerName:  "manager",
+	})
+
+	generated := []byte(`{"plugins":{"entries":{"memory-core":{"enabled":true}}}}`)
+	if err := lc.PutManagerConfig(generated); err != nil {
+		t.Fatalf("PutManagerConfig: %v", err)
+	}
+
+	out, err := fake.GetObject(context.Background(), "agents/manager/openclaw.json")
+	if err != nil {
+		t.Fatalf("GetObject: %v", err)
+	}
+	// First write: no merge happens, generated config is stored verbatim.
+	var got map[string]interface{}
+	if err := json.Unmarshal(out, &got); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	plugins := got["plugins"].(map[string]interface{})
+	entries := plugins["entries"].(map[string]interface{})
+	if _, ok := entries["memory-core"]; !ok {
+		t.Errorf("memory-core entry missing in first write: %v", entries)
+	}
+}
+
+func TestPutManagerConfig_MalformedExistingJSON_FallsBackToGenerated(t *testing.T) {
+	fake := ossfake.NewMemory()
+	ctx := context.Background()
+	if err := fake.PutObject(ctx, "agents/manager/openclaw.json", []byte("{not json")); err != nil {
+		t.Fatalf("seed OSS: %v", err)
+	}
+
+	lc := NewLegacyCompat(LegacyConfig{
+		OSS:          fake,
+		MatrixDomain: "hiclaw.local",
+		ManagerName:  "manager",
+	})
+
+	generated := []byte(`{"plugins":{"entries":{"memory-core":{"enabled":true}}}}`)
+	if err := lc.PutManagerConfig(generated); err != nil {
+		t.Fatalf("PutManagerConfig should swallow malformed existing JSON: %v", err)
+	}
+
+	out, err := fake.GetObject(ctx, "agents/manager/openclaw.json")
+	if err != nil {
+		t.Fatalf("GetObject: %v", err)
+	}
+	var got map[string]interface{}
+	if err := json.Unmarshal(out, &got); err != nil {
+		t.Fatalf("written bytes should be valid JSON: %v", err)
+	}
+	// Generated config wins when existing JSON is corrupt.
+	plugins := got["plugins"].(map[string]interface{})
+	if _, ok := plugins["entries"].(map[string]interface{})["memory-core"]; !ok {
+		t.Errorf("expected generated memory-core entry, got: %v", plugins)
+	}
+}
