@@ -9,7 +9,9 @@ messages actually wake up receiving OpenClaw agents.
 """
 
 import asyncio
+from types import SimpleNamespace
 
+from matrix import channel as matrix_channel
 from matrix.channel import MatrixChannel
 
 
@@ -20,6 +22,10 @@ class _TypingClient:
 
     async def room_typing(self, room_id, *, typing_state, timeout):
         self.calls.append((room_id, typing_state, timeout))
+
+
+async def _noop_typing(*_args, **_kwargs):
+    return None
 
 
 def _make_channel(user_id: str = "@bot:hs.local") -> MatrixChannel:
@@ -249,3 +255,131 @@ def test_cancelled_consume_error_stops_typing_without_matrix_noise():
 
     assert client.calls[-1][0] == "!room:hs.local"
     assert client.calls[-1][1] is False
+
+
+class _FakeCommandRegistry:
+    def is_control_command(self, text):
+        return text.strip().lower().split(None, 1)[0] in {
+            "/stop",
+            "/approve",
+        }
+
+
+class _FakeCfg:
+    history_limit = 50
+
+
+class _FakeContentType:
+    TEXT = "text"
+
+
+class _FakeTextContent:
+    def __init__(self, type, text):
+        self.type = type
+        self.text = text
+
+
+class _FakeRoom:
+    room_id = "!room:hs.local"
+    users = {}
+
+    def user_name(self, user_id):
+        if user_id == "@copywriting-assistant:hs.local":
+            return "copywriting-assistant"
+        return user_id
+
+
+async def _false_dm(_room_id, _sender_id):
+    return False
+
+
+async def _noop_read_receipt(_room_id, _event_id):
+    return None
+
+
+def _make_inbound_channel() -> MatrixChannel:
+    if not hasattr(matrix_channel, "TextContent"):
+        matrix_channel.TextContent = _FakeTextContent
+        matrix_channel.ContentType = _FakeContentType
+
+    ch = _make_channel(user_id="@copywriting-assistant:hs.local")
+    ch._cfg = _FakeCfg()
+    ch._room_histories = {}
+    ch._command_registry = _FakeCommandRegistry()
+    ch._is_dm_room = _false_dm
+    ch._check_allowed = lambda *_args: True
+    ch._require_mention = lambda _room_id: True
+    ch._send_read_receipt = _noop_read_receipt
+    ch._send_typing = _noop_typing
+    ch.enqueued = []
+    ch._enqueue = ch.enqueued.append
+    return ch
+
+
+def _event(body: str, mentioned: bool = False):
+    mentions = (
+        {"user_ids": ["@copywriting-assistant:hs.local"]}
+        if mentioned
+        else {}
+    )
+    return SimpleNamespace(
+        sender="@alice:hs.local",
+        body=body,
+        event_id="$event",
+        server_timestamp=0,
+        source={"content": {"m.mentions": mentions}},
+    )
+
+
+def _first_text(payload):
+    return payload["content_parts"][0].text
+
+
+def test_matrix_control_command_strips_mention_before_enqueue():
+    ch = _make_inbound_channel()
+
+    asyncio.run(
+        ch._on_room_event(
+            _FakeRoom(),
+            _event("copywriting-assistant: /stop", mentioned=True),
+        ),
+    )
+
+    assert len(ch.enqueued) == 1
+    assert _first_text(ch.enqueued[0]) == "/stop"
+
+
+def test_matrix_bare_stop_not_recognized_without_slash():
+    ch = _make_inbound_channel()
+
+    asyncio.run(
+        ch._on_room_event(
+            _FakeRoom(),
+            _event("copywriting-assistant: stop", mentioned=True),
+        ),
+    )
+
+    assert len(ch.enqueued) == 1
+    assert "/stop" not in _first_text(ch.enqueued[0])
+
+
+def test_matrix_control_command_requires_mention_in_group():
+    ch = _make_inbound_channel()
+
+    asyncio.run(ch._on_room_event(_FakeRoom(), _event("/approve")))
+
+    assert len(ch.enqueued) == 0
+
+
+def test_matrix_double_slash_stop_normalized_with_mention():
+    ch = _make_inbound_channel()
+
+    asyncio.run(
+        ch._on_room_event(
+            _FakeRoom(),
+            _event("copywriting-assistant: //stop", mentioned=True),
+        ),
+    )
+
+    assert len(ch.enqueued) == 1
+    assert _first_text(ch.enqueued[0]) == "/stop"

@@ -810,6 +810,23 @@ class MatrixChannel(BaseChannel):
                 return result.strip()
         return text
 
+    def _control_command_text(self, text: str) -> str | None:
+        """Return normalized runtime control command text, if any."""
+        registry = getattr(self, "_command_registry", None)
+        if registry is None:
+            return None
+
+        stripped = (text or "").strip()
+        if registry.is_control_command(stripped):
+            return stripped
+
+        if stripped.startswith("/"):
+            normalized = "/" + stripped.lstrip("/")
+            if normalized != stripped and registry.is_control_command(normalized):
+                return normalized
+
+        return None
+
     # ------------------------------------------------------------------
     # Display names & group history buffer (requireMention context)
     # display names from room / client.rooms (§5–§6);
@@ -1524,10 +1541,13 @@ class MatrixChannel(BaseChannel):
             await self._send_typing(room_id, False)
             return
 
-        cmd = (
-            stripped.lstrip("/").split()[0] if stripped.startswith("/") else ""
-        )
-        if cmd in _SLASH_COMMANDS:
+        control_text = self._control_command_text(stripped)
+        cmd = ""
+        if control_text is not None:
+            command_text = control_text
+        elif stripped.startswith("/"):
+            cmd = stripped.lstrip("/").split()[0]
+        if control_text is None and cmd in _SLASH_COMMANDS:
             command_text = stripped
             # Apply alias (e.g. /reset -> /clear)
             if cmd in _SLASH_ALIASES:
