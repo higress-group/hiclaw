@@ -37,8 +37,8 @@ func (r *ManagerReconciler) reconcileManagerConfig(ctx context.Context, s *manag
 		return reconcile.Result{}, fmt.Errorf("deploy manager config: %w", err)
 	}
 
-	if err := r.Deployer.PushOnDemandSkills(ctx, m.Name, m.Spec.Skills); err != nil {
-		logger.Error(err, "skill push failed (non-fatal)")
+	if err := r.Deployer.PushOnDemandSkills(ctx, m.Name, m.Spec.Skills, nil); err != nil {
+		logger.Info("skill push failed", "error", err)
 	}
 
 	return reconcile.Result{}, nil

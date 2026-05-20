@@ -20,7 +20,7 @@ const (
 const LabelController = "hiclaw.io/controller"
 
 // AccessEntry declares one cloud-permission grant under a logical
-// service. v1 supported services: "object-storage", "ai-gateway".
+// service. v1 supported services: "object-storage", "ai-gateway", "ai-registry".
 //
 // Scope is a schema-less JSON blob in the CR layer: it may reference
 // logical names (bucketRef: workspace, gatewayRef: default) and
@@ -56,6 +56,25 @@ type MCPServer struct {
 	Transport string `json:"transport,omitempty"`
 }
 
+// RemoteSkill identifies one skill from a remote source.
+// version and label are mutually exclusive; set at most one.
+type RemoteSkill struct {
+	Name    string `json:"name"`
+	Version string `json:"version,omitempty"`
+	Label   string `json:"label,omitempty"`
+}
+
+// RemoteSkillSource groups remote skills by source and auth mode.
+// Source format: nacos://host:port/{namespace-id}
+// AuthType values: "nacos" (username:password embedded in source URL as nacos://user:pass@host:port/namespace),
+// "sts-hiclaw" (STS credential provider), "none" (unauthenticated). Empty auto-detects:
+// embedded username/password selects "nacos"; otherwise "none".
+type RemoteSkillSource struct {
+	Source   string        `json:"source"`
+	AuthType string        `json:"authType,omitempty"`
+	Skills   []RemoteSkill `json:"skills"`
+}
+
 // +genclient
 // +kubebuilder:subresource:status
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
@@ -69,17 +88,18 @@ type Worker struct {
 }
 
 type WorkerSpec struct {
-	Model         string             `json:"model"`
-	Runtime       string             `json:"runtime,omitempty"` // openclaw | copaw | hermes (default: openclaw)
-	Image         string             `json:"image,omitempty"`   // custom Docker image
-	Identity      string             `json:"identity,omitempty"`
-	Soul          string             `json:"soul,omitempty"`
-	Agents        string             `json:"agents,omitempty"`
-	Skills        []string           `json:"skills,omitempty"`
-	McpServers    []MCPServer        `json:"mcpServers,omitempty"`
-	Package       string             `json:"package,omitempty"` // file://, http(s)://, or nacos:// URI
-	Expose        []ExposePort       `json:"expose,omitempty"`  // ports to expose via Higress gateway
-	ChannelPolicy *ChannelPolicySpec `json:"channelPolicy,omitempty"`
+	Model         string              `json:"model"`
+	Runtime       string              `json:"runtime,omitempty"` // openclaw | copaw | hermes (default: openclaw)
+	Image         string              `json:"image,omitempty"`   // custom Docker image
+	Identity      string              `json:"identity,omitempty"`
+	Soul          string              `json:"soul,omitempty"`
+	Agents        string              `json:"agents,omitempty"`
+	Skills        []string            `json:"skills,omitempty"`       // built-in skills only
+	RemoteSkills  []RemoteSkillSource `json:"remoteSkills,omitempty"` // remote skills from source registries
+	McpServers    []MCPServer         `json:"mcpServers,omitempty"`
+	Package       string              `json:"package,omitempty"` // file://, http(s)://, or nacos://[user:pass@]host:port/...; optional ?authType=nacos|sts-hiclaw|none
+	Expose        []ExposePort        `json:"expose,omitempty"`  // ports to expose via Higress gateway
+	ChannelPolicy *ChannelPolicySpec  `json:"channelPolicy,omitempty"`
 
 	// ContainerManaged indicates whether the controller should manage
 	// container lifecycle for this worker. When false, container
@@ -236,19 +256,20 @@ type TeamLeaderHeartbeatSpec struct {
 }
 
 type TeamWorkerSpec struct {
-	Name          string             `json:"name"`
-	Model         string             `json:"model,omitempty"`
-	Runtime       string             `json:"runtime,omitempty"`
-	Image         string             `json:"image,omitempty"`
-	Identity      string             `json:"identity,omitempty"`
-	Soul          string             `json:"soul,omitempty"`
-	Agents        string             `json:"agents,omitempty"`
-	Skills        []string           `json:"skills,omitempty"`
-	McpServers    []MCPServer        `json:"mcpServers,omitempty"`
-	Package       string             `json:"package,omitempty"`
-	Expose        []ExposePort       `json:"expose,omitempty"`
-	ChannelPolicy *ChannelPolicySpec `json:"channelPolicy,omitempty"`
-	State         *string            `json:"state,omitempty"` // desired lifecycle state: Running, Sleeping, Stopped
+	Name          string              `json:"name"`
+	Model         string              `json:"model,omitempty"`
+	Runtime       string              `json:"runtime,omitempty"`
+	Image         string              `json:"image,omitempty"`
+	Identity      string              `json:"identity,omitempty"`
+	Soul          string              `json:"soul,omitempty"`
+	Agents        string              `json:"agents,omitempty"`
+	Skills        []string            `json:"skills,omitempty"`
+	RemoteSkills  []RemoteSkillSource `json:"remoteSkills,omitempty"` // remote skills from source registries
+	McpServers    []MCPServer         `json:"mcpServers,omitempty"`
+	Package       string              `json:"package,omitempty"`
+	Expose        []ExposePort        `json:"expose,omitempty"`
+	ChannelPolicy *ChannelPolicySpec  `json:"channelPolicy,omitempty"`
+	State         *string             `json:"state,omitempty"` // desired lifecycle state: Running, Sleeping, Stopped
 
 	// AccessEntries declares the cloud permissions this team worker should be
 	// granted via hiclaw-credential-provider. See AccessEntry for semantics.
@@ -414,7 +435,7 @@ type ManagerSpec struct {
 	Agents     string        `json:"agents,omitempty"`     // custom AGENTS.md content
 	Skills     []string      `json:"skills,omitempty"`     // on-demand skills to enable
 	McpServers []MCPServer   `json:"mcpServers,omitempty"` // MCP servers callable by the Manager via mcporter
-	Package    string        `json:"package,omitempty"`    // file://, http(s)://, or nacos:// URI
+	Package    string        `json:"package,omitempty"`    // file://, http(s)://, or nacos://; optional ?authType= for Nacos
 	Config     ManagerConfig `json:"config,omitempty"`
 
 	// State is the desired lifecycle state of the manager.

@@ -11,12 +11,18 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+
+	"github.com/hiclaw/hiclaw-controller/internal/credprovider"
 )
 
 // PackageResolver handles file://, http(s)://, and nacos:// package URIs.
 type PackageResolver struct {
 	ImportDir  string // e.g. /tmp/import
 	ExtractDir string // e.g. /tmp/import/extracted
+
+	// CredClient is used when a nacos:// package URI includes ?authType=sts-hiclaw
+	// (STS via hiclaw-credential-provider). Optional for user/password or none.
+	CredClient credprovider.Client
 }
 
 func NewPackageResolver(importDir string) *PackageResolver {
@@ -473,8 +479,9 @@ func (p *PackageResolver) resolveHTTP(ctx context.Context, uri string) (string, 
 }
 
 // resolveNacos downloads a Worker template from Nacos via the AgentSpec client API.
-// URI format: nacos://[user:pass@]host:port/{namespace}/{agentspec-name}[/{version}]
-// The Nacos server address (and optional credentials) are extracted directly from the URI.
+// URI format: nacos://[user:pass@]host:port/{namespace}/{agentspec-name}[/{version}][?authType=...]
+// Optional query: authType=nacos|sts-hiclaw|none (empty = auto from userinfo, same as NewNacosAIClient).
+// The Nacos server address (and optional credentials) are extracted from the URI authority.
 func (p *PackageResolver) resolveNacos(ctx context.Context, u *url.URL) (string, error) {
 	// Parse URI path segments: /{namespace}/{agentspec-name}/{version}
 	parts := strings.Split(strings.Trim(u.Path, "/"), "/")
@@ -504,7 +511,8 @@ func (p *PackageResolver) resolveNacos(ctx context.Context, u *url.URL) (string,
 		return "", fmt.Errorf("failed to clean previous nacos package %s: %w", destPath, err)
 	}
 
-	client, err := newNacosAgentSpecClient(ctx, nacosAddr, namespace)
+	authType := strings.TrimSpace(u.Query().Get("authType"))
+	client, err := NewNacosAIClient(ctx, nacosAddr, namespace, authType, p.CredClient)
 	if err != nil {
 		return "", err
 	}
@@ -530,10 +538,21 @@ func (p *PackageResolver) resolveNacos(ctx context.Context, u *url.URL) (string,
 	return destPath, nil
 }
 
+// ValidateNacosURIOptions configures Nacos preflight so it matches runtime
+// PackageResolver behavior. The auth type is read from the nacos:// URI query:
+//   ?authType=nacos|sts-hiclaw|none
+// or omitted for the same auto-detection as NewNacosAIClient.
+type ValidateNacosURIOptions struct {
+	// CredClient is required when the URI includes authType=sts-hiclaw; it
+	// should be the same credprovider.Client wired into PackageResolver
+	// (HTTP client to hiclaw-credential-provider /issue).
+	CredClient credprovider.Client
+}
+
 // ValidateNacosURI checks that a nacos:// URI is well-formed, the server is
 // reachable, and any embedded credentials are accepted.  It is intended as a
 // preflight check before persisting a Worker resource.
-func ValidateNacosURI(ctx context.Context, raw string) error {
+func ValidateNacosURI(ctx context.Context, raw string, opts ValidateNacosURIOptions) error {
 	u, err := url.Parse(raw)
 	if err != nil {
 		return fmt.Errorf("invalid nacos URI %q: %w", raw, err)
@@ -567,9 +586,11 @@ func ValidateNacosURI(ctx context.Context, raw string) error {
 		version = ""
 	}
 
-	// newNacosAgentSpecClient validates the address format, connects, and
-	// performs login when credentials are present.
-	client, err := newNacosAgentSpecClient(ctx, nacosAddr, namespace)
+	authType := strings.TrimSpace(u.Query().Get("authType"))
+
+	// newNacosAIClient validates the address format, connects, and
+	// performs login (or STS) when credentials are present — same as resolveNacos.
+	client, err := NewNacosAIClient(ctx, nacosAddr, namespace, authType, opts.CredClient)
 	if err != nil {
 		return fmt.Errorf("nacos preflight check failed for %q: %w", raw, err)
 	}

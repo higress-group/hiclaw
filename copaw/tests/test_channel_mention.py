@@ -1,4 +1,4 @@
-"""Tests for MatrixChannel._apply_mention: outgoing visible mentions.
+"""Tests for MatrixChannel Matrix-specific outgoing behavior.
 
 openclaw >= 2026.4.x's mention monitor requires BOTH ``m.mentions.user_ids``
 metadata AND a *visible* mention (a ``matrix.to`` link in ``formatted_body``
@@ -8,7 +8,18 @@ three-layer invariant that ``_apply_mention`` must uphold so CoPaw-issued
 messages actually wake up receiving OpenClaw agents.
 """
 
+import asyncio
+
 from matrix.channel import MatrixChannel
+
+
+class _TypingClient:
+    def __init__(self):
+        self.rooms = {}
+        self.calls = []
+
+    async def room_typing(self, room_id, *, typing_state, timeout):
+        self.calls.append((room_id, typing_state, timeout))
 
 
 def _make_channel(user_id: str = "@bot:hs.local") -> MatrixChannel:
@@ -23,7 +34,15 @@ def _make_channel(user_id: str = "@bot:hs.local") -> MatrixChannel:
     ch = MatrixChannel.__new__(MatrixChannel)
     ch._user_id = user_id
     ch._client = None
+    ch._typing_tasks = {}
     return ch
+
+
+def _make_typing_channel() -> tuple[MatrixChannel, _TypingClient]:
+    ch = _make_channel()
+    client = _TypingClient()
+    ch._client = client
+    return ch, client
 
 
 def test_apply_mention_explicit_user_ids_prefixes_body_and_adds_anchor():
@@ -42,7 +61,9 @@ def test_apply_mention_explicit_user_ids_prefixes_body_and_adds_anchor():
     )
 
     assert content["m.mentions"] == {"user_ids": ["@worker-a:hs.local"]}
-    assert content["body"].startswith("@worker-a:hs.local ")
+    # body should use display name (localpart fallback), not full MXID
+    assert content["body"].startswith("worker-a ")
+    assert "@worker-a:hs.local" not in content["body"]
     assert (
         'href="https://matrix.to/#/%40worker-a%3Ahs.local"'
         in content["formatted_body"]
@@ -66,7 +87,9 @@ def test_apply_mention_fallback_sender_id_when_no_explicit_list():
     )
 
     assert content["m.mentions"] == {"user_ids": ["@alice:hs.local"]}
-    assert "@alice:hs.local" in content["body"]
+    # body should use display name (localpart fallback), not full MXID
+    assert "alice" in content["body"]
+    assert "@alice:hs.local" not in content["body"]
     assert (
         'href="https://matrix.to/#/%40alice%3Ahs.local"'
         in content["formatted_body"]
@@ -85,8 +108,9 @@ def test_apply_mention_body_scan_rewrites_existing_mxid_to_anchor():
     ch._apply_mention(content, "!room:hs.local")
 
     assert content["m.mentions"] == {"user_ids": ["@worker-b:hs.local"]}
-    # Body already had the MXID — no duplicate prefix.
-    assert content["body"].count("@worker-b:hs.local") == 1
+    # Body MXID should be replaced with display name (localpart fallback).
+    assert "worker-b" in content["body"]
+    assert "@worker-b:hs.local" not in content["body"]
     # First occurrence in formatted_body is replaced with a matrix.to anchor.
     assert (
         'href="https://matrix.to/#/%40worker-b%3Ahs.local"'
@@ -165,7 +189,9 @@ def test_apply_mention_synthesizes_formatted_body_for_media_events():
     )
 
     assert content["format"] == "org.matrix.custom.html"
-    assert content["body"].startswith("@worker-d:hs.local ")
+    # body should use display name (localpart fallback), not full MXID
+    assert content["body"].startswith("worker-d ")
+    assert "@worker-d:hs.local" not in content["body"]
     assert (
         'href="https://matrix.to/#/%40worker-d%3Ahs.local"'
         in content["formatted_body"]
@@ -199,3 +225,27 @@ def test_apply_mention_multiple_targets_all_get_visible_anchors():
             f'href="https://matrix.to/#/{uid_enc}"'
             in content["formatted_body"]
         )
+
+
+def test_process_completed_stops_typing_even_without_reply():
+    ch, client = _make_typing_channel()
+
+    asyncio.run(ch._on_process_completed(None, "!room:hs.local", {}))
+
+    assert client.calls[-1][0] == "!room:hs.local"
+    assert client.calls[-1][1] is False
+
+
+def test_cancelled_consume_error_stops_typing_without_matrix_noise():
+    ch, client = _make_typing_channel()
+
+    asyncio.run(
+        ch._on_consume_error(
+            None,
+            "!room:hs.local",
+            "Task has been cancelled",
+        )
+    )
+
+    assert client.calls[-1][0] == "!room:hs.local"
+    assert client.calls[-1][1] is False
