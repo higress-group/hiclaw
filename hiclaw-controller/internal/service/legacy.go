@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/hiclaw/hiclaw-controller/internal/oss"
+	"sigs.k8s.io/controller-runtime/pkg/log"
 )
 
 // LegacyCompat handles backward-compatible operations that only apply in
@@ -116,7 +117,7 @@ func (l *LegacyCompat) PutManagerConfig(configJSON []byte) error {
 			}
 		}
 		if pluginMerged, pErr := mergeUserPluginConfig(configJSON, existingData); pErr != nil {
-			fmt.Printf("warning: plugin config merge failed for %s, using generated config: %v\n", key, pErr)
+			log.Log.WithName("legacy").Error(pErr, "plugin config merge failed, using generated config", "key", key)
 		} else {
 			configJSON = pluginMerged
 		}
