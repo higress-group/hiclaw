@@ -26,6 +26,7 @@ type K8sConfig struct {
 	WorkerImage       string
 	CopawWorkerImage  string
 	HermesWorkerImage string
+	HarnessWorkerImage string
 	WorkerCPU         string
 	WorkerMemory      string
 
@@ -186,6 +187,8 @@ func (k *K8sBackend) Create(ctx context.Context, req CreateRequest) (*WorkerResu
 			image = k.config.CopawWorkerImage
 		case req.Runtime == RuntimeHermes && k.config.HermesWorkerImage != "":
 			image = k.config.HermesWorkerImage
+		case req.Runtime == RuntimeHarness && k.config.HarnessWorkerImage != "":
+			image = k.config.HarnessWorkerImage
 		case k.config.WorkerImage != "":
 			image = k.config.WorkerImage
 		}
@@ -525,6 +528,8 @@ func defaultRuntime(runtime string) string {
 		return RuntimeCopaw
 	case RuntimeHermes:
 		return RuntimeHermes
+	case RuntimeHarness:
+		return RuntimeHarness
 	default:
 		return RuntimeOpenClaw
 	}

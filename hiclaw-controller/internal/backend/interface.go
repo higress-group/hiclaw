@@ -30,12 +30,13 @@ const (
 	RuntimeOpenClaw = "openclaw"
 	RuntimeCopaw    = "copaw"
 	RuntimeHermes   = "hermes"
+	RuntimeHarness  = "harness"
 )
 
 // ValidRuntime reports whether r is a recognized runtime value.
 // An empty string is valid — backends resolve it via ResolveRuntime.
 func ValidRuntime(r string) bool {
-	return r == "" || r == RuntimeOpenClaw || r == RuntimeCopaw || r == RuntimeHermes
+	return r == "" || r == RuntimeOpenClaw || r == RuntimeCopaw || r == RuntimeHermes || r == RuntimeHarness
 }
 
 // ResolveRuntime returns the effective runtime for a backend request.
