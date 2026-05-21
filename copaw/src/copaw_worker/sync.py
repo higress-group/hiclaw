@@ -137,6 +137,7 @@ class FileSync:
         self._prefix = f"agents/{worker_name}"
         self._alias_set = False
         self._cloud_mode = os.environ.get("HICLAW_RUNTIME") == "aliyun"
+        self._k8s_mode = os.environ.get("HICLAW_RUNTIME") == "k8s"
         self._worker_info: dict[str, Any] | None = None
 
     # ------------------------------------------------------------------
@@ -172,6 +173,9 @@ class FileSync:
         """
         if self._cloud_mode:
             self._refresh_cloud_credentials()
+            self._alias_set = True
+            return
+        if self._k8s_mode:
             self._alias_set = True
             return
         if self._alias_set:
