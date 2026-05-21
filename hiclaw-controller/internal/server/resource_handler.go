@@ -104,6 +104,7 @@ func (h *ResourceHandler) CreateWorker(w http.ResponseWriter, r *http.Request) {
 		},
 		Spec: v1beta1.WorkerSpec{
 			Model:            req.Model,
+			WorkerName:       req.WorkerName,
 			Runtime:          req.Runtime,
 			Image:            req.Image,
 			Identity:         req.Identity,
@@ -263,6 +264,9 @@ func (h *ResourceHandler) UpdateWorker(w http.ResponseWriter, r *http.Request) {
 		if req.Model != "" {
 			worker.Spec.Model = req.Model
 		}
+		if req.WorkerName != "" {
+			worker.Spec.WorkerName = req.WorkerName
+		}
 		if req.Runtime != "" {
 			worker.Spec.Runtime = req.Runtime
 		}
@@ -365,11 +369,13 @@ func (h *ResourceHandler) CreateTeam(w http.ResponseWriter, r *http.Request) {
 		},
 		Spec: v1beta1.TeamSpec{
 			Description:   req.Description,
+			TeamName:      req.TeamName,
 			Admin:         req.Admin,
 			PeerMentions:  req.PeerMentions,
 			ChannelPolicy: req.ChannelPolicy,
 			Leader: v1beta1.LeaderSpec{
 				Name:              req.Leader.Name,
+				WorkerName:        req.Leader.WorkerName,
 				Model:             req.Leader.Model,
 				Identity:          req.Leader.Identity,
 				Soul:              req.Leader.Soul,
@@ -387,6 +393,7 @@ func (h *ResourceHandler) CreateTeam(w http.ResponseWriter, r *http.Request) {
 	for _, tw := range req.Workers {
 		team.Spec.Workers = append(team.Spec.Workers, v1beta1.TeamWorkerSpec{
 			Name:          tw.Name,
+			WorkerName:    tw.WorkerName,
 			Model:         tw.Model,
 			Runtime:       tw.Runtime,
 			Image:         tw.Image,
@@ -467,6 +474,9 @@ func (h *ResourceHandler) UpdateTeam(w http.ResponseWriter, r *http.Request) {
 		if req.Description != "" {
 			team.Spec.Description = req.Description
 		}
+		if req.TeamName != "" {
+			team.Spec.TeamName = req.TeamName
+		}
 		if req.Admin != nil {
 			team.Spec.Admin = req.Admin
 		}
@@ -477,6 +487,9 @@ func (h *ResourceHandler) UpdateTeam(w http.ResponseWriter, r *http.Request) {
 			team.Spec.ChannelPolicy = req.ChannelPolicy
 		}
 		if req.Leader != nil {
+			if req.Leader.WorkerName != "" {
+				team.Spec.Leader.WorkerName = req.Leader.WorkerName
+			}
 			if req.Leader.Model != "" {
 				team.Spec.Leader.Model = req.Leader.Model
 			}
@@ -513,6 +526,7 @@ func (h *ResourceHandler) UpdateTeam(w http.ResponseWriter, r *http.Request) {
 			for _, tw := range req.Workers {
 				team.Spec.Workers = append(team.Spec.Workers, v1beta1.TeamWorkerSpec{
 					Name:          tw.Name,
+					WorkerName:    tw.WorkerName,
 					Model:         tw.Model,
 					Runtime:       tw.Runtime,
 					Image:         tw.Image,
@@ -844,6 +858,7 @@ func workerToResponse(w *v1beta1.Worker) WorkerResponse {
 func teamToResponse(t *v1beta1.Team) TeamResponse {
 	resp := TeamResponse{
 		Name:              t.Name,
+		TeamName:          t.Spec.EffectiveTeamName(t.Name),
 		Phase:             t.Status.Phase,
 		Description:       t.Spec.Description,
 		LeaderName:        t.Spec.Leader.Name,
@@ -949,11 +964,11 @@ func (h *ResourceHandler) findTeamMember(ctx context.Context, name string) (*v1b
 	for i := range list.Items {
 		t := &list.Items[i]
 		if t.Spec.Leader.Name == name {
-			return t, name, true, nil
+			return t, t.Spec.Leader.Name, true, nil
 		}
 		for _, w := range t.Spec.Workers {
 			if w.Name == name {
-				return t, name, true, nil
+				return t, w.Name, true, nil
 			}
 		}
 	}

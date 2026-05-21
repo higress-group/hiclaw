@@ -23,6 +23,7 @@ def main() -> None:
 
     def _run(
         name: str = typer.Option(..., "--name", help="Worker name"),
+        cr_name: Optional[str] = typer.Option(None, "--cr-name", help="Worker CR name"),
         fs: str = typer.Option(..., "--fs", help="MinIO endpoint"),
         fs_key: str = typer.Option(..., "--fs-key", help="MinIO access key"),
         fs_secret: str = typer.Option(..., "--fs-secret", help="MinIO secret key"),
@@ -34,6 +35,7 @@ def main() -> None:
         """Start the CoPaw Worker and connect to Matrix."""
         config = WorkerConfig(
             worker_name=name,
+            worker_cr_name=cr_name,
             minio_endpoint=fs,
             minio_access_key=fs_key,
             minio_secret_key=fs_secret,

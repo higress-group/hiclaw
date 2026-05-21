@@ -3,20 +3,29 @@ package executor
 import (
 	"context"
 	"crypto/sha256"
+	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"net/http"
 	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
+
+	"github.com/hiclaw/hiclaw-controller/internal/credprovider"
+	"github.com/hiclaw/hiclaw-controller/internal/oss"
 )
 
 // PackageResolver handles file://, http(s)://, and nacos:// package URIs.
 type PackageResolver struct {
 	ImportDir  string // e.g. /tmp/import
 	ExtractDir string // e.g. /tmp/import/extracted
+
+	// CredClient is used when a nacos:// package URI includes ?authType=sts-hiclaw
+	// (STS via hiclaw-credential-provider). Optional for user/password or none.
+	CredClient credprovider.Client
 }
 
 func NewPackageResolver(importDir string) *PackageResolver {
@@ -118,14 +127,15 @@ func (p *PackageResolver) ResolveAndExtract(ctx context.Context, uri, name strin
 	return destDir, nil
 }
 
-// DeployToMinIO copies extracted package contents to the worker's MinIO agent space.
-// Config files and skills from the package are applied when present; SOUL may come
-// from the package, inline spec, or DeployWorkerConfig defaults.
+// DeployToMinIO seeds extracted package contents to the worker's agent space.
+// Package files are initialization defaults: a later reconcile must not overwrite
+// runtime-mutated files for the same worker. Controller-owned generated files are
+// still overwritten by DeployWorkerConfig after this package layer is applied.
 //
 // To avoid a race with the background MinIO→local sync (which could overwrite local
 // files between the local write and the mc mirror push), we push to MinIO FIRST from
 // the extracted directory (immune to background sync), then copy to the local agent dir.
-func (p *PackageResolver) DeployToMinIO(ctx context.Context, extractedDir, workerName string, excludeMemory bool) error {
+func (p *PackageResolver) DeployToMinIO(ctx context.Context, extractedDir, workerName string, excludeMemory bool, storage oss.StorageClient) error {
 	agentDir := fmt.Sprintf("/root/hiclaw-fs/agents/%s", workerName)
 	if err := os.MkdirAll(agentDir, 0755); err != nil {
 		return fmt.Errorf("create agent dir: %w", err)
@@ -136,6 +146,7 @@ func (p *PackageResolver) DeployToMinIO(ctx context.Context, extractedDir, worke
 		storagePrefix = "hiclaw/hiclaw-storage"
 	}
 	minioBase := fmt.Sprintf("%s/agents/%s", storagePrefix, workerName)
+	agentPrefix := fmt.Sprintf("agents/%s", workerName)
 
 	// Collect transformed config files and subdirectory names from the package.
 	type fileEntry struct {
@@ -197,54 +208,97 @@ func (p *PackageResolver) DeployToMinIO(ctx context.Context, extractedDir, worke
 		if excludeMemory && (f.name == "SOUL.md" || f.name == "AGENTS.md") {
 			continue
 		}
-		if err := mcPut(ctx, minioBase+"/"+f.name, f.data); err != nil {
+		useStorageClient := storage != nil
+		target := agentPrefix + "/" + f.name
+		if !useStorageClient {
+			target = minioBase + "/" + f.name
+		}
+		if _, err := putPackageObjectSeedOnly(ctx, storage, useStorageClient, target, f.data); err != nil {
 			return fmt.Errorf("push %s to MinIO: %w", f.name, err)
+		}
+	}
+	if len(configSubdirs) > 0 && storage != nil {
+		for _, dirName := range configSubdirs {
+			srcDir := filepath.Join(configDir, dirName)
+			if err := filepath.WalkDir(srcDir, func(path string, entry fs.DirEntry, walkErr error) error {
+				if walkErr != nil {
+					return walkErr
+				}
+				if entry.IsDir() || entry.Type()&os.ModeSymlink != 0 {
+					return nil
+				}
+				rel, err := filepath.Rel(configDir, path)
+				if err != nil {
+					return err
+				}
+				target := agentPrefix + "/" + filepath.ToSlash(rel)
+				_, err = putPackageFileSeedOnly(ctx, storage, path, target)
+				return err
+			}); err != nil {
+				return fmt.Errorf("seed config directory %s to storage: %w", dirName, err)
+			}
 		}
 	}
 
 	// Skills
 	if info, err := os.Stat(skillsDir); err == nil && info.IsDir() {
-		mcCmd := exec.CommandContext(ctx, "mc", "mirror", skillsDir+"/", minioBase+"/skills/", "--overwrite")
-		if out, err := mcCmd.CombinedOutput(); err != nil {
-			return fmt.Errorf("mc mirror skills to MinIO: %s: %w", string(out), err)
+		if storage != nil {
+			if err := seedDirToStorage(ctx, storage, skillsDir, agentPrefix+"/skills"); err != nil {
+				return fmt.Errorf("seed skills to storage: %w", err)
+			}
+		} else {
+			mcCmd := exec.CommandContext(ctx, "mc", "mirror", skillsDir+"/", minioBase+"/skills/", "--overwrite")
+			if out, err := mcCmd.CombinedOutput(); err != nil {
+				return fmt.Errorf("mc mirror skills to MinIO: %s: %w", string(out), err)
+			}
 		}
 	}
 
 	// Crons
 	if cronData != nil {
-		if err := mcPut(ctx, minioBase+"/.openclaw/cron/jobs.json", cronData); err != nil {
-			return fmt.Errorf("push crons to MinIO: %w", err)
+		if storage != nil {
+			if _, err := putPackageObjectSeedOnly(ctx, storage, true, agentPrefix+"/.openclaw/cron/jobs.json", cronData); err != nil {
+				return fmt.Errorf("seed crons to storage: %w", err)
+			}
+		} else {
+			if err := mcPut(ctx, minioBase+"/.openclaw/cron/jobs.json", cronData); err != nil {
+				return fmt.Errorf("push crons to MinIO: %w", err)
+			}
 		}
 	}
 
-	// ── Phase 2: Copy to local agent dir (safe — MinIO already has new content) ──
+	// ── Phase 2: Seed local package files without overwriting runtime changes ──
 
 	for _, f := range configFiles {
 		if excludeMemory && (f.name == "SOUL.md" || f.name == "AGENTS.md") {
 			continue
 		}
-		os.WriteFile(filepath.Join(agentDir, f.name), f.data, 0644)
+		if _, err := writeFileSeedOnly(filepath.Join(agentDir, f.name), f.data); err != nil {
+			return fmt.Errorf("seed local %s: %w", f.name, err)
+		}
 	}
 	for _, dirName := range configSubdirs {
 		src := filepath.Join(configDir, dirName)
 		dst := filepath.Join(agentDir, dirName)
-		cpCmd := exec.CommandContext(ctx, "cp", "-r", src, dst)
-		cpCmd.CombinedOutput()
+		if err := copyDirSeedOnly(src, dst); err != nil {
+			return fmt.Errorf("seed local config directory %s: %w", dirName, err)
+		}
 	}
 
 	// Skills
 	if info, err := os.Stat(skillsDir); err == nil && info.IsDir() {
 		destSkills := filepath.Join(agentDir, "skills")
-		os.MkdirAll(destSkills, 0755)
-		cpCmd := exec.CommandContext(ctx, "cp", "-r", skillsDir+"/.", destSkills+"/")
-		cpCmd.CombinedOutput()
+		if err := copyDirSeedOnly(skillsDir, destSkills); err != nil {
+			return fmt.Errorf("seed local skills: %w", err)
+		}
 	}
 
 	// Crons
 	if cronData != nil {
 		destCron := filepath.Join(agentDir, ".openclaw", "cron")
-		os.MkdirAll(destCron, 0755)
-		os.WriteFile(filepath.Join(destCron, "jobs.json"), cronData, 0644)
+		if _, err := writeFileSeedOnly(filepath.Join(destCron, "jobs.json"), cronData); err != nil {
+			return fmt.Errorf("seed local crons: %w", err)
+		}
 	}
 
 	return nil
@@ -270,6 +324,82 @@ func mcPut(ctx context.Context, minioPath string, data []byte) error {
 		return fmt.Errorf("mc cp to %s: %s: %w", minioPath, string(out), err)
 	}
 	return nil
+}
+
+func putPackageObjectSeedOnly(ctx context.Context, storage oss.StorageClient, useStorageClient bool, target string, data []byte) (bool, error) {
+	if !useStorageClient {
+		return true, mcPut(ctx, target, data)
+	}
+	if err := storage.Stat(ctx, target); err == nil {
+		return false, nil
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return false, err
+	}
+	return true, storage.PutObject(ctx, target, data)
+}
+
+func putPackageFileSeedOnly(ctx context.Context, storage oss.StorageClient, localPath, target string) (bool, error) {
+	if err := storage.Stat(ctx, target); err == nil {
+		return false, nil
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return false, err
+	}
+	return true, storage.PutFile(ctx, localPath, target)
+}
+
+func seedDirToStorage(ctx context.Context, storage oss.StorageClient, srcDir, dstPrefix string) error {
+	return filepath.WalkDir(srcDir, func(path string, entry fs.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		if entry.IsDir() || entry.Type()&os.ModeSymlink != 0 {
+			return nil
+		}
+		rel, err := filepath.Rel(srcDir, path)
+		if err != nil {
+			return err
+		}
+		target := strings.TrimSuffix(dstPrefix, "/") + "/" + filepath.ToSlash(rel)
+		_, err = putPackageFileSeedOnly(ctx, storage, path, target)
+		return err
+	})
+}
+
+func writeFileSeedOnly(path string, data []byte) (bool, error) {
+	if _, err := os.Stat(path); err == nil {
+		return false, nil
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return false, err
+	}
+	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
+		return false, err
+	}
+	return true, os.WriteFile(path, data, 0644)
+}
+
+func copyDirSeedOnly(srcDir, dstDir string) error {
+	return filepath.WalkDir(srcDir, func(path string, entry fs.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		rel, err := filepath.Rel(srcDir, path)
+		if err != nil {
+			return err
+		}
+		dst := filepath.Join(dstDir, rel)
+		if entry.IsDir() {
+			return os.MkdirAll(dst, 0755)
+		}
+		if entry.Type()&os.ModeSymlink != 0 {
+			return nil
+		}
+		data, err := os.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		_, err = writeFileSeedOnly(dst, data)
+		return err
+	})
 }
 
 // wrapWithBuiltinMarkers wraps user AGENTS.md content with hiclaw-builtin markers.
@@ -473,8 +603,9 @@ func (p *PackageResolver) resolveHTTP(ctx context.Context, uri string) (string, 
 }
 
 // resolveNacos downloads a Worker template from Nacos via the AgentSpec client API.
-// URI format: nacos://[user:pass@]host:port/{namespace}/{agentspec-name}[/{version}]
-// The Nacos server address (and optional credentials) are extracted directly from the URI.
+// URI format: nacos://[user:pass@]host:port/{namespace}/{agentspec-name}[/{version}][?authType=...]
+// Optional query: authType=nacos|sts-hiclaw|none (empty = auto from userinfo, same as NewNacosAIClient).
+// The Nacos server address (and optional credentials) are extracted from the URI authority.
 func (p *PackageResolver) resolveNacos(ctx context.Context, u *url.URL) (string, error) {
 	// Parse URI path segments: /{namespace}/{agentspec-name}/{version}
 	parts := strings.Split(strings.Trim(u.Path, "/"), "/")
@@ -504,7 +635,8 @@ func (p *PackageResolver) resolveNacos(ctx context.Context, u *url.URL) (string,
 		return "", fmt.Errorf("failed to clean previous nacos package %s: %w", destPath, err)
 	}
 
-	client, err := newNacosAgentSpecClient(ctx, nacosAddr, namespace)
+	authType := strings.TrimSpace(u.Query().Get("authType"))
+	client, err := NewNacosAIClient(ctx, nacosAddr, namespace, authType, p.CredClient)
 	if err != nil {
 		return "", err
 	}
@@ -530,10 +662,23 @@ func (p *PackageResolver) resolveNacos(ctx context.Context, u *url.URL) (string,
 	return destPath, nil
 }
 
+// ValidateNacosURIOptions configures Nacos preflight so it matches runtime
+// PackageResolver behavior. The auth type is read from the nacos:// URI query:
+//
+//	?authType=nacos|sts-hiclaw|none
+//
+// or omitted for the same auto-detection as NewNacosAIClient.
+type ValidateNacosURIOptions struct {
+	// CredClient is required when the URI includes authType=sts-hiclaw; it
+	// should be the same credprovider.Client wired into PackageResolver
+	// (HTTP client to hiclaw-credential-provider /issue).
+	CredClient credprovider.Client
+}
+
 // ValidateNacosURI checks that a nacos:// URI is well-formed, the server is
 // reachable, and any embedded credentials are accepted.  It is intended as a
 // preflight check before persisting a Worker resource.
-func ValidateNacosURI(ctx context.Context, raw string) error {
+func ValidateNacosURI(ctx context.Context, raw string, opts ValidateNacosURIOptions) error {
 	u, err := url.Parse(raw)
 	if err != nil {
 		return fmt.Errorf("invalid nacos URI %q: %w", raw, err)
@@ -567,9 +712,11 @@ func ValidateNacosURI(ctx context.Context, raw string) error {
 		version = ""
 	}
 
-	// newNacosAgentSpecClient validates the address format, connects, and
-	// performs login when credentials are present.
-	client, err := newNacosAgentSpecClient(ctx, nacosAddr, namespace)
+	authType := strings.TrimSpace(u.Query().Get("authType"))
+
+	// newNacosAIClient validates the address format, connects, and
+	// performs login (or STS) when credentials are present — same as resolveNacos.
+	client, err := NewNacosAIClient(ctx, nacosAddr, namespace, authType, opts.CredClient)
 	if err != nil {
 		return fmt.Errorf("nacos preflight check failed for %q: %w", raw, err)
 	}

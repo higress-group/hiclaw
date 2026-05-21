@@ -1,4 +1,4 @@
-"""Tests for MatrixChannel._apply_mention: outgoing visible mentions.
+"""Tests for MatrixChannel Matrix-specific outgoing behavior.
 
 openclaw >= 2026.4.x's mention monitor requires BOTH ``m.mentions.user_ids``
 metadata AND a *visible* mention (a ``matrix.to`` link in ``formatted_body``
@@ -8,7 +8,24 @@ three-layer invariant that ``_apply_mention`` must uphold so CoPaw-issued
 messages actually wake up receiving OpenClaw agents.
 """
 
+import asyncio
+from types import SimpleNamespace
+
+from matrix import channel as matrix_channel
 from matrix.channel import MatrixChannel
+
+
+class _TypingClient:
+    def __init__(self):
+        self.rooms = {}
+        self.calls = []
+
+    async def room_typing(self, room_id, *, typing_state, timeout):
+        self.calls.append((room_id, typing_state, timeout))
+
+
+async def _noop_typing(*_args, **_kwargs):
+    return None
 
 
 def _make_channel(user_id: str = "@bot:hs.local") -> MatrixChannel:
@@ -23,7 +40,15 @@ def _make_channel(user_id: str = "@bot:hs.local") -> MatrixChannel:
     ch = MatrixChannel.__new__(MatrixChannel)
     ch._user_id = user_id
     ch._client = None
+    ch._typing_tasks = {}
     return ch
+
+
+def _make_typing_channel() -> tuple[MatrixChannel, _TypingClient]:
+    ch = _make_channel()
+    client = _TypingClient()
+    ch._client = client
+    return ch, client
 
 
 def test_apply_mention_explicit_user_ids_prefixes_body_and_adds_anchor():
@@ -42,7 +67,9 @@ def test_apply_mention_explicit_user_ids_prefixes_body_and_adds_anchor():
     )
 
     assert content["m.mentions"] == {"user_ids": ["@worker-a:hs.local"]}
-    assert content["body"].startswith("@worker-a:hs.local ")
+    # body should use display name (localpart fallback), not full MXID
+    assert content["body"].startswith("worker-a ")
+    assert "@worker-a:hs.local" not in content["body"]
     assert (
         'href="https://matrix.to/#/%40worker-a%3Ahs.local"'
         in content["formatted_body"]
@@ -66,7 +93,9 @@ def test_apply_mention_fallback_sender_id_when_no_explicit_list():
     )
 
     assert content["m.mentions"] == {"user_ids": ["@alice:hs.local"]}
-    assert "@alice:hs.local" in content["body"]
+    # body should use display name (localpart fallback), not full MXID
+    assert "alice" in content["body"]
+    assert "@alice:hs.local" not in content["body"]
     assert (
         'href="https://matrix.to/#/%40alice%3Ahs.local"'
         in content["formatted_body"]
@@ -85,8 +114,9 @@ def test_apply_mention_body_scan_rewrites_existing_mxid_to_anchor():
     ch._apply_mention(content, "!room:hs.local")
 
     assert content["m.mentions"] == {"user_ids": ["@worker-b:hs.local"]}
-    # Body already had the MXID — no duplicate prefix.
-    assert content["body"].count("@worker-b:hs.local") == 1
+    # Body MXID should be replaced with display name (localpart fallback).
+    assert "worker-b" in content["body"]
+    assert "@worker-b:hs.local" not in content["body"]
     # First occurrence in formatted_body is replaced with a matrix.to anchor.
     assert (
         'href="https://matrix.to/#/%40worker-b%3Ahs.local"'
@@ -165,7 +195,9 @@ def test_apply_mention_synthesizes_formatted_body_for_media_events():
     )
 
     assert content["format"] == "org.matrix.custom.html"
-    assert content["body"].startswith("@worker-d:hs.local ")
+    # body should use display name (localpart fallback), not full MXID
+    assert content["body"].startswith("worker-d ")
+    assert "@worker-d:hs.local" not in content["body"]
     assert (
         'href="https://matrix.to/#/%40worker-d%3Ahs.local"'
         in content["formatted_body"]
@@ -199,3 +231,155 @@ def test_apply_mention_multiple_targets_all_get_visible_anchors():
             f'href="https://matrix.to/#/{uid_enc}"'
             in content["formatted_body"]
         )
+
+
+def test_process_completed_stops_typing_even_without_reply():
+    ch, client = _make_typing_channel()
+
+    asyncio.run(ch._on_process_completed(None, "!room:hs.local", {}))
+
+    assert client.calls[-1][0] == "!room:hs.local"
+    assert client.calls[-1][1] is False
+
+
+def test_cancelled_consume_error_stops_typing_without_matrix_noise():
+    ch, client = _make_typing_channel()
+
+    asyncio.run(
+        ch._on_consume_error(
+            None,
+            "!room:hs.local",
+            "Task has been cancelled",
+        )
+    )
+
+    assert client.calls[-1][0] == "!room:hs.local"
+    assert client.calls[-1][1] is False
+
+
+class _FakeCommandRegistry:
+    def is_control_command(self, text):
+        return text.strip().lower().split(None, 1)[0] in {
+            "/stop",
+            "/approve",
+        }
+
+
+class _FakeCfg:
+    history_limit = 50
+
+
+class _FakeContentType:
+    TEXT = "text"
+
+
+class _FakeTextContent:
+    def __init__(self, type, text):
+        self.type = type
+        self.text = text
+
+
+class _FakeRoom:
+    room_id = "!room:hs.local"
+    users = {}
+
+    def user_name(self, user_id):
+        if user_id == "@copywriting-assistant:hs.local":
+            return "copywriting-assistant"
+        return user_id
+
+
+async def _false_dm(_room_id, _sender_id):
+    return False
+
+
+async def _noop_read_receipt(_room_id, _event_id):
+    return None
+
+
+def _make_inbound_channel() -> MatrixChannel:
+    if not hasattr(matrix_channel, "TextContent"):
+        matrix_channel.TextContent = _FakeTextContent
+        matrix_channel.ContentType = _FakeContentType
+
+    ch = _make_channel(user_id="@copywriting-assistant:hs.local")
+    ch._cfg = _FakeCfg()
+    ch._room_histories = {}
+    ch._command_registry = _FakeCommandRegistry()
+    ch._is_dm_room = _false_dm
+    ch._check_allowed = lambda *_args: True
+    ch._require_mention = lambda _room_id: True
+    ch._send_read_receipt = _noop_read_receipt
+    ch._send_typing = _noop_typing
+    ch.enqueued = []
+    ch._enqueue = ch.enqueued.append
+    return ch
+
+
+def _event(body: str, mentioned: bool = False):
+    mentions = (
+        {"user_ids": ["@copywriting-assistant:hs.local"]}
+        if mentioned
+        else {}
+    )
+    return SimpleNamespace(
+        sender="@alice:hs.local",
+        body=body,
+        event_id="$event",
+        server_timestamp=0,
+        source={"content": {"m.mentions": mentions}},
+    )
+
+
+def _first_text(payload):
+    return payload["content_parts"][0].text
+
+
+def test_matrix_control_command_strips_mention_before_enqueue():
+    ch = _make_inbound_channel()
+
+    asyncio.run(
+        ch._on_room_event(
+            _FakeRoom(),
+            _event("copywriting-assistant: /stop", mentioned=True),
+        ),
+    )
+
+    assert len(ch.enqueued) == 1
+    assert _first_text(ch.enqueued[0]) == "/stop"
+
+
+def test_matrix_bare_stop_not_recognized_without_slash():
+    ch = _make_inbound_channel()
+
+    asyncio.run(
+        ch._on_room_event(
+            _FakeRoom(),
+            _event("copywriting-assistant: stop", mentioned=True),
+        ),
+    )
+
+    assert len(ch.enqueued) == 1
+    assert "/stop" not in _first_text(ch.enqueued[0])
+
+
+def test_matrix_control_command_requires_mention_in_group():
+    ch = _make_inbound_channel()
+
+    asyncio.run(ch._on_room_event(_FakeRoom(), _event("/approve")))
+
+    assert len(ch.enqueued) == 0
+
+
+def test_matrix_double_slash_stop_normalized_with_mention():
+    ch = _make_inbound_channel()
+
+    asyncio.run(
+        ch._on_room_event(
+            _FakeRoom(),
+            _event("copywriting-assistant: //stop", mentioned=True),
+        ),
+    )
+
+    assert len(ch.enqueued) == 1
+    assert _first_text(ch.enqueued[0]) == "/stop"

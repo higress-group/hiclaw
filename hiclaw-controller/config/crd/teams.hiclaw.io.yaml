@@ -18,6 +18,9 @@ spec:
               properties:
                 description:
                   type: string
+                teamName:
+                  type: string
+                  description: Runtime/storage team identity. Defaults to metadata.name.
                 peerMentions:
                   type: boolean
                   description: "Whether team workers can @mention each other in group rooms (default: true)"
@@ -57,6 +60,9 @@ spec:
                   properties:
                     name:
                       type: string
+                    workerName:
+                      type: string
+                      description: Runtime identity for leader (Matrix localpart, OSS path key). Defaults to leader.name.
                     model:
                       type: string
                     identity:
@@ -149,7 +155,7 @@ spec:
                         properties:
                           service:
                             type: string
-                            enum: [object-storage, ai-gateway]
+                            enum: [object-storage, ai-gateway, ai-registry]
                             description: Logical cloud service identifier
                           permissions:
                             type: array
@@ -175,6 +181,9 @@ spec:
                     properties:
                       name:
                         type: string
+                      workerName:
+                        type: string
+                        description: Runtime identity for worker (Matrix localpart, OSS path key). Defaults to worker.name.
                       model:
                         type: string
                       runtime:
@@ -192,6 +201,38 @@ spec:
                         type: array
                         items:
                           type: string
+                          not:
+                            pattern: '^nacos://'
+                        description: HiClaw built-in skills to enable (remote registry skills must use remoteSkills)
+                      remoteSkills:
+                        type: array
+                        description: Remote skills fetched from source registries.
+                        items:
+                          type: object
+                          required: [source, skills]
+                          properties:
+                            source:
+                              type: string
+                              pattern: '^nacos://[^/]+/[^/?#]+$'
+                              description: Remote source in nacos://host[:port]/namespace-id format.
+                            authType:
+                              type: string
+                              enum: [sts-hiclaw, nacos, none]
+                              description: "Authentication mode for remote source access. Empty auto-detects: embedded username/password selects nacos; otherwise none. nacos: username/password embedded in source URL; sts-hiclaw: STS credential provider; none: unauthenticated."
+                            skills:
+                              type: array
+                              minItems: 1
+                              description: Skills to fetch from the remote source.
+                              items:
+                                type: object
+                                required: [name]
+                                properties:
+                                  name:
+                                    type: string
+                                  version:
+                                    type: string
+                                  label:
+                                    type: string
                       mcpServers:
                         type: array
                         description: MCP servers callable via mcporter. url is the full endpoint; transport defaults to http.
@@ -263,7 +304,7 @@ spec:
                           properties:
                             service:
                               type: string
-                              enum: [object-storage, ai-gateway]
+                              enum: [object-storage, ai-gateway, ai-registry]
                               description: Logical cloud service identifier
                             permissions:
                               type: array
@@ -329,6 +370,9 @@ spec:
                       name:
                         type: string
                         description: "Member's canonical name (matches spec.leader.name or spec.workers[i].name)."
+                      runtimeName:
+                        type: string
+                        description: "Member runtime identity key (Matrix localpart, OSS path key). Empty falls back to name."
                       role:
                         type: string
                         enum: [team_leader, worker]

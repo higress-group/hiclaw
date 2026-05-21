@@ -10,6 +10,9 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/hiclaw/hiclaw-controller/internal/credprovider"
+	"github.com/hiclaw/hiclaw-controller/internal/oss/ossfake"
 )
 
 func TestWriteInlineConfigs_AllFields_OpenClaw(t *testing.T) {
@@ -265,7 +268,7 @@ func TestValidateNacosURI_FormatErrors(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			err := ValidateNacosURI(context.Background(), tt.uri)
+			err := ValidateNacosURI(context.Background(), tt.uri, ValidateNacosURIOptions{})
 			if err == nil {
 				t.Fatal("expected error, got nil")
 			}
@@ -301,7 +304,7 @@ func TestValidateNacosURI_ValidFormat_UnreachableServer(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			err := ValidateNacosURI(context.Background(), tt.uri)
+			err := ValidateNacosURI(context.Background(), tt.uri, ValidateNacosURIOptions{})
 			if err == nil {
 				t.Fatal("expected connection error for unreachable server, got nil")
 			}
@@ -428,7 +431,7 @@ func TestValidateNacosURI_UsesEnvCredentialsWhenURIHasNoAuth(t *testing.T) {
 	t.Setenv("HICLAW_NACOS_USERNAME", "env-user")
 	t.Setenv("HICLAW_NACOS_PASSWORD", "env-pass")
 
-	err := ValidateNacosURI(context.Background(), "nacos://127.0.0.1:19999/ns/my-spec")
+	err := ValidateNacosURI(context.Background(), "nacos://127.0.0.1:19999/ns/my-spec", ValidateNacosURIOptions{})
 	if err == nil {
 		t.Fatal("expected connection error for unreachable server, got nil")
 	}
@@ -446,7 +449,7 @@ func TestValidateNacosURI_PartialEnvCredentialsFail(t *testing.T) {
 	t.Setenv("HICLAW_NACOS_USERNAME", "env-user")
 	t.Setenv("HICLAW_NACOS_PASSWORD", "")
 
-	err := ValidateNacosURI(context.Background(), "nacos://127.0.0.1:19999/ns/my-spec")
+	err := ValidateNacosURI(context.Background(), "nacos://127.0.0.1:19999/ns/my-spec", ValidateNacosURIOptions{})
 	if err == nil {
 		t.Fatal("expected error, got nil")
 	}
@@ -464,7 +467,7 @@ func TestValidateNacosURI_ChecksAgentSpecExists(t *testing.T) {
 	)
 	defer server.Close()
 
-	err := ValidateNacosURI(context.Background(), "nacos://"+server.Listener.Addr().String()+"/public/missing-spec")
+	err := ValidateNacosURI(context.Background(), "nacos://"+server.Listener.Addr().String()+"/public/missing-spec", ValidateNacosURIOptions{})
 	if err == nil {
 		t.Fatal("expected missing agentspec error, got nil")
 	}
@@ -485,7 +488,7 @@ func TestValidateNacosURI_SucceedsWhenAgentSpecExists(t *testing.T) {
 	)
 	defer server.Close()
 
-	err := ValidateNacosURI(context.Background(), "nacos://"+server.Listener.Addr().String()+"/public/existing-spec")
+	err := ValidateNacosURI(context.Background(), "nacos://"+server.Listener.Addr().String()+"/public/existing-spec", ValidateNacosURIOptions{})
 	if err != nil {
 		t.Fatalf("expected success, got: %v", err)
 	}
@@ -500,7 +503,7 @@ func TestValidateNacosURI_FailsWhenAgentSpecHasNoOnlineVersion(t *testing.T) {
 	)
 	defer server.Close()
 
-	err := ValidateNacosURI(context.Background(), "nacos://"+server.Listener.Addr().String()+"/public/offline-spec")
+	err := ValidateNacosURI(context.Background(), "nacos://"+server.Listener.Addr().String()+"/public/offline-spec", ValidateNacosURIOptions{})
 	if err == nil {
 		t.Fatal("expected offline agentspec error, got nil")
 	}
@@ -518,7 +521,7 @@ func TestValidateNacosURI_FailsWhenRequestedVersionIsNotOnline(t *testing.T) {
 	)
 	defer server.Close()
 
-	err := ValidateNacosURI(context.Background(), "nacos://"+server.Listener.Addr().String()+"/public/mixed-spec/v1")
+	err := ValidateNacosURI(context.Background(), "nacos://"+server.Listener.Addr().String()+"/public/mixed-spec/v1", ValidateNacosURIOptions{})
 	if err == nil {
 		t.Fatal("expected offline version error, got nil")
 	}
@@ -594,7 +597,182 @@ func TestResolveAndExtract_ZipWithoutSoulmd_Succeeds(t *testing.T) {
 	}
 }
 
+func TestValidateNacosURI_STSHiclaw_RequiresCredClient(t *testing.T) {
+	uri := "nacos://127.0.0.1:19999/public/my-spec?authType=sts-hiclaw"
+	err := ValidateNacosURI(context.Background(), uri, ValidateNacosURIOptions{})
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+	if !strings.Contains(err.Error(), "sts-hiclaw auth requires a credprovider.Client") {
+		t.Fatalf("expected credprovider requirement error, got: %v", err)
+	}
+}
+
+func TestValidateNacosURI_STSHiclaw_SucceedsWithCredClient(t *testing.T) {
+	server := newNacosAgentSpecCheckTestServer(t,
+		http.StatusOK,
+		`{"code":0,"message":"success","data":{"totalCount":1,"pageItems":[{"namespaceId":"public","name":"sts-spec","description":"demo","enable":true,"onlineCnt":1,"labels":{"latest":"v1"}}]}}`,
+		0,
+		"",
+	)
+	defer server.Close()
+
+	stub := stubCredClient{}
+	err := ValidateNacosURI(context.Background(), "nacos://"+server.Listener.Addr().String()+"/public/sts-spec?authType=sts-hiclaw", ValidateNacosURIOptions{
+		CredClient: stub,
+	})
+	if err != nil {
+		t.Fatalf("expected success, got: %v", err)
+	}
+}
+
+func TestPutPackageObjectSeedOnlyPreservesExistingStorageObject(t *testing.T) {
+	ctx := context.Background()
+	store := ossfake.NewMemory()
+	if err := store.PutObject(ctx, "agents/alice/config/credagent.json", []byte("runtime")); err != nil {
+		t.Fatal(err)
+	}
+
+	seeded, err := putPackageObjectSeedOnly(ctx, store, true, "agents/alice/config/credagent.json", []byte("template"))
+	if err != nil {
+		t.Fatalf("putPackageObjectSeedOnly failed: %v", err)
+	}
+	if seeded {
+		t.Fatalf("existing object should not be seeded")
+	}
+
+	got, err := store.GetObject(ctx, "agents/alice/config/credagent.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(got) != "runtime" {
+		t.Fatalf("seed-only object overwritten: %q", got)
+	}
+
+	seeded, err = putPackageObjectSeedOnly(ctx, store, true, "agents/alice/config/new.json", []byte("template"))
+	if err != nil {
+		t.Fatalf("putPackageObjectSeedOnly new object failed: %v", err)
+	}
+	if !seeded {
+		t.Fatalf("new object should be seeded")
+	}
+	got, err = store.GetObject(ctx, "agents/alice/config/new.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(got) != "template" {
+		t.Fatalf("new seed object = %q", got)
+	}
+}
+
+func TestWriteFileSeedOnlyPreservesExistingLocalFile(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config", "credagent.json")
+	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte("runtime"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	seeded, err := writeFileSeedOnly(path, []byte("template"))
+	if err != nil {
+		t.Fatalf("writeFileSeedOnly failed: %v", err)
+	}
+	if seeded {
+		t.Fatalf("existing file should not be seeded")
+	}
+	assertFileContent(t, path, "runtime")
+
+	newPath := filepath.Join(filepath.Dir(path), "new.json")
+	seeded, err = writeFileSeedOnly(newPath, []byte("template"))
+	if err != nil {
+		t.Fatalf("writeFileSeedOnly new file failed: %v", err)
+	}
+	if !seeded {
+		t.Fatalf("new file should be seeded")
+	}
+	assertFileContent(t, newPath, "template")
+}
+
+func TestCopyDirSeedOnlyPreservesExistingLocalFiles(t *testing.T) {
+	root := t.TempDir()
+	src := filepath.Join(root, "src")
+	dst := filepath.Join(root, "dst")
+	if err := os.MkdirAll(filepath.Join(src, "nested"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(src, "nested", "settings.json"), []byte("template"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(src, "nested", "new.json"), []byte("new-template"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(dst, "nested"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dst, "nested", "settings.json"), []byte("runtime"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := copyDirSeedOnly(src, dst); err != nil {
+		t.Fatalf("copyDirSeedOnly failed: %v", err)
+	}
+	assertFileContent(t, filepath.Join(dst, "nested", "settings.json"), "runtime")
+	assertFileContent(t, filepath.Join(dst, "nested", "new.json"), "new-template")
+}
+
+func TestSeedDirToStoragePreservesExistingObjects(t *testing.T) {
+	ctx := context.Background()
+	root := t.TempDir()
+	src := filepath.Join(root, "skills")
+	if err := os.MkdirAll(filepath.Join(src, "tool"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(src, "tool", "SKILL.md"), []byte("template"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(src, "tool", "extra.md"), []byte("extra-template"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	store := ossfake.NewMemory()
+	if err := store.PutObject(ctx, "agents/alice/skills/tool/SKILL.md", []byte("runtime")); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := seedDirToStorage(ctx, store, src, "agents/alice/skills"); err != nil {
+		t.Fatalf("seedDirToStorage failed: %v", err)
+	}
+
+	got, err := store.GetObject(ctx, "agents/alice/skills/tool/SKILL.md")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(got) != "runtime" {
+		t.Fatalf("existing storage object overwritten: %q", got)
+	}
+	got, err = store.GetObject(ctx, "agents/alice/skills/tool/extra.md")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(got) != "extra-template" {
+		t.Fatalf("new storage seed object = %q", got)
+	}
+}
+
 // --- helpers ---
+
+// stubCredClient returns a static STS-like triple for Nacos Spas signing tests.
+type stubCredClient struct{}
+
+func (stubCredClient) Issue(ctx context.Context, req credprovider.IssueRequest) (*credprovider.IssueResponse, error) {
+	return &credprovider.IssueResponse{
+		AccessKeyID:     "test-access-key-id",
+		AccessKeySecret: "test-access-key-secret",
+		SecurityToken:   "test-security-token",
+		Expiration:      "2099-01-01T00:00:00Z",
+	}, nil
+}
 func newNacosAgentSpecCheckTestServer(t *testing.T, listStatus int, listBody string, getStatus int, getBody string) *httptest.Server {
 	t.Helper()
 

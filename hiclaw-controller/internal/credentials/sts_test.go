@@ -6,6 +6,7 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/google/uuid"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -83,8 +84,11 @@ func TestIssueForCaller_WorkerDefaultEntries(t *testing.T) {
 			tok.OSSEndpoint, "oss-cn-hangzhou.aliyuncs.com")
 	}
 
-	if fake.lastReq.SessionName != "hiclaw-worker-alice" {
-		t.Fatalf("session = %q", fake.lastReq.SessionName)
+	if _, err := uuid.Parse(fake.lastReq.SessionName); err != nil {
+		t.Fatalf("session = %q, want UUID: %v", fake.lastReq.SessionName, err)
+	}
+	if len(fake.lastReq.SessionName) != 36 {
+		t.Fatalf("session length = %d, want 36", len(fake.lastReq.SessionName))
 	}
 	// Standalone workers now default to a single object-storage entry
 	// covering agents/<name>/* + shared/* (both RW), mirroring the

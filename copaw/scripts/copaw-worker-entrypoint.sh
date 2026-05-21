@@ -16,6 +16,7 @@ set -e
 source /opt/hiclaw/scripts/lib/hiclaw-env.sh 2>/dev/null || true
 
 WORKER_NAME="${HICLAW_WORKER_NAME:?HICLAW_WORKER_NAME is required}"
+WORKER_CR_NAME="${HICLAW_WORKER_CR_NAME:-${WORKER_NAME}}"
 INSTALL_DIR="/root/.hiclaw-worker"
 
 log() {
@@ -82,13 +83,14 @@ _start_readiness_reporter() {
         fi
 
         # Report ready to controller via hiclaw CLI
-        hiclaw worker report-ready
+        hiclaw worker report-ready --name "${WORKER_CR_NAME}"
     ) &
     log "Background readiness reporter started (PID: $!)"
 }
 
 VENV="/opt/venv/copaw"
 log "Starting copaw-worker: ${WORKER_NAME}"
+log "  Worker CR name: ${WORKER_CR_NAME}"
 log "  FS endpoint: ${FS_ENDPOINT}"
 log "  Install dir: ${INSTALL_DIR}"
 log "  CoPaw venv: ${VENV}"
@@ -113,8 +115,8 @@ if [ "${CMS_TRACES_ENABLED}" = "true" ]; then
   "OTEL_EXPORTER_OTLP_PROTOCOL": "http/protobuf",
   "OTEL_EXPORTER_OTLP_HEADERS": "x-arms-license-key=${HICLAW_CMS_LICENSE_KEY},x-arms-project=${HICLAW_CMS_PROJECT},x-cms-workspace=${HICLAW_CMS_WORKSPACE}",
   "OTEL_SERVICE_NAME": "${HICLAW_CMS_SERVICE_NAME:-hiclaw-worker-${WORKER_NAME}}",
-  "OTEL_SEMCONV_STABILITY_OPT_IN": "http",
-  "OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT": "true",
+  "OTEL_SEMCONV_STABILITY_OPT_IN": "http,gen_ai_latest_experimental",
+  "OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT": "SPAN_AND_EVENT",
   "LOONGSUITE_PYTHON_SITE_BOOTSTRAP": "true"
 }
 EOF
@@ -128,6 +130,7 @@ CONSOLE_PORT="${HICLAW_CONSOLE_PORT:-8088}"
 # Build command
 CMD_ARGS=(
     --name "${WORKER_NAME}"
+    --cr-name "${WORKER_CR_NAME}"
     --fs "${FS_ENDPOINT}"
     --fs-key "${FS_ACCESS_KEY}"
     --fs-secret "${FS_SECRET_KEY}"

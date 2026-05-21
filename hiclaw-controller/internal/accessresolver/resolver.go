@@ -50,8 +50,9 @@ func New(c client.Client, namespace, defaultBucket, defaultGatewayID string, pre
 // logical refs, and returns a list of fully-resolved entries ready
 // for credprovider.IssueRequest.
 //
-// The returned sessionName is a canonical identifier the caller can
-// forward to Alibaba Cloud AssumeRole as RoleSessionName.
+// The returned sessionName is a canonical caller label for controller
+// logs. The STS sidecar request uses a generated UUID as RoleSessionName
+// to stay below cloud-provider length limits.
 func (r *Resolver) ResolveForCaller(ctx context.Context, caller *auth.CallerIdentity) (sessionName string, entries []credprovider.AccessEntry, err error) {
 	if caller == nil {
 		return "", nil, errors.New("accessresolver: caller is nil")
@@ -90,7 +91,11 @@ func (r *Resolver) resolveWorker(ctx context.Context, name string) (string, []cr
 	if len(crEntries) == 0 {
 		crEntries = DefaultEntriesForWorker()
 	}
-	tmpl := templateCtx{kind: "Worker", name: name, namespace: r.namespace}
+	runtimeName := name
+	if w.Name != "" {
+		runtimeName = w.Spec.EffectiveWorkerName(w.Name)
+	}
+	tmpl := templateCtx{kind: "Worker", name: runtimeName, namespace: r.namespace}
 	resolved, err := r.resolveEntries(crEntries, tmpl)
 	if err != nil {
 		return "", nil, fmt.Errorf("worker %q: %w", name, err)
@@ -125,14 +130,17 @@ func (r *Resolver) resolveTeamMember(ctx context.Context, name, teamName string)
 
 	var crEntries []v1beta1.AccessEntry
 	kind := "TeamWorker"
+	runtimeName := name
 	switch {
-	case team.Spec.Leader.Name == name && team.Spec.Leader.Name != "":
+	case leaderMatches(team.Spec.Leader, name):
 		crEntries = team.Spec.Leader.AccessEntries
 		kind = "TeamLeader"
+		runtimeName = team.Spec.Leader.EffectiveWorkerName()
 	default:
 		for _, w := range team.Spec.Workers {
-			if w.Name == name {
+			if teamWorkerMatches(w, name) {
 				crEntries = w.AccessEntries
+				runtimeName = w.EffectiveWorkerName()
 				break
 			}
 		}
@@ -141,7 +149,11 @@ func (r *Resolver) resolveTeamMember(ctx context.Context, name, teamName string)
 		crEntries = DefaultEntriesForTeamMember()
 	}
 
-	tmpl := templateCtx{kind: kind, name: name, namespace: r.namespace, team: teamName}
+	runtimeTeamName := teamName
+	if team.Name != "" {
+		runtimeTeamName = team.Spec.EffectiveTeamName(team.Name)
+	}
+	tmpl := templateCtx{kind: kind, name: runtimeName, namespace: r.namespace, team: runtimeTeamName}
 	resolved, err := r.resolveEntries(crEntries, tmpl)
 	if err != nil {
 		return "", nil, fmt.Errorf("team member %q (team %q): %w", name, teamName, err)
@@ -150,6 +162,14 @@ func (r *Resolver) resolveTeamMember(ctx context.Context, name, teamName string)
 	// session-name shape because their ServiceAccount name on the
 	// pod is still hiclaw-worker-<name> (see auth.ResourcePrefix.SAName).
 	return r.prefix.WorkerSessionName(name), resolved, nil
+}
+
+func leaderMatches(leader v1beta1.LeaderSpec, name string) bool {
+	return leader.Name == name || (leader.WorkerName != "" && leader.WorkerName == name)
+}
+
+func teamWorkerMatches(worker v1beta1.TeamWorkerSpec, name string) bool {
+	return worker.Name == name || (worker.WorkerName != "" && worker.WorkerName == name)
 }
 
 func (r *Resolver) resolveManager(ctx context.Context, name string) (string, []credprovider.AccessEntry, error) {
@@ -204,6 +224,12 @@ func (r *Resolver) resolveEntries(in []v1beta1.AccessEntry, tmpl templateCtx) ([
 			out = append(out, entry)
 		case credprovider.ServiceAIGateway:
 			entry, err := r.resolveAIGateway(e, tmpl)
+			if err != nil {
+				return nil, fmt.Errorf("entry[%d]: %w", i, err)
+			}
+			out = append(out, entry)
+		case credprovider.ServiceAIRegistry:
+			entry, err := r.resolveAIRegistry(e, tmpl)
 			if err != nil {
 				return nil, fmt.Errorf("entry[%d]: %w", i, err)
 			}
@@ -302,6 +328,40 @@ func (r *Resolver) resolveAIGateway(e v1beta1.AccessEntry, tmpl templateCtx) (cr
 		Scope: credprovider.AccessScope{
 			GatewayID: gatewayID,
 			Resources: resources,
+		},
+	}, nil
+}
+
+type aiRegistryScope struct {
+	NamespaceID string   `json:"namespaceId,omitempty"`
+	Resources   []string `json:"resources,omitempty"`
+}
+
+func (r *Resolver) resolveAIRegistry(e v1beta1.AccessEntry, tmpl templateCtx) (credprovider.AccessEntry, error) {
+	var s aiRegistryScope
+	if err := unmarshalScope(e.Scope, &s); err != nil {
+		return credprovider.AccessEntry{}, fmt.Errorf("ai-registry: %w", err)
+	}
+
+	namespaceID := strings.TrimSpace(tmpl.expand(s.NamespaceID))
+	if namespaceID == "" {
+		return credprovider.AccessEntry{}, errors.New("ai-registry: namespaceId is required")
+	}
+
+	resources := make([]string, 0, len(s.Resources))
+	for _, res := range s.Resources {
+		resources = append(resources, tmpl.expand(res))
+	}
+	if len(resources) == 0 {
+		resources = []string{"agentSpec/*", "skill/*"}
+	}
+
+	return credprovider.AccessEntry{
+		Service:     credprovider.ServiceAIRegistry,
+		Permissions: copyPermissions(e.Permissions),
+		Scope: credprovider.AccessScope{
+			NamespaceID: namespaceID,
+			Resources:   resources,
 		},
 	}, nil
 }

@@ -8,6 +8,7 @@ import (
 	v1beta1 "github.com/hiclaw/hiclaw-controller/api/v1beta1"
 	"github.com/hiclaw/hiclaw-controller/internal/oss/ossfake"
 	"github.com/hiclaw/hiclaw-controller/internal/service"
+	"github.com/hiclaw/hiclaw-controller/test/testutil/mocks"
 )
 
 func TestLeaderHeartbeatEvery(t *testing.T) {
@@ -109,6 +110,140 @@ func TestTeamWorkerSpecToWorkerSpec_RuntimePassthrough(t *testing.T) {
 				t.Fatalf("runtime=%q, want %q (must be passed through verbatim; empty string is valid and resolved downstream by backend.ResolveRuntime)", got.Runtime, tc.runtime)
 			}
 		})
+	}
+}
+
+func TestBuildDesiredMembers_RuntimeWorkerNamesDriveMatrixPolicy(t *testing.T) {
+	team := &v1beta1.Team{}
+	team.Name = "alpha"
+	team.Spec.TeamName = "runtime-alpha"
+	team.Spec.Leader = v1beta1.LeaderSpec{
+		Name:       "alpha-worker-lead",
+		WorkerName: "lead",
+		Model:      "gpt-4o",
+	}
+	team.Spec.Workers = []v1beta1.TeamWorkerSpec{
+		{Name: "alpha-worker-dev", WorkerName: "dev", Model: "gpt-4o"},
+		{Name: "alpha-worker-qa", WorkerName: "qa", Model: "gpt-4o"},
+	}
+	team.Spec.Admin = &v1beta1.TeamAdminSpec{
+		Name:         "alpha-human-yhf",
+		MatrixUserID: "@yhf:example.com",
+	}
+
+	members := buildDesiredMembers(team, "")
+	byName := map[string]MemberContext{}
+	for _, m := range members {
+		byName[m.Name] = m
+	}
+
+	if got := byName["alpha-worker-lead"].RuntimeName; got != "lead" {
+		t.Fatalf("leader RuntimeName=%q, want lead", got)
+	}
+	if got := byName["alpha-worker-dev"].RuntimeName; got != "dev" {
+		t.Fatalf("worker RuntimeName=%q, want dev", got)
+	}
+	if got := byName["alpha-worker-dev"].TeamLeaderName; got != "lead" {
+		t.Fatalf("worker TeamLeaderName=%q, want lead", got)
+	}
+	for _, m := range members {
+		if got := m.TeamName; got != "runtime-alpha" {
+			t.Fatalf("member %s TeamName=%q, want runtime-alpha", m.Name, got)
+		}
+	}
+
+	leaderAllow := byName["alpha-worker-lead"].Spec.ChannelPolicy.GroupAllowExtra
+	if !stringSliceContains(leaderAllow, "dev") || !stringSliceContains(leaderAllow, "qa") {
+		t.Fatalf("leader groupAllowExtra=%v, want runtime worker names dev/qa", leaderAllow)
+	}
+	if stringSliceContains(leaderAllow, "alpha-worker-dev") {
+		t.Fatalf("leader groupAllowExtra=%v must not use CR worker name", leaderAllow)
+	}
+	if !stringSliceContains(leaderAllow, "@yhf:example.com") || stringSliceContains(leaderAllow, "alpha-human-yhf") {
+		t.Fatalf("leader groupAllowExtra=%v must use admin MatrixUserID, not admin CR name", leaderAllow)
+	}
+
+	devAllow := byName["alpha-worker-dev"].Spec.ChannelPolicy.GroupAllowExtra
+	if !stringSliceContains(devAllow, "lead") || !stringSliceContains(devAllow, "qa") {
+		t.Fatalf("dev groupAllowExtra=%v, want runtime leader/peer names lead/qa", devAllow)
+	}
+	if stringSliceContains(devAllow, "alpha-worker-lead") || stringSliceContains(devAllow, "alpha-worker-qa") {
+		t.Fatalf("dev groupAllowExtra=%v must not use CR member names", devAllow)
+	}
+	if !stringSliceContains(devAllow, "@yhf:example.com") || stringSliceContains(devAllow, "alpha-human-yhf") {
+		t.Fatalf("dev groupAllowExtra=%v must use admin MatrixUserID, not admin CR name", devAllow)
+	}
+}
+
+func TestReconcileMemberInfraUsesCRNameForCredentialKey(t *testing.T) {
+	prov := mocks.NewMockProvisioner()
+	state := &MemberState{}
+	member := MemberContext{
+		Name:        "alpha-worker-lead",
+		RuntimeName: "leader",
+		Role:        RoleTeamLeader,
+	}
+
+	if _, err := ReconcileMemberInfra(context.Background(), MemberDeps{Provisioner: prov}, member, state); err != nil {
+		t.Fatalf("ReconcileMemberInfra: %v", err)
+	}
+
+	if len(prov.Calls.ProvisionWorker) != 1 {
+		t.Fatalf("ProvisionWorker calls=%d, want 1", len(prov.Calls.ProvisionWorker))
+	}
+	req := prov.Calls.ProvisionWorker[0]
+	if req.Name != "leader" {
+		t.Fatalf("ProvisionWorker Name=%q, want runtime workerName leader", req.Name)
+	}
+	if req.CredentialName != "alpha-worker-lead" {
+		t.Fatalf("ProvisionWorker CredentialName=%q, want CR name alpha-worker-lead", req.CredentialName)
+	}
+}
+
+func TestReconcileMemberRefreshUsesCRNameCredentialAndRuntimeMatrixName(t *testing.T) {
+	prov := mocks.NewMockProvisioner()
+	state := &MemberState{}
+	member := MemberContext{
+		Name:                 "alpha-worker-lead",
+		RuntimeName:          "leader",
+		Role:                 RoleTeamLeader,
+		ExistingMatrixUserID: "@leader:localhost",
+	}
+
+	if _, err := ReconcileMemberInfra(context.Background(), MemberDeps{Provisioner: prov}, member, state); err != nil {
+		t.Fatalf("ReconcileMemberInfra: %v", err)
+	}
+
+	if len(prov.Calls.RefreshWorkerCredentials) != 1 {
+		t.Fatalf("RefreshWorkerCredentials calls=%d, want 1", len(prov.Calls.RefreshWorkerCredentials))
+	}
+	call := prov.Calls.RefreshWorkerCredentials[0]
+	if call.CredentialName != "alpha-worker-lead" {
+		t.Fatalf("CredentialName=%q, want CR name alpha-worker-lead", call.CredentialName)
+	}
+	if call.WorkerName != "leader" {
+		t.Fatalf("WorkerName=%q, want runtime workerName leader", call.WorkerName)
+	}
+}
+
+func TestReconcileMemberDeleteUsesCRNameForCredentialDelete(t *testing.T) {
+	prov := mocks.NewMockProvisioner()
+	deployer := mocks.NewMockDeployer()
+	member := MemberContext{
+		Name:        "alpha-worker-lead",
+		RuntimeName: "leader",
+		Role:        RoleTeamLeader,
+	}
+
+	if err := ReconcileMemberDelete(context.Background(), MemberDeps{Provisioner: prov, Deployer: deployer}, member); err != nil {
+		t.Fatalf("ReconcileMemberDelete: %v", err)
+	}
+
+	if len(prov.Calls.DeprovisionWorker) != 1 || prov.Calls.DeprovisionWorker[0].Name != "leader" {
+		t.Fatalf("DeprovisionWorker calls=%v, want runtime workerName leader", prov.Calls.DeprovisionWorker)
+	}
+	if len(prov.Calls.DeleteWorkerCredentials) != 1 || prov.Calls.DeleteWorkerCredentials[0] != "alpha-worker-lead" {
+		t.Fatalf("DeleteWorkerCredentials calls=%v, want CR name alpha-worker-lead", prov.Calls.DeleteWorkerCredentials)
 	}
 }
 
@@ -593,4 +728,13 @@ func TestBuildDesiredMembers_SystemLabelsOverrideUserLabels(t *testing.T) {
 	if got := byName["w1"].PodLabels["hiclaw.io/role"]; got != RoleTeamWorker.String() {
 		t.Errorf("w1 role got %q, want %q", got, RoleTeamWorker.String())
 	}
+}
+
+func stringSliceContains(values []string, target string) bool {
+	for _, value := range values {
+		if value == target {
+			return true
+		}
+	}
+	return false
 }

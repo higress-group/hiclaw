@@ -12,11 +12,13 @@ type WorkerProvisioner interface {
 	ProvisionWorker(ctx context.Context, req WorkerProvisionRequest) (*WorkerProvisionResult, error)
 	DeprovisionWorker(ctx context.Context, req WorkerDeprovisionRequest) error
 	RefreshCredentials(ctx context.Context, workerName string) (*RefreshResult, error)
+	RefreshWorkerCredentials(ctx context.Context, credentialName, workerName string) (*RefreshResult, error)
 	EnsureWorkerGatewayAuth(ctx context.Context, workerName, gatewayKey string) error
 	ReconcileExpose(ctx context.Context, workerName string, desired []v1beta1.ExposePort, current []v1beta1.ExposedPortStatus) ([]v1beta1.ExposedPortStatus, error)
 	EnsureServiceAccount(ctx context.Context, workerName string) error
 	DeleteServiceAccount(ctx context.Context, workerName string) error
 	DeleteCredentials(ctx context.Context, workerName string) error
+	DeleteWorkerCredentials(ctx context.Context, credentialName string) error
 	RequestSAToken(ctx context.Context, workerName string) (string, error)
 	// LeaveAllWorkerRooms logs in as the worker (using stored credentials,
 	// or resetting the password via admin if they are stale) and makes
@@ -38,7 +40,7 @@ type WorkerDeployer interface {
 	DeployPackage(ctx context.Context, name, uri string, isUpdate bool) error
 	WriteInlineConfigs(name string, spec v1beta1.WorkerSpec) error
 	DeployWorkerConfig(ctx context.Context, req WorkerDeployRequest) error
-	PushOnDemandSkills(ctx context.Context, workerName string, skills []string) error
+	PushOnDemandSkills(ctx context.Context, workerName string, skills []string, remoteSkills []v1beta1.RemoteSkillSource) error
 	CleanupOSSData(ctx context.Context, workerName string) error
 	InjectCoordinationContext(ctx context.Context, req CoordinationDeployRequest) error
 	EnsureTeamStorage(ctx context.Context, teamName string) error
@@ -107,7 +109,7 @@ type ManagerProvisioner interface {
 type ManagerDeployer interface {
 	DeployPackage(ctx context.Context, name, uri string, isUpdate bool) error
 	DeployManagerConfig(ctx context.Context, req ManagerDeployRequest) error
-	PushOnDemandSkills(ctx context.Context, name string, skills []string) error
+	PushOnDemandSkills(ctx context.Context, name string, skills []string, remoteSkills []v1beta1.RemoteSkillSource) error
 	CleanupOSSData(ctx context.Context, name string) error
 }
 
@@ -133,14 +135,18 @@ type HumanProvisioner interface {
 	// LoginAsHuman with the stored password instead to avoid triggering
 	// the orphan-recovery password reset inside matrix.EnsureUser, which
 	// would clobber any user-initiated password change made in Element.
-	EnsureHumanUser(ctx context.Context, name string) (*HumanCredentials, error)
+	EnsureHumanUser(ctx context.Context, username string) (*HumanCredentials, error)
 
 	// LoginAsHuman obtains a fresh access token for an already-provisioned
 	// human using the caller-supplied password. Returns an error when the
 	// password no longer matches (e.g. the user changed it in Element);
 	// callers treat that as a soft failure and fall back to admin-only
 	// room management on this reconcile pass.
-	LoginAsHuman(ctx context.Context, name, password string) (string, error)
+	LoginAsHuman(ctx context.Context, username, password string) (string, error)
+
+	// SetDisplayName updates the Matrix profile displayname for the user.
+	// Requires a user-scoped access token.
+	SetDisplayName(ctx context.Context, userID, accessToken, displayName string) error
 
 	// MatrixUserID builds the full "@<name>:<domain>" form.
 	MatrixUserID(name string) string

@@ -4,12 +4,16 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io/fs"
+	"net/url"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	v1beta1 "github.com/hiclaw/hiclaw-controller/api/v1beta1"
 	"github.com/hiclaw/hiclaw-controller/internal/agentconfig"
+	"github.com/hiclaw/hiclaw-controller/internal/credprovider"
 	"github.com/hiclaw/hiclaw-controller/internal/executor"
 	"github.com/hiclaw/hiclaw-controller/internal/oss"
 	"sigs.k8s.io/controller-runtime/pkg/log"
@@ -67,32 +71,37 @@ type DeployerConfig struct {
 	AgentFSDir     string // embedded: /root/hiclaw-fs/agents
 	WorkerAgentDir string // source for builtin agent files
 	MatrixDomain   string
+
+	// NacosCredClient is used when remoteSkills use sts-hiclaw (see CRD authType).
+	NacosCredClient credprovider.Client
 }
 
 // Deployer orchestrates configuration deployment for workers: package resolution,
 // inline config writes, openclaw.json generation, AGENTS.md merging, skill pushing,
 // and OSS synchronization.
 type Deployer struct {
-	agentConfig    *agentconfig.Generator
-	oss            oss.StorageClient
-	executor       *executor.Shell
-	packages       *executor.PackageResolver
-	legacy         *LegacyCompat
-	agentFSDir     string
-	workerAgentDir string
-	matrixDomain   string
+	agentConfig     *agentconfig.Generator
+	oss             oss.StorageClient
+	executor        *executor.Shell
+	packages        *executor.PackageResolver
+	legacy          *LegacyCompat
+	agentFSDir      string
+	workerAgentDir  string
+	matrixDomain    string
+	nacosCredClient credprovider.Client
 }
 
 func NewDeployer(cfg DeployerConfig) *Deployer {
 	return &Deployer{
-		agentConfig:    cfg.AgentConfig,
-		oss:            cfg.OSS,
-		executor:       cfg.Executor,
-		packages:       cfg.Packages,
-		legacy:         cfg.Legacy,
-		agentFSDir:     cfg.AgentFSDir,
-		workerAgentDir: cfg.WorkerAgentDir,
-		matrixDomain:   cfg.MatrixDomain,
+		agentConfig:     cfg.AgentConfig,
+		oss:             cfg.OSS,
+		executor:        cfg.Executor,
+		packages:        cfg.Packages,
+		legacy:          cfg.Legacy,
+		agentFSDir:      cfg.AgentFSDir,
+		workerAgentDir:  cfg.WorkerAgentDir,
+		matrixDomain:    cfg.MatrixDomain,
+		nacosCredClient: cfg.NacosCredClient,
 	}
 }
 
@@ -111,7 +120,7 @@ func (d *Deployer) DeployPackage(ctx context.Context, name, uri string, isUpdate
 		return nil
 	}
 
-	if err := d.packages.DeployToMinIO(ctx, extractedDir, name, isUpdate); err != nil {
+	if err := d.packages.DeployToMinIO(ctx, extractedDir, name, isUpdate, d.oss); err != nil {
 		return fmt.Errorf("package deploy failed: %w", err)
 	}
 
@@ -140,9 +149,10 @@ func (d *Deployer) DeployWorkerConfig(ctx context.Context, req WorkerDeployReque
 	agentPrefix := fmt.Sprintf("agents/%s", req.Name)
 	localAgentDir := fmt.Sprintf("%s/%s", d.agentFSDir, req.Name)
 
-	// --- Sync local agent files to storage FIRST (base layer) ---
-	// Mirror provides the base: package files, memory, custom skills, etc.
-	// All subsequent PutObject calls overwrite on top with authoritative content.
+	// --- Seed local agent files to storage FIRST (base layer) ---
+	// Local/package files provide defaults only. They must not overwrite
+	// runtime-mutated OSS state during reconcile; authoritative files are
+	// written explicitly below via the overwrite whitelist.
 	//
 	// Always exclude SOUL.md, AGENTS.md, HEARTBEAT.md from the mirror — each
 	// has a dedicated authoritative writer below (PutObject for SOUL.md,
@@ -157,8 +167,8 @@ func (d *Deployer) DeployWorkerConfig(ctx context.Context, req WorkerDeployReque
 		return fmt.Errorf("create agent dir: %w", err)
 	}
 	logger.Info("syncing agent files to storage", "name", req.Name)
-	mirrorExcludes := []string{"SOUL.md", "AGENTS.md", "HEARTBEAT.md"}
-	if err := d.oss.Mirror(ctx, localAgentDir+"/", agentPrefix+"/", oss.MirrorOptions{Overwrite: true, Exclude: mirrorExcludes}); err != nil {
+	seedExcludes := map[string]struct{}{"SOUL.md": {}, "AGENTS.md": {}, "HEARTBEAT.md": {}}
+	if err := d.seedLocalAgentFiles(ctx, localAgentDir, agentPrefix, seedExcludes); err != nil {
 		logger.Error(err, "agent file sync failed (non-fatal)")
 	}
 
@@ -322,13 +332,20 @@ func (d *Deployer) renderAndPushSoulTemplate(ctx context.Context, agentPrefix st
 	return d.oss.PutObject(ctx, agentPrefix+"/SOUL.md", []byte(result))
 }
 
-// PushOnDemandSkills runs the push-worker-skills.sh script for on-demand skills.
-// No-op if no skills or executor is nil.
-// NOTE: In incluster mode, the script may not exist in the controller container.
-// On-demand skills are then expected to be pushed by the Manager agent via its
-// worker-management skill at runtime.
-func (d *Deployer) PushOnDemandSkills(ctx context.Context, workerName string, skills []string) error {
+// PushOnDemandSkills pushes on-demand skills to a worker.
+// Built-in skills are pushed via push-worker-skills.sh. Remote skills are
+// fetched from source registries (currently nacos://) and mirrored to OSS.
+func (d *Deployer) PushOnDemandSkills(ctx context.Context, workerName string, skills []string, remoteSkills []v1beta1.RemoteSkillSource) error {
 	logger := log.FromContext(ctx)
+	if len(skills) == 0 && len(remoteSkills) == 0 {
+		return nil
+	}
+
+	agentPrefix := fmt.Sprintf("agents/%s", workerName)
+	if err := d.pushRemoteSkills(ctx, workerName, agentPrefix, remoteSkills); err != nil {
+		return err
+	}
+
 	if len(skills) == 0 || d.executor == nil {
 		return nil
 	}
@@ -340,6 +357,203 @@ func (d *Deployer) PushOnDemandSkills(ctx context.Context, workerName string, sk
 	}
 	_, err := d.executor.RunSimple(ctx, scriptPath, "--worker", workerName, "--no-notify")
 	return err
+}
+
+func (d *Deployer) seedLocalAgentFiles(ctx context.Context, localAgentDir, agentPrefix string, excludedTopLevel map[string]struct{}) error {
+	info, err := os.Stat(localAgentDir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return err
+	}
+	if !info.IsDir() {
+		return nil
+	}
+
+	logger := log.FromContext(ctx)
+	var seeded []string
+	err = filepath.WalkDir(localAgentDir, func(path string, entry fs.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		if entry.IsDir() {
+			return nil
+		}
+		if entry.Type()&os.ModeSymlink != 0 {
+			return nil
+		}
+
+		rel, err := filepath.Rel(localAgentDir, path)
+		if err != nil {
+			return err
+		}
+		rel = filepath.ToSlash(rel)
+		if _, excluded := excludedTopLevel[rel]; excluded {
+			return nil
+		}
+
+		key := agentPrefix + "/" + rel
+		if _, err := d.oss.GetObject(ctx, key); err == nil {
+			return nil
+		} else if !os.IsNotExist(err) {
+			return err
+		}
+		if err := d.oss.PutFile(ctx, path, key); err != nil {
+			return err
+		}
+		seeded = append(seeded, rel)
+		return nil
+	})
+	if err != nil {
+		return err
+	}
+	if len(seeded) > 0 {
+		logger.Info("agent seed-only files pushed to storage", "target", agentPrefix, "files", seeded)
+	}
+	return nil
+}
+
+type nacosClientKey struct {
+	nacosAddr string
+	namespace string
+	authType  string
+	resources string
+}
+
+func (d *Deployer) pushRemoteSkills(ctx context.Context, workerName, agentPrefix string, remoteSkills []v1beta1.RemoteSkillSource) error {
+	if len(remoteSkills) == 0 {
+		return nil
+	}
+
+	logger := log.FromContext(ctx)
+	logger.Info("pushing remote skills", "worker", workerName, "sources", len(remoteSkills))
+	clients := map[nacosClientKey]*executor.NacosAIClient{}
+
+	for _, source := range remoteSkills {
+		if len(source.Skills) == 0 {
+			return fmt.Errorf("remoteSkills source %q has empty skills list", source.Source)
+		}
+		for _, skill := range source.Skills {
+			if strings.TrimSpace(skill.Name) == "" {
+				return fmt.Errorf("remoteSkills source %q has an entry with empty name", source.Source)
+			}
+			if skill.Version != "" && skill.Label != "" {
+				return fmt.Errorf("remote skill %q in source %q cannot set both version and label", skill.Name, source.Source)
+			}
+		}
+
+		nacosAddr, namespace, err := parseNacosRemoteSource(source.Source)
+		if err != nil {
+			return fmt.Errorf("invalid remoteSkills.source %q: %w", source.Source, err)
+		}
+
+		authType, err := mapRemoteSkillAuthType(source.AuthType)
+		if err != nil {
+			return fmt.Errorf("invalid remoteSkills.authType for source %q: %w", source.Source, err)
+		}
+
+		stsResources := remoteSkillSTSResources(source.Skills)
+		key := nacosClientKey{nacosAddr: nacosAddr, namespace: namespace, authType: authType}
+		var opts []executor.NacosAIClientOption
+		if authType == "sts-hiclaw" {
+			key.resources = strings.Join(stsResources, ",")
+			opts = append(opts, executor.WithNacosSTSResources(stsResources))
+		}
+		client, ok := clients[key]
+		if !ok {
+			logger.Info("connecting to nacos", "worker", workerName, "source", source.Source, "authType", authType)
+			client, err = executor.NewNacosAIClient(ctx, nacosAddr, namespace, authType, d.nacosCredClient, opts...)
+			if err != nil {
+				return fmt.Errorf("connect to nacos source %q: %w", source.Source, err)
+			}
+			clients[key] = client
+		}
+
+		for _, skill := range source.Skills {
+			tmpDir, err := os.MkdirTemp("", "nacos-skill-")
+			if err != nil {
+				return fmt.Errorf("create temp dir for skill %q: %w", skill.Name, err)
+			}
+			defer os.RemoveAll(tmpDir)
+
+			if err := client.GetSkill(ctx, skill.Name, tmpDir, skill.Version, skill.Label); err != nil {
+				return fmt.Errorf("fetch remote skill %q from %q: %w", skill.Name, source.Source, err)
+			}
+			logger.Info("remote skill fetched, mirroring to OSS",
+				"worker", workerName,
+				"source", source.Source,
+				"skill", skill.Name,
+				"version", skill.Version,
+				"label", skill.Label)
+
+			src := filepath.Join(tmpDir, skill.Name) + "/"
+			dst := agentPrefix + "/skills/" + skill.Name + "/"
+			if err := d.oss.Mirror(ctx, src, dst, oss.MirrorOptions{Overwrite: true}); err != nil {
+				return fmt.Errorf("mirror remote skill %q from %q to OSS: %w", skill.Name, source.Source, err)
+			}
+			logger.Info("remote skill pushed",
+				"worker", workerName,
+				"source", source.Source,
+				"skill", skill.Name,
+				"version", skill.Version,
+				"label", skill.Label)
+		}
+	}
+
+	return nil
+}
+
+func mapRemoteSkillAuthType(raw string) (string, error) {
+	authType := strings.TrimSpace(raw)
+	switch authType {
+	case "", "sts-hiclaw", "nacos", "none":
+		return authType, nil
+	default:
+		return "", fmt.Errorf("unsupported authType %q", raw)
+	}
+}
+
+func remoteSkillSTSResources(skills []v1beta1.RemoteSkill) []string {
+	seen := make(map[string]struct{}, len(skills))
+	for _, skill := range skills {
+		name := strings.TrimSpace(skill.Name)
+		if name == "" {
+			continue
+		}
+		seen["skill/"+name] = struct{}{}
+	}
+	resources := make([]string, 0, len(seen))
+	for res := range seen {
+		resources = append(resources, res)
+	}
+	sort.Strings(resources)
+	return resources
+}
+
+func parseNacosRemoteSource(raw string) (nacosAddr, namespace string, err error) {
+	if !strings.HasPrefix(raw, "nacos://") {
+		return "", "", fmt.Errorf("source must use nacos:// scheme")
+	}
+
+	parsed, err := url.Parse("http://" + strings.TrimPrefix(raw, "nacos://"))
+	if err != nil {
+		return "", "", err
+	}
+	if parsed.Host == "" {
+		return "", "", fmt.Errorf("missing host")
+	}
+
+	parts := strings.Split(strings.Trim(parsed.Path, "/"), "/")
+	if len(parts) != 1 || parts[0] == "" {
+		return "", "", fmt.Errorf("expected nacos://host:port/{namespace-id}")
+	}
+
+	nacosAddr = parsed.Host
+	if parsed.User != nil {
+		nacosAddr = parsed.User.String() + "@" + parsed.Host
+	}
+	return nacosAddr, parts[0], nil
 }
 
 // CleanupOSSData removes all agent data from OSS for a deleted worker.

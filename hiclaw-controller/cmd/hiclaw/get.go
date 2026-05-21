@@ -307,6 +307,7 @@ type workerListResp struct {
 
 type teamResp struct {
 	Name              string             `json:"name"`
+	TeamName          string             `json:"teamName,omitempty"`
 	Phase             string             `json:"phase"`
 	Description       string             `json:"description,omitempty"`
 	LeaderName        string             `json:"leaderName"`
@@ -387,6 +388,7 @@ func workerDetail(w workerResp) []KeyValue {
 func teamDetail(t teamResp) []KeyValue {
 	return []KeyValue{
 		{"Name", t.Name},
+		{"TeamName", t.TeamName},
 		{"Phase", or(t.Phase, "Pending")},
 		{"Description", t.Description},
 		{"Leader", t.LeaderName},

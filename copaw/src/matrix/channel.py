@@ -810,6 +810,23 @@ class MatrixChannel(BaseChannel):
                 return result.strip()
         return text
 
+    def _control_command_text(self, text: str) -> str | None:
+        """Return normalized runtime control command text, if any."""
+        registry = getattr(self, "_command_registry", None)
+        if registry is None:
+            return None
+
+        stripped = (text or "").strip()
+        if registry.is_control_command(stripped):
+            return stripped
+
+        if stripped.startswith("/"):
+            normalized = "/" + stripped.lstrip("/")
+            if normalized != stripped and registry.is_control_command(normalized):
+                return normalized
+
+        return None
+
     # ------------------------------------------------------------------
     # Display names & group history buffer (requireMention context)
     # display names from room / client.rooms (§5–§6);
@@ -1524,10 +1541,13 @@ class MatrixChannel(BaseChannel):
             await self._send_typing(room_id, False)
             return
 
-        cmd = (
-            stripped.lstrip("/").split()[0] if stripped.startswith("/") else ""
-        )
-        if cmd in _SLASH_COMMANDS:
+        control_text = self._control_command_text(stripped)
+        cmd = ""
+        if control_text is not None:
+            command_text = control_text
+        elif stripped.startswith("/"):
+            cmd = stripped.lstrip("/").split()[0]
+        if control_text is None and cmd in _SLASH_COMMANDS:
             command_text = stripped
             # Apply alias (e.g. /reset -> /clear)
             if cmd in _SLASH_ALIASES:
@@ -1992,10 +2012,12 @@ class MatrixChannel(BaseChannel):
             html_body = html.escape(body).replace("\n", "<br>\n")
 
         for mxid in targets:
-            if mxid not in body:
-                body = f"{mxid} {body}" if body else mxid
-            mxid_enc = urllib.parse.quote(mxid, safe="")
             display = self._resolve_display_name(mxid, room_id) or mxid
+            if mxid in body:
+                body = body.replace(mxid, display, 1)
+            elif display not in body:
+                body = f"{display} {body}" if body else display
+            mxid_enc = urllib.parse.quote(mxid, safe="")
             anchor = (
                 f'<a href="https://matrix.to/#/{mxid_enc}">'
                 f"{html.escape(display)}</a>"
@@ -2027,6 +2049,34 @@ class MatrixChannel(BaseChannel):
                         exc,
                     )
         return user_id.split(":")[0].lstrip("@") or user_id
+
+    async def _on_process_completed(
+        self,
+        request: Any,
+        to_handle: str,
+        send_meta: Dict[str, Any],
+    ) -> None:
+        base_completed = getattr(super(), "_on_process_completed", None)
+        try:
+            if base_completed:
+                await base_completed(request, to_handle, send_meta)
+        finally:
+            await self._send_typing(to_handle, False)
+
+    async def _on_consume_error(
+        self,
+        request: Any,
+        to_handle: str,
+        err_text: str,
+    ) -> None:
+        if "Task has been cancelled" in (err_text or ""):
+            logger.info(
+                "MatrixChannel: suppressing cancellation error for %s",
+                to_handle,
+            )
+            await self._send_typing(to_handle, False)
+            return
+        await super()._on_consume_error(request, to_handle, err_text)
 
     # ------------------------------------------------------------------
     # Outgoing send — text

@@ -6,6 +6,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"sync"
 
 	v1beta1 "github.com/hiclaw/hiclaw-controller/api/v1beta1"
 	"github.com/hiclaw/hiclaw-controller/internal/accessresolver"
@@ -45,6 +46,10 @@ type App struct {
 	mgr ctrl.Manager
 
 	httpServer *server.HTTPServer
+
+	// wg tracks all background goroutines launched from Start so Stop can
+	// wait for them to drain before returning.
+	wg sync.WaitGroup
 
 	// --- Build-time intermediates (populated during init*, consumed by later init* steps) ---
 	scheme    *runtime.Scheme
@@ -108,18 +113,20 @@ func New(ctx context.Context, cfg *config.Config) (*App, error) {
 }
 
 // Start runs the HTTP server and controller manager. Blocks until ctx is cancelled.
+// Call Stop afterwards to drain background goroutines and shut the HTTP server
+// down gracefully.
 func (a *App) Start(ctx context.Context) error {
 	logger := ctrl.Log.WithName("app")
 
-	go func() {
+	a.wg.Go(func() {
 		if err := a.httpServer.Start(); err != nil {
 			logger.Error(err, "HTTP server failed")
 		}
-	}()
+	})
 
 	// Run cluster initialization only after this instance becomes the leader.
 	// In embedded mode (no leader election) Elected() closes immediately.
-	go func() {
+	a.wg.Go(func() {
 		<-a.mgr.Elected()
 		logger.Info("elected as leader, running cluster initialization")
 
@@ -169,9 +176,26 @@ func (a *App) Start(ctx context.Context) error {
 			"kubeMode", a.cfg.KubeMode,
 			"httpAddr", a.cfg.HTTPAddr,
 		)
-	}()
+	})
 
 	return a.mgr.Start(ctx)
+}
+
+// Stop performs a graceful shutdown: the HTTP server stops accepting new
+// connections and is given ctx to finish in-flight requests, then we wait
+// for every background goroutine launched from Start to exit. Safe to call
+// after Start returns. The caller is expected to bound ctx with a timeout.
+func (a *App) Stop(ctx context.Context) error {
+	logger := ctrl.Log.WithName("app")
+	var firstErr error
+	if a.httpServer != nil {
+		if err := a.httpServer.Shutdown(ctx); err != nil {
+			logger.Error(err, "HTTP server shutdown")
+			firstErr = err
+		}
+	}
+	a.wg.Wait()
+	return firstErr
 }
 
 // =========================================================================
@@ -204,6 +228,9 @@ func (a *App) initInfraClients(_ context.Context) error {
 		// controller-runtime Manager (and its client.Client) is built, since
 		// the accessresolver needs to read Worker/Manager CRs.
 		logger.Info("credential-provider sidecar configured", "url", cfg.CredentialProviderURL)
+	}
+	if a.credProvider != nil {
+		a.packages.CredClient = a.credProvider
 	}
 
 	// Gateway client — provider-driven.
@@ -298,8 +325,8 @@ func (a *App) initControllerManager(ctx context.Context) error {
 // initFieldIndexers registers cache field indexers used for efficient reverse
 // lookups by auth enrichment and, in the future, admission/validation.
 //
-//   - teams.spec.leader.name  -> list Team by leader name
-//   - teams.spec.workerNames  -> list Team by any worker name (custom virtual field)
+//   - teams.spec.leader.name  -> list Team by leader name or runtime workerName
+//   - teams.spec.workerNames  -> list Team by any worker name or runtime workerName
 func (a *App) initFieldIndexers(ctx context.Context) error {
 	if a.mgr == nil {
 		return nil
@@ -310,10 +337,11 @@ func (a *App) initFieldIndexers(ctx context.Context) error {
 		if !ok {
 			return nil
 		}
-		if team.Spec.Leader.Name == "" {
+		names := uniqueNonEmpty(team.Spec.Leader.Name, team.Spec.Leader.WorkerName)
+		if len(names) == 0 {
 			return nil
 		}
-		return []string{team.Spec.Leader.Name}
+		return names
 	}); err != nil {
 		return fmt.Errorf("index team leader name: %w", err)
 	}
@@ -322,11 +350,9 @@ func (a *App) initFieldIndexers(ctx context.Context) error {
 		if !ok {
 			return nil
 		}
-		names := make([]string, 0, len(team.Spec.Workers))
+		names := make([]string, 0, len(team.Spec.Workers)*2)
 		for _, w := range team.Spec.Workers {
-			if w.Name != "" {
-				names = append(names, w.Name)
-			}
+			names = append(names, uniqueNonEmpty(w.Name, w.WorkerName)...)
 		}
 		return names
 	}); err != nil {
@@ -335,7 +361,23 @@ func (a *App) initFieldIndexers(ctx context.Context) error {
 	return nil
 }
 
-func (a *App) initAuth(_ context.Context) error {
+func uniqueNonEmpty(values ...string) []string {
+	seen := map[string]struct{}{}
+	out := make([]string, 0, len(values))
+	for _, value := range values {
+		if value == "" {
+			continue
+		}
+		if _, ok := seen[value]; ok {
+			continue
+		}
+		seen[value] = struct{}{}
+		out = append(out, value)
+	}
+	return out
+}
+
+func (a *App) initAuth(ctx context.Context) error {
 	logger := ctrl.Log.WithName("app")
 
 	if a.restCfg != nil {
@@ -345,6 +387,7 @@ func (a *App) initAuth(_ context.Context) error {
 			return fmt.Errorf("create kubernetes client: %w", err)
 		}
 		authenticator := authpkg.NewTokenReviewAuthenticator(a.k8sClient, a.cfg.AuthAudience, authpkg.ResourcePrefix(a.cfg.ResourcePrefix))
+		go authenticator.StartCleanup(ctx)
 		enricher := authpkg.NewCREnricher(a.mgr.GetClient(), a.namespace)
 		authorizer := authpkg.NewAuthorizer()
 		a.authMw = authpkg.NewMiddleware(authenticator, enricher, authorizer, a.mgr.GetClient(), a.namespace)
@@ -416,14 +459,15 @@ func (a *App) initServiceLayer(_ context.Context) error {
 	}
 
 	a.deployer = service.NewDeployer(service.DeployerConfig{
-		AgentConfig:    a.agentGen,
-		OSS:            a.oss,
-		Executor:       a.shell,
-		Packages:       a.packages,
-		Legacy:         a.legacy,
-		AgentFSDir:     cfg.AgentFSDir(),
-		WorkerAgentDir: cfg.WorkerAgentDir(),
-		MatrixDomain:   cfg.MatrixDomain,
+		AgentConfig:     a.agentGen,
+		OSS:             a.oss,
+		Executor:        a.shell,
+		Packages:        a.packages,
+		Legacy:          a.legacy,
+		AgentFSDir:      cfg.AgentFSDir(),
+		WorkerAgentDir:  cfg.WorkerAgentDir(),
+		MatrixDomain:    cfg.MatrixDomain,
+		NacosCredClient: a.credProvider,
 	})
 
 	return nil
@@ -556,11 +600,11 @@ func (a *App) startEmbedded(ctx context.Context) (*rest.Config, error) {
 	if err := fw.InitialSync(ctx); err != nil {
 		logger.Error(err, "initial sync failed (non-fatal)")
 	}
-	go func() {
+	a.wg.Go(func() {
 		if err := fw.Watch(ctx); err != nil && ctx.Err() == nil {
 			logger.Error(err, "file watcher stopped unexpectedly")
 		}
-	}()
+	})
 	logger.Info("file watcher started", "dir", cfg.ConfigDir)
 
 	return restCfg, nil
