@@ -102,6 +102,10 @@ _STOP_RESPONSE_RE = re.compile(
     r"Session\s+`matrix:[^`]+`:\s+(?P<status>[^.]+)\.",
     re.IGNORECASE,
 )
+_READINESS_REPLY_RE = re.compile(
+    r"\breadiness\s+check\b.*\breply\s+with\s+the\s+exact\s+text\s+READY\b",
+    re.IGNORECASE | re.DOTALL,
+)
 _THREAD_META_ROOT_KEY = "thread_root_event_id"
 _MATRIX_THREAD_META_KEY = "matrix_thread_root_event_id"
 _MATRIX_OWN_THREAD_ROOT_KEY = "matrix_own_thread_root_event_id"
@@ -185,6 +189,11 @@ def _clean_control_response_text(text: str) -> str:
 def _ends_with_no_reply_control(text: str) -> bool:
     """Return true when the final non-empty output line is NO_REPLY."""
     return bool(text) and text.rstrip().splitlines()[-1].strip() == "NO_REPLY"
+
+
+def _readiness_probe_reply(text: str) -> str | None:
+    """Return the direct reply for the Matrix runtime readiness probe."""
+    return "READY" if _READINESS_REPLY_RE.search(text or "") else None
 
 
 def _enum_name(value: Any) -> str:
@@ -1674,6 +1683,19 @@ class MatrixChannel(BaseChannel):
                 room_id,
             )
             await self._send_typing(room_id, False)
+            return
+
+        direct_reply = _readiness_probe_reply(stripped)
+        if direct_reply:
+            logger.info(
+                "MatrixChannel: replying directly to readiness probe from %s "
+                "in %s",
+                sender_id,
+                room_id,
+            )
+            await self.send(room_id, direct_reply)
+            if not is_dm and not is_thread_event:
+                self._clear_history(room_id)
             return
 
         cmd = (
