@@ -10,6 +10,7 @@ Record image-affecting changes to `manager/`, `worker/`, `copaw/`, `hermes/`, `o
 - fix(copaw): avoid swallowing fresh Matrix messages during first-start sync token initialization.
 - fix(copaw): gate Worker readiness on Matrix channel startup so probes do not pass before messages can be handled.
 - fix(copaw): answer Matrix runtime readiness probes directly once the channel is receiving mentioned messages.
+- fix(copaw): handle targeted Matrix readiness probes before the normal agent dispatch and policy path.
 
 - feat(hiclaw-controller): propagate controller-level skills API and Nacos auth defaults to workers.
 - fix(copaw): suppress noisy warnings when optional MinIO objects do not exist.

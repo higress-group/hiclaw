@@ -40,7 +40,7 @@ from nio import (
 )
 from nio.responses import JoinedMembersResponse, WhoamiResponse
 
-logger = logging.getLogger("qwenpaw.channels.matrix")
+logger = logging.getLogger("copaw.channels.matrix")
 
 # ---------------------------------------------------------------------------
 # Lazy import of QwenPaw base types so this file can be syntax-checked without
@@ -821,6 +821,42 @@ class MatrixChannel(BaseChannel):
         if not isinstance(relates_to, dict):
             return False
         return relates_to.get("rel_type") == "m.thread"
+
+    def _targeted_readiness_probe_reply(self, event: Any, text: str) -> str | None:
+        """Return a direct readiness reply if this event explicitly targets us."""
+        reply = _readiness_probe_reply(text)
+        if not reply or not self._user_id:
+            return None
+
+        content = getattr(event, "source", {}).get("content", {}) or {}
+        mentions = content.get("m.mentions", {}) or {}
+        if self._user_id in mentions.get("user_ids", []):
+            return reply
+        if re.search(re.escape(self._user_id), text, re.IGNORECASE):
+            return reply
+        return None
+
+    async def _send_plain_text(self, room_id: str, text: str) -> None:
+        """Send a plain Matrix text event without invoking the agent path."""
+        if not self._client:
+            logger.error("MatrixChannel: direct send called but client not ready")
+            return
+        try:
+            await self._client.room_send(
+                room_id,
+                "m.room.message",
+                {
+                    "msgtype": "m.text",
+                    "body": text,
+                },
+                ignore_unverified_devices=True,
+            )
+        except Exception as exc:
+            logger.exception(
+                "MatrixChannel: direct send failed to %s: %s",
+                room_id,
+                exc,
+            )
 
     # pylint: disable=too-many-return-statements
     def _was_mentioned(self, event: Any, text: str) -> bool:
@@ -1624,6 +1660,18 @@ class MatrixChannel(BaseChannel):
         sender_id = event.sender
         text = event.body or ""
 
+        direct_reply = self._targeted_readiness_probe_reply(event, text)
+        if direct_reply:
+            logger.info(
+                "MatrixChannel: replying directly to targeted readiness probe "
+                "from %s in %s",
+                sender_id,
+                room_id,
+            )
+            await self._send_read_receipt(room_id, event.event_id)
+            await self._send_plain_text(room_id, direct_reply)
+            return
+
         # Use Matrix API to reliably detect DM rooms
         # (nio's room.users is unreliable after token restore)
         is_dm = await self._is_dm_room(room_id, sender_id)
@@ -1693,7 +1741,7 @@ class MatrixChannel(BaseChannel):
                 sender_id,
                 room_id,
             )
-            await self.send(room_id, direct_reply)
+            await self._send_plain_text(room_id, direct_reply)
             if not is_dm and not is_thread_event:
                 self._clear_history(room_id)
             return

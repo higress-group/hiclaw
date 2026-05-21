@@ -435,3 +435,24 @@ def test_matrix_readiness_probe_replies_directly_without_enqueue():
     assert len(client.sent) == 1
     assert client.sent[0][0] == "!room:hs.local"
     assert client.sent[0][2]["body"] == "READY"
+
+
+def test_matrix_readiness_probe_bypasses_allowlist_when_targeted():
+    ch = _make_inbound_channel()
+    client = _SendClient()
+    ch._client = client
+    ch._check_allowed = lambda *_args: False
+
+    asyncio.run(
+        ch._on_room_event(
+            _FakeRoom(),
+            _event(
+                "@copywriting-assistant:hs.local Readiness check: please "
+                "reply with the exact text READY.",
+            ),
+        ),
+    )
+
+    assert ch.enqueued == []
+    assert len(client.sent) == 1
+    assert client.sent[0][2]["body"] == "READY"

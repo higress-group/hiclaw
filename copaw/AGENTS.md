@@ -330,7 +330,7 @@ docker logs hiclaw-manager --tail 200    # supervisord-level + any uncaught stdo
 
 Level is controlled by `COPAW_LOG_LEVEL=debug|info|warning|error` (default `info`). HiClaw Worker containers **do not** set it by default; bounce the container with `-e COPAW_LOG_LEVEL=debug` when you need `_download_mxc` / sync-loop detail.
 
-> ⚠️ Only `copaw.*` and the root logger reach stdout. Any third-party or vendored logger using a different namespace is **silently dropped at INFO level.** The in-tree Matrix channel (`copaw/src/matrix/channel.py`) currently uses `logging.getLogger("qwenpaw.channels.matrix")` — see the Known gotchas section.
+> ⚠️ Only `copaw.*` and the root logger reach stdout. Any third-party or vendored logger using a different namespace is **silently dropped at INFO level.** The in-tree Matrix channel (`copaw/src/matrix/channel.py`) uses `logging.getLogger("copaw.channels.matrix")` so channel decisions are visible in normal Worker logs.
 
 **Session files (per-agent conversation history):**
 
@@ -385,17 +385,12 @@ These make healthy runs look broken or sick runs look healthy — learn them bef
 1. **Runtime config changes require a Worker restart.**
    CoPaw worker no longer runs a background Remote -> Local config pull loop. Startup `mirror_all()` restores MinIO state, and runtime Local -> Remote preservation is handled by `push_loop`. Shared data can still be pulled explicitly through the filesync tool, but `openclaw.json`, skills, and mcporter config are refreshed by restarting the Worker.
 
-2. **Matrix channel logs are silent by default.** `copaw/src/matrix/channel.py` uses `logging.getLogger("qwenpaw.channels.matrix")`. CoPaw's runtime filter only promotes `copaw.*` (plus root) to stdout, so allowlist rejections, mention filtering, login retries, and sync-loop errors from the channel **never surface** at INFO. Workarounds for the moment:
-   - Rebuild with `COPAW_LOG_LEVEL=debug` *and* additionally raise the `qwenpaw` logger via a shell into the container (`python -c 'import logging; logging.getLogger("qwenpaw").setLevel("DEBUG")'` won't persist across process lifetime — patch the entrypoint or add a bootstrap hook), or
-   - Treat the root-cause fix (rename logger to `copaw.channels.matrix` or hiclaw-specific) as a prerequisite for serious Matrix-layer debugging.
-   > Remove this gotcha once the logger is renamed under `copaw.*`.
-
-3. **Team Leader startup always logs `authorization denied: team-leader "<name>" cannot ready worker`.** `hiclaw-controller/internal/auth/authorizer.go :: authorizeTeamLeaderWorkerAction` does not list `ActionReady` — the Leader's `hiclaw worker report-ready` call inside `copaw-worker-entrypoint.sh` gets a 403. The Worker process keeps running fine; only the readiness self-report is lost. Ignore it while debugging non-response issues — it is *not* the cause.
+2. **Team Leader startup always logs `authorization denied: team-leader "<name>" cannot ready worker`.** `hiclaw-controller/internal/auth/authorizer.go :: authorizeTeamLeaderWorkerAction` does not list `ActionReady` — the Leader's `hiclaw worker report-ready` call inside `copaw-worker-entrypoint.sh` gets a 403. The Worker process keeps running fine; only the readiness self-report is lost. Ignore it while debugging non-response issues — it is *not* the cause.
    > Remove this gotcha once `authorizeTeamLeaderWorkerAction` accepts `ActionReady` for the Leader's own team.
 
-4. **Manager-side MCP server re-setup can touch MinIO `openclaw.json`.** If you re-run `setup-mcp-server.sh` (or Manager triggers it on heartbeat), MinIO objects are rewritten even when content matches, bumping mtime. Combined with gotcha 1 this can show as a storm of re-bridges; check Manager logs around the reload moments.
+3. **Manager-side MCP server re-setup can touch MinIO `openclaw.json`.** If you re-run `setup-mcp-server.sh` (or Manager triggers it on heartbeat), MinIO objects are rewritten even when content matches, bumping mtime. Combined with gotcha 1 this can show as a storm of re-bridges; check Manager logs around the reload moments.
 
-5. **Session files survive `make uninstall-embedded`** (volumes are not removed). Reproducing a bug from a clean slate requires the full-wipe command in § Build, Install, Test — Embedded mode.
+4. **Session files survive `make uninstall-embedded`** (volumes are not removed). Reproducing a bug from a clean slate requires the full-wipe command in § Build, Install, Test — Embedded mode.
 
 ### Dev tooling
 
