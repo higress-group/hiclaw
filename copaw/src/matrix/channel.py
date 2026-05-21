@@ -623,6 +623,8 @@ class MatrixChannel(BaseChannel):
         # deploy), do an initial sync with callbacks suppressed — only capture
         # next_batch so subsequent syncs are incremental.  This prevents
         # replaying old messages when the token file doesn't exist yet.
+        # Use timeout=0 so startup does not long-poll and swallow fresh
+        # messages that arrive while callbacks are temporarily suppressed.
         #
         # To truly suppress callbacks, temporarily remove event callbacks
         # before the sync and restore them after, because nio's sync()
@@ -637,7 +639,7 @@ class MatrixChannel(BaseChannel):
                 self._client.event_callbacks.clear()
                 try:
                     resp = await self._client.sync(
-                        timeout=self._cfg.sync_timeout_ms,
+                        timeout=0,
                         full_state=True,
                     )
                 finally:
