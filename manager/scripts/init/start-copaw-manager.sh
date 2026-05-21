@@ -202,7 +202,29 @@ PYEOF
 fi
 
 # ============================================================
-# 9. Launch CoPaw Manager (app mode with hot-reload)
+# 9. Background: watch openclaw.json for changes and re-bridge
+# ============================================================
+(
+    _prev_hash=$(md5sum "${OPENCLAW_JSON}" 2>/dev/null | awk '{print $1}')
+    while true; do
+        sleep 30
+        _curr_hash=$(md5sum "${OPENCLAW_JSON}" 2>/dev/null | awk '{print $1}')
+        if [ -n "${_curr_hash}" ] && [ "${_curr_hash}" != "${_prev_hash}" ]; then
+            log "openclaw.json changed, re-bridging..."
+            PYTHONPATH="/opt/hiclaw/copaw/src:${PYTHONPATH:-}" \
+                python3 -m copaw_worker.bridge \
+                    --profile manager \
+                    --openclaw-json "${OPENCLAW_JSON}" \
+                    --working-dir "${COPAW_WORKING_DIR}" 2>&1 | while IFS= read -r line; do log "  [re-bridge] ${line}"; done
+            _prev_hash="${_curr_hash}"
+            log "Re-bridge complete"
+        fi
+    done
+) &
+log "openclaw.json watcher started (PID: $!)"
+
+# ============================================================
+# 10. Launch CoPaw Manager (app mode with hot-reload)
 # ============================================================
 export COPAW_WORKING_DIR="${COPAW_WORKING_DIR}"
 
