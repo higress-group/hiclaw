@@ -4,6 +4,7 @@ Record image-affecting changes to `manager/`, `worker/`, `copaw/`, `hermes/`, `o
 
 ---
 
+- fix(hiclaw-controller): preserve default object-storage access when custom non-storage entries are configured.
 - fix(copaw): skip static mc alias setup for k8s workers that use wrapper-provided credentials.
 - fix(copaw): exclude inbound Matrix thread messages from room-history context.
 - fix(copaw): align the CoPaw worker install directory with the HOME-backed workspace path.
