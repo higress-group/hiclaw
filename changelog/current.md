@@ -4,6 +4,7 @@ Record image-affecting changes to `manager/`, `worker/`, `copaw/`, `hermes/`, `o
 
 ---
 
+- fix(hiclaw-controller): apply the configured AI stream idle timeout to the self-hosted Higress gateway.
 - feat(hiclaw-controller): propagate controller-level skills API and Nacos auth defaults to workers.
 - fix(copaw): suppress noisy warnings when optional MinIO objects do not exist.
 - fix(hiclaw-controller): preserve default object-storage access when custom non-storage entries are configured.
