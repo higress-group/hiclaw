@@ -1,46 +1,10 @@
 ---
 name: team-task-coordination
-description: Coordinate access to team task directories using .processing marker files. Use before accessing a worker's task workspace to prevent conflicts when both Leader and Worker might modify files simultaneously.
+description: Compatibility alias for older Team Leader coordination workflows and tests. Prefer team-coordination for new workflows.
 ---
 
 # Team Task Coordination
 
-Prevents conflicts when Leader and Workers access the same task directory under `teams/{team-name}/tasks/`.
+Use `team-coordination` for new team planning, DAG versus Loop decisions, interruption, replanning, and result acceptance.
 
-## The `.processing` Marker
-
-Location: `teams/{team-name}/tasks/{task-id}/.processing`
-
-```json
-{
-  "processor": "leader-name",
-  "started_at": "2026-03-31T10:30:00Z",
-  "expires_at": "2026-03-31T10:45:00Z"
-}
-```
-
-Auto-expires after 15 minutes (default).
-
-## Protocol
-
-1. Sync from MinIO first
-2. Check marker: `check-processing-marker.sh <task-id>`
-   - Exit 0: safe to proceed
-   - Exit 1: processing in progress, wait
-3. Create marker: `create-processing-marker.sh <task-id> <your-name>`
-4. Perform modifications
-5. Remove marker: `remove-processing-marker.sh <task-id>`
-6. Sync to MinIO
-
-## Scripts
-
-```bash
-# Check if safe to modify
-bash ./skills/team-task-coordination/scripts/check-processing-marker.sh <task-id>
-
-# Create marker before modifying
-bash ./skills/team-task-coordination/scripts/create-processing-marker.sh <task-id> <processor-name> [timeout-mins]
-
-# Remove marker after done
-bash ./skills/team-task-coordination/scripts/remove-processing-marker.sh <task-id>
-```
+This legacy skill name stays available so older Team Leader workspaces, scripts, and integration tests can still find coordination helper entrypoints under `skills/team-task-coordination/scripts/`.
