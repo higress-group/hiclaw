@@ -198,6 +198,7 @@ type WorkerEnvDefaults struct {
 
 	// NacosAuthType is propagated to workers as NACOS_AUTH_TYPE.
 	// Sourced from NACOS_AUTH_TYPE.
+	// Typical value: "sts-hiclaw".
 	NacosAuthType string
 }
 
