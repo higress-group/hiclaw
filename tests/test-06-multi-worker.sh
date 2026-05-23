@@ -46,13 +46,8 @@ REPLY=$(matrix_wait_for_message_containing "${ADMIN_TOKEN}" "${DM_ROOM}" "@manag
     "bob" 300 \
     "${ADMIN_TOKEN}" "${DM_ROOM}" "Please check if the request to create worker bob has been processed.")
 
-if [ -n "${REPLY}" ]; then
-    assert_contains_i "${REPLY}" "bob" "Reply mentions worker name 'bob'"
-elif manager_runtime_is_copaw; then
-    log_info "CoPaw Manager did not emit a DM ack for Bob; continuing with infrastructure verification"
-else
-    assert_not_empty "${REPLY}" "Manager replied to create bob request"
-fi
+assert_not_empty "${REPLY}" "Manager replied to create bob request"
+assert_contains_i "${REPLY}" "bob" "Reply mentions worker name 'bob'"
 
 # Verify Bob's infrastructure (may take a moment for LLM to complete setup)
 sleep 30
@@ -88,13 +83,7 @@ if [ -z "${REPLY}" ]; then
     fi
 fi
 
-if [ -n "${REPLY}" ]; then
-    log_info "Manager project ack (first 500 chars): $(echo "${REPLY}" | head -c 500)"
-elif manager_runtime_is_copaw; then
-    log_info "CoPaw Manager did not emit a DM/project ack; continuing with completion verification"
-else
-    assert_not_empty "${REPLY}" "Manager acknowledged collaborative task"
-fi
+assert_not_empty "${REPLY}" "Manager acknowledged collaborative task"
 
 log_section "Wait for Task Completion"
 
