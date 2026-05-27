@@ -5,6 +5,7 @@
 - [如何查看当前 HiClaw 版本](#如何查看当前-hiclaw-版本)
 - [新架构说明（v1.1.0+）](#新架构说明v110)
 - [如何使用 hiclaw CLI 管理资源](#如何使用-hiclaw-cli-管理资源)
+- [如何为 Worker 配置 GitHub 凭据](#如何为-worker-配置-github-凭据)
 - [如何对接飞书/钉钉/企业微信/Discord/Telegram](#如何对接飞书钉钉企业微信discordtelegram)
 - [Windows 下执行安装脚本闪退](#windows-下执行安装脚本闪退)
 - [安装失败：embedded 镜像 "manifest unknown"](#安装失败embedded-镜像-manifest-unknown)
@@ -12,6 +13,7 @@
 - [局域网其他电脑如何访问 Web 端](#局域网其他电脑如何访问-web-端)
 - [本地访问 Matrix 服务器不通](#本地访问-matrix-服务器不通)
 - [如何主动指挥 Worker](#如何主动指挥-worker)
+- [如何接入第三方、本地或多供应商模型](#如何接入第三方本地或多供应商模型)
 - [如何切换 Manager 的模型](#如何切换-manager-的模型)
 - [如何切换 Worker 的模型](#如何切换-worker-的模型)
 - [如何配置 OpenRouter 或模型名带斜杠的供应商](#如何配置-openrouter-或模型名带斜杠的供应商)
@@ -37,6 +39,16 @@
 ```bash
 docker exec hiclaw-manager cat /opt/hiclaw/agent/.builtin-version
 ```
+
+v1.1.0+ 架构下，也可以通过 controller 里的 CLI 查询：
+
+```bash
+docker exec hiclaw-controller hiclaw version
+```
+
+早期 `latest` 镜像如果是在版本元数据规范化之前重新构建的，可能会显示 commit hash
+而不是语义化版本号。遇到这种情况，可以用 hash 对照 release 或 commit 历史，或者使用
+明确的 `HICLAW_VERSION` 升级到指定版本。
 
 安装时指定版本：
 
@@ -203,6 +215,32 @@ hiclaw delete human john
 
 ---
 
+## 如何为 Worker 配置 GitHub 凭据
+
+GitHub 凭据应作为 MCP Server 凭据配置，不要复制到 Worker 容器里。Worker 通过
+`mcporter` 和 AI Gateway 调用 GitHub，真实 GitHub PAT 保存在网关侧 MCP 配置中。
+
+安装时，在安装脚本询问可选 GitHub Personal Access Token 时输入，或提前设置
+`HICLAW_GITHUB_TOKEN`：
+
+```bash
+HICLAW_GITHUB_TOKEN=ghp_xxx bash <(curl -sSL https://higress.ai/hiclaw/install.sh)
+```
+
+该变量存在时，HiClaw 会自动配置 GitHub MCP Server，并生成 Manager 侧
+`mcporter` 配置。之后创建或更新 Worker 时给它 GitHub MCP 能力：
+
+```bash
+hiclaw create worker --name alice --skills github-operations --mcp-servers github
+hiclaw update worker --name alice --mcp-servers github
+```
+
+如果已有安装当时跳过了 token，请在原工作目录重新执行安装并提供
+`HICLAW_GITHUB_TOKEN`，或在网关中手动配置 GitHub MCP Server 并授权目标
+Manager/Worker consumer。不要把 PAT 粘贴进 Worker 提示词或容器本地配置。
+
+---
+
 ## Windows 下执行安装脚本闪退
 
 如果在 Windows 下执行 PowerShell 安装脚本后窗口立即关闭，请先确认是否已安装 Docker Desktop。如果已安装，请确认 Docker Desktop 是否已启动并完全加载——脚本需要连接 Docker 守护进程，Docker Desktop 未运行时会直接失败退出。
@@ -306,6 +344,9 @@ http://<局域网IP>:18080
 2. 确认 Manager 所在机器的防火墙放行 `18080`（Matrix/Higress Gateway）和 `18088`（Element Web）。
 3. 不要在其他设备上使用默认的 `matrix-local.hiclaw.io`；该域名会解析到当前设备自己的 loopback 地址。
 
+如果通过 Tailscale 使用 FluffyChat 或 Element Mobile，规则相同：homeserver 填
+`http://<tailscale-ip>:18080`，并确认手机和 HiClaw 所在机器在 Tailscale 网络内互通。
+
 ---
 
 ## 本地访问 Matrix 服务器不通
@@ -323,6 +364,40 @@ http://<局域网IP>:18080
 在 Element 等客户端中，输入 `@` 后再输入 Worker 昵称的首字母，才会出现补全列表，选择对应用户即可。
 
 也可以点击 Worker 的头像，进入**私聊**。私聊中不需要 @，每条消息都会触发 Worker 响应。但注意：私聊对 Manager 不可见，Manager 不会感知到这部分对话内容。
+
+---
+
+## 如何接入第三方、本地或多供应商模型
+
+HiClaw 不会直接读取你的 `~/.openclaw/openclaw.json` 供应商定义。模型流量会经过
+HiClaw AI Gateway。OpenClaw/QwenPaw 通常只看到一个名为 `hiclaw-gateway` 的
+provider；Higress 再根据请求里的模型名路由到真实上游供应商。
+
+### 第三方 OpenAI 兼容 API
+
+对于 OpenAI 兼容服务，在 Higress AI 路由中配置：
+
+- 供应商 base URL；供应商要求 `/v1` 时需要包含 `/v1`
+- 供应商 API Key
+- 能匹配你准备让 Manager 或 Worker 使用的 model id 的模型匹配规则
+
+然后让 Manager 切换到同一个 model id，或创建/更新 Worker 时指定这个模型。不要只把
+`/model list` 当成 Higress 可用供应商列表；它展示的是 Agent 侧已知模型列表，不是
+Higress 里定义的全部路由。
+
+### Ollama、LM Studio 等本地模型
+
+本地模型需要暴露 OpenAI 兼容 API，并且 HiClaw 容器必须能访问该地址。在 Docker 容器内，
+`localhost` 指的是容器自身，不是你的 Mac 或宿主机。请使用容器可达的宿主机地址，例如
+Docker Desktop 下的 `http://host.docker.internal:<port>/v1`，或在 Linux/Podman 下使用
+宿主机局域网 IP。
+
+### 多供应商和按任务使用不同模型
+
+在 Higress 中配置多条 AI 路由，每条路由使用不同的前缀或正则匹配规则，例如一条匹配
+`qwen*`，另一条匹配 `claude*`。然后明确给 Manager 或 Worker 指定目标模型。HiClaw
+可以让不同 Worker 使用不同模型，但不会内置按任务类型自动选择模型的策略；这类策略需要
+通过 Worker 角色设计或显式切换模型表达。
 
 ---
 

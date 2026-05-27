@@ -5,6 +5,7 @@
 - [How to check the current HiClaw version](#how-to-check-the-current-hiclaw-version)
 - [Understanding the new architecture (v1.1.0+)](#understanding-the-new-architecture-v110)
 - [How to use the hiclaw CLI to manage resources](#how-to-use-the-hiclaw-cli-to-manage-resources)
+- [How to configure GitHub credentials for Workers](#how-to-configure-github-credentials-for-workers)
 - [How to connect Feishu/DingTalk/WeCom/Discord/Telegram](#how-to-connect-feishudingtalkwecomdiscordtelegram)
 - [Installation script exits immediately on Windows](#installation-script-exits-immediately-on-windows)
 - [Installation fails: "manifest unknown" for embedded image](#installation-fails-manifest-unknown-for-embedded-image)
@@ -12,6 +13,7 @@
 - [Accessing the web UI from other devices on the LAN](#accessing-the-web-ui-from-other-devices-on-the-lan)
 - [Cannot connect to Matrix server locally](#cannot-connect-to-matrix-server-locally)
 - [How to talk to a Worker directly](#how-to-talk-to-a-worker-directly)
+- [How to connect third-party, local, or multi-provider models](#how-to-connect-third-party-local-or-multi-provider-models)
 - [How to switch the Manager's model](#how-to-switch-the-managers-model)
 - [How to switch a Worker's model](#how-to-switch-a-workers-model)
 - [How to configure OpenRouter or another model provider with slashes in model names](#how-to-configure-openrouter-or-another-model-provider-with-slashes-in-model-names)
@@ -37,6 +39,17 @@ Run the following command to see the installed version:
 ```bash
 docker exec hiclaw-manager cat /opt/hiclaw/agent/.builtin-version
 ```
+
+In v1.1.0+ installs, you can also query the controller-side CLI:
+
+```bash
+docker exec hiclaw-controller hiclaw version
+```
+
+Older `latest` images may print a commit hash instead of a semantic version if
+that image was rebuilt before version metadata was standardized. In that case,
+match the hash against the release or commit history, or upgrade with an
+explicit `HICLAW_VERSION`.
 
 To install a specific version, use the `HICLAW_VERSION` environment variable during installation:
 
@@ -203,6 +216,36 @@ For declarative YAML resource definitions, see [Declarative Resource Management]
 
 ---
 
+## How to configure GitHub credentials for Workers
+
+GitHub credentials are configured as an MCP Server credential, not copied into
+Worker containers. Workers call GitHub through `mcporter` and the AI Gateway;
+the real GitHub PAT stays in the gateway-side MCP configuration.
+
+During installation, set or enter `HICLAW_GITHUB_TOKEN` when the installer asks
+for the optional GitHub Personal Access Token:
+
+```bash
+HICLAW_GITHUB_TOKEN=ghp_xxx bash <(curl -sSL https://higress.ai/hiclaw/install.sh)
+```
+
+When this variable is present, HiClaw configures the GitHub MCP Server and
+generates Manager-side `mcporter` configuration automatically. After that, give
+a Worker the GitHub MCP capability when creating or updating it:
+
+```bash
+hiclaw create worker --name alice --skills github-operations --mcp-servers github
+hiclaw update worker --name alice --mcp-servers github
+```
+
+For an existing installation that skipped the token, re-run the installer from
+the original workspace and provide `HICLAW_GITHUB_TOKEN`, or configure the
+GitHub MCP Server in the gateway manually and then authorize the target
+Manager/Worker consumer. Do not paste a PAT into a Worker prompt or
+container-local config.
+
+---
+
 ## Installation script exits immediately on Windows
 
 If the PowerShell installation script closes immediately after launching, first check whether Docker Desktop is installed. If it is installed, make sure it is actually running — Docker Desktop must be started and fully loaded before the script can connect to the Docker daemon.
@@ -311,6 +354,10 @@ If the login page still reports a homeserver error:
 3. Do not use the default `matrix-local.hiclaw.io` address from another device;
    that name resolves to the client machine's loopback address.
 
+For FluffyChat or Element Mobile over Tailscale, use the same rule: set the
+homeserver to `http://<tailscale-ip>:18080` and make sure the phone and the
+HiClaw host can reach each other in the Tailscale network.
+
 ---
 
 ## Cannot connect to Matrix server locally
@@ -328,6 +375,46 @@ After creating a Worker, Manager automatically adds you and the Worker to a shar
 When using Element or similar clients, type `@` followed by the first letter(s) of the Worker's display name to trigger autocomplete and select the right user.
 
 Alternatively, you can click the Worker's avatar and open a **direct message** (DM) conversation. In a DM you don't need to @mention — every message triggers the Worker. Keep in mind that Manager is not in the DM room and won't see any of that conversation.
+
+---
+
+## How to connect third-party, local, or multi-provider models
+
+HiClaw does not read your `~/.openclaw/openclaw.json` provider definitions
+directly. Model traffic goes through the HiClaw AI Gateway. OpenClaw/QwenPaw
+usually sees one provider named `hiclaw-gateway`; Higress then routes each
+requested model name to the real upstream provider.
+
+### Third-party OpenAI-compatible APIs
+
+For an OpenAI-compatible service, create or update a Higress AI route with:
+
+- the provider's base URL, including `/v1` when the provider requires it
+- the provider API key
+- a model matching rule that matches the model id you will ask Manager or a
+  Worker to use
+
+Then ask Manager to switch to that same model id, or create/update a Worker with
+that model. Do not rely on `/model list` alone as the source of available
+Higress providers; it shows the agent-side known model list, not every route
+defined in Higress.
+
+### Local models such as Ollama or LM Studio
+
+Local models are supported when the service exposes an OpenAI-compatible API
+that the HiClaw containers can reach. From inside Docker, `localhost` means the
+container itself, not your Mac or host machine. Use a reachable host address,
+for example `http://host.docker.internal:<port>/v1` on Docker Desktop, or the
+host LAN IP on Linux/Podman when `host.docker.internal` is not available.
+
+### Multiple providers and task-specific models
+
+Configure separate Higress AI routes with prefix or regex model matching rules,
+for example one rule for `qwen*` and another for `claude*`. Then assign the
+desired model explicitly to the Manager or a Worker. HiClaw can use different
+models for different Workers, but automatic model selection by task type is not
+a built-in policy; express that policy through Worker roles or switch the model
+explicitly.
 
 ---
 
