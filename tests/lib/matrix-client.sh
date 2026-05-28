@@ -563,11 +563,20 @@ dump_manager_dm_messages() {
     local token="$1"
     local dm_room="$2"
     local note="${3:-Manager DM dump}"
+    local raw formatted
+    raw=$(matrix_read_messages "${token}" "${dm_room}" 20 2>&1 || true)
     {
         printf "\n--- %s ---\n" "${note}"
-        matrix_read_messages "${token}" "${dm_room}" 20 2>&1 \
-            | jq -r '.chunk[] | "[\(.sender // "?")] \(.content.body // "<no body>" | tostring | .[0:400])"' 2>&1 \
-            | head -40 || true
+        # Try to render as one-line-per-message. If matrix_read_messages
+        # returned a curl error instead of JSON, jq will fail — fall back to
+        # the raw response so the dump always shows something useful.
+        if formatted=$(printf '%s' "${raw}" \
+            | jq -r '.chunk[] | "[\(.sender // "?")] \(.content.body // "<no body>" | tostring | .[0:400])"' 2>/dev/null) \
+            && [ -n "${formatted}" ]; then
+            printf '%s\n' "${formatted}" | head -40
+        else
+            printf 'raw response (jq parse failed):\n%s\n' "${raw}" | head -40
+        fi
         printf -- "--- end of Manager DM dump ---\n"
     } >&2
     return 0

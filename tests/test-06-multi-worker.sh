@@ -38,10 +38,13 @@ wait_for_manager_agent_ready 300 "${DM_ROOM}" "${ADMIN_TOKEN}" || {
 # Alice is running from previous tests; bob will be created below (offset=0 is correct for new workers)
 wait_for_worker_container "alice" 60
 METRICS_BASELINE=$(snapshot_baseline "alice" "bob")
-# Same explicit 4-input prompt pattern as test-02 — see comment there for why.
-# Without all four inputs, Manager (per worker-management/SKILL.md) may reply
-# with a confirmation request instead of calling `hiclaw create worker`, and
-# the consumer/SOUL.md poll below silently times out.
+# worker-management/SKILL.md tells Manager to ask admin for FOUR inputs
+# (name / runtime / SOUL / skills) before running `hiclaw create worker`
+# and not to invent defaults. A vague prompt that only names the worker is
+# therefore a coin flip — sometimes Manager replies with a confirmation
+# request, never calls the CLI, and the consumer/SOUL.md polls below
+# silently time out. Spell out all four inputs and tell Manager to skip
+# confirmation so this test exercises actual Worker creation.
 matrix_send_message "${ADMIN_TOKEN}" "${DM_ROOM}" \
     "Please create a new Worker now using these exact values — do not ask me to confirm any of them:
 - name: bob
