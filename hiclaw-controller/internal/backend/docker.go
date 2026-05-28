@@ -167,18 +167,14 @@ func (d *DockerBackend) Create(ctx context.Context, req CreateRequest) (*WorkerR
 	}
 
 	// Infer WorkingDir from HOME env if not set.
-	// OpenHuman uses a dedicated non-root workspace; CoPaw has its own path;
-	// openclaw and hermes derive from HOME.
+	// OpenHuman uses a dedicated non-root workspace baked into the image;
+	// other runtimes (openclaw / copaw / hermes) derive from HOME, which
+	// the service layer already sets to the per-worker hiclaw-fs path.
 	if req.WorkingDir == "" {
-		switch {
-		case req.Runtime == RuntimeOpenHuman:
+		if req.Runtime == RuntimeOpenHuman {
 			req.WorkingDir = "/home/openhuman/.openhuman"
-		case req.Runtime == RuntimeCopaw:
-			req.WorkingDir = "/root/.copaw-worker"
-		default:
-			if home, ok := req.Env["HOME"]; ok {
-				req.WorkingDir = home
-			}
+		} else if home, ok := req.Env["HOME"]; ok {
+			req.WorkingDir = home
 		}
 	}
 
