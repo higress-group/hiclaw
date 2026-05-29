@@ -8,6 +8,12 @@
 #   - Copies HiClaw shared scripts and OpenHuman worker entrypoint
 #   - Copies OpenHuman worker agent template (AGENTS.md, skills)
 #
+# License notice:
+#   This image contains openhuman-core, licensed under GPL-3.0.
+#   Source: https://github.com/tinyhumansai/openhuman (see OPENHUMAN_GIT_REF).
+#   The GPL-3.0 license text is preserved at /usr/share/licenses/openhuman/LICENSE
+#   inside the built image.
+#
 # Build context: HiClaw repo root (to access shared/lib/ and manager/agent/).
 # OpenHuman upstream source is fetched via git inside the builder stage —
 # no `openhuman-src/` directory is required in the build context.
@@ -161,8 +167,10 @@ COPY manager/agent/openhuman-worker-agent/ /opt/hiclaw/agent/openhuman-worker-ag
 # hiclaw CLI — for worker lifecycle management via controller REST API
 COPY --from=hiclaw-controller /usr/local/bin/hiclaw /usr/local/bin/hiclaw
 
-# Copy the built binary
+# Copy the built binary and upstream license (GPL-3.0 compliance: recipients
+# must be able to identify the license of the included GPL component).
 COPY --from=builder /build/openhuman-src/target/release/openhuman-core /usr/local/bin/openhuman-core
+COPY --from=builder /build/openhuman-src/LICENSE /usr/share/licenses/openhuman/LICENSE
 
 # The entrypoint runs as root to set up mc credentials and volumes,
 # then runs openhuman-core as the main process.
