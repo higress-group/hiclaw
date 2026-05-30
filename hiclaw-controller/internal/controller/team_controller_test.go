@@ -9,6 +9,10 @@ import (
 	"github.com/hiclaw/hiclaw-controller/internal/oss/ossfake"
 	"github.com/hiclaw/hiclaw-controller/internal/service"
 	"github.com/hiclaw/hiclaw-controller/test/testutil/mocks"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
 
 func TestLeaderHeartbeatEvery(t *testing.T) {
@@ -738,4 +742,273 @@ func stringSliceContains(values []string, target string) bool {
 		}
 	}
 	return false
+}
+
+// ---------------------------------------------------------------------------
+// listOtherTeamsReferencingWorker tests
+// ---------------------------------------------------------------------------
+
+func indexTeamWorkerNamesForTest(obj client.Object) []string {
+	team, ok := obj.(*v1beta1.Team)
+	if !ok {
+		return nil
+	}
+	names := make([]string, 0, len(team.Spec.Workers))
+	for _, w := range team.Spec.Workers {
+		if w.Name != "" {
+			names = append(names, w.Name)
+		}
+	}
+	return names
+}
+
+func TestListOtherTeamsReferencingWorker_NoOtherTeams(t *testing.T) {
+	scheme := newTeamTestScheme(t)
+	team := &v1beta1.Team{}
+	team.Name = "team-a"
+	team.Namespace = "default"
+	team.Spec.Workers = []v1beta1.TeamWorkerSpec{{Name: "worker-x"}}
+
+	k8sClient := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(team).
+		WithIndex(&v1beta1.Team{}, TeamWorkerNameField, indexTeamWorkerNamesForTest).
+		Build()
+
+	r := &TeamReconciler{Client: k8sClient}
+	others, err := r.listOtherTeamsReferencingWorker(context.Background(), "default", "worker-x", "team-a")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(others) != 0 {
+		t.Fatalf("expected 0 other teams, got %d: %v", len(others), others)
+	}
+}
+
+func TestListOtherTeamsReferencingWorker_OtherTeamReferences(t *testing.T) {
+	scheme := newTeamTestScheme(t)
+	teamA := &v1beta1.Team{}
+	teamA.Name = "team-a"
+	teamA.Namespace = "default"
+	teamA.Spec.Workers = []v1beta1.TeamWorkerSpec{{Name: "worker-x"}}
+
+	teamB := &v1beta1.Team{}
+	teamB.Name = "team-b"
+	teamB.Namespace = "default"
+	teamB.Spec.Workers = []v1beta1.TeamWorkerSpec{{Name: "worker-x"}}
+
+	k8sClient := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(teamA, teamB).
+		WithIndex(&v1beta1.Team{}, TeamWorkerNameField, indexTeamWorkerNamesForTest).
+		Build()
+
+	r := &TeamReconciler{Client: k8sClient}
+	others, err := r.listOtherTeamsReferencingWorker(context.Background(), "default", "worker-x", "team-a")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(others) != 1 {
+		t.Fatalf("expected 1 other team, got %d: %v", len(others), others)
+	}
+	if others[0].Name != "team-b" {
+		t.Fatalf("expected team-b, got %s", others[0].Name)
+	}
+}
+
+func TestListOtherTeamsReferencingWorker_ExcludesDeletedTeams(t *testing.T) {
+	scheme := newTeamTestScheme(t)
+	teamA := &v1beta1.Team{}
+	teamA.Name = "team-a"
+	teamA.Namespace = "default"
+	teamA.Spec.Workers = []v1beta1.TeamWorkerSpec{{Name: "worker-x"}}
+
+	teamB := &v1beta1.Team{}
+	teamB.Name = "team-b"
+	teamB.Namespace = "default"
+	teamB.Spec.Workers = []v1beta1.TeamWorkerSpec{{Name: "worker-x"}}
+	now := metav1.Now()
+	teamB.DeletionTimestamp = &now
+	teamB.Finalizers = []string{finalizerName}
+
+	k8sClient := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(teamA, teamB).
+		WithIndex(&v1beta1.Team{}, TeamWorkerNameField, indexTeamWorkerNamesForTest).
+		Build()
+
+	r := &TeamReconciler{Client: k8sClient}
+	others, err := r.listOtherTeamsReferencingWorker(context.Background(), "default", "worker-x", "team-a")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(others) != 0 {
+		t.Fatalf("expected 0 other teams (team-b is being deleted), got %d: %v", len(others), others)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// handleDelete refcount protection tests
+// ---------------------------------------------------------------------------
+
+func TestHandleDelete_SharedWorkerProtected(t *testing.T) {
+	scheme := newTeamTestScheme(t)
+
+	teamA := &v1beta1.Team{}
+	teamA.Name = "team-a"
+	teamA.Namespace = "default"
+	teamA.Spec.Leader = v1beta1.LeaderSpec{Name: "leader-a"}
+	teamA.Spec.Workers = []v1beta1.TeamWorkerSpec{{Name: "worker-shared"}}
+	teamA.Status.Members = []v1beta1.TeamMemberStatus{
+		{Name: "leader-a", Role: RoleTeamLeader.String(), Observed: true},
+		{Name: "worker-shared", Role: RoleTeamWorker.String(), Observed: true},
+	}
+
+	teamB := &v1beta1.Team{}
+	teamB.Name = "team-b"
+	teamB.Namespace = "default"
+	teamB.Spec.Leader = v1beta1.LeaderSpec{Name: "leader-b"}
+	teamB.Spec.Workers = []v1beta1.TeamWorkerSpec{{Name: "worker-shared"}}
+
+	k8sClient := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(teamA, teamB).
+		WithIndex(&v1beta1.Team{}, TeamWorkerNameField, indexTeamWorkerNamesForTest).
+		Build()
+
+	mockProv := mocks.NewMockProvisioner()
+	mockDeployer := mocks.NewMockDeployer()
+
+	r := &TeamReconciler{
+		Client:      k8sClient,
+		Provisioner: mockProv,
+		Deployer:    mockDeployer,
+	}
+
+	err := r.handleDelete(context.Background(), teamA)
+	if err != nil {
+		t.Fatalf("handleDelete: %v", err)
+	}
+
+	// Leader should be cleaned up.
+	if !sliceContains(mockProv.Calls.DeleteWorkerCredentials, "leader-a") {
+		t.Error("leader-a credentials should have been deleted")
+	}
+	if !sliceContains(mockDeployer.Calls.CleanupOSSData, "leader-a") {
+		t.Error("leader-a OSS data should have been cleaned up")
+	}
+
+	// Shared worker MUST NOT be cleaned up.
+	if sliceContains(mockProv.Calls.DeleteWorkerCredentials, "worker-shared") {
+		t.Error("worker-shared credentials should NOT have been deleted (still referenced by team-b)")
+	}
+	if sliceContains(mockDeployer.Calls.CleanupOSSData, "worker-shared") {
+		t.Error("worker-shared OSS data should NOT have been cleaned up (still referenced by team-b)")
+	}
+}
+
+func TestHandleDelete_NonSharedWorkerCleanedUp(t *testing.T) {
+	scheme := newTeamTestScheme(t)
+
+	teamA := &v1beta1.Team{}
+	teamA.Name = "team-a"
+	teamA.Namespace = "default"
+	teamA.Spec.Leader = v1beta1.LeaderSpec{Name: "leader-a"}
+	teamA.Spec.Workers = []v1beta1.TeamWorkerSpec{{Name: "worker-unshared"}}
+	teamA.Status.Members = []v1beta1.TeamMemberStatus{
+		{Name: "leader-a", Role: RoleTeamLeader.String(), Observed: true},
+		{Name: "worker-unshared", Role: RoleTeamWorker.String(), Observed: true},
+	}
+
+	// No other team references worker-unshared.
+	k8sClient := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(teamA).
+		WithIndex(&v1beta1.Team{}, TeamWorkerNameField, indexTeamWorkerNamesForTest).
+		Build()
+
+	mockProv := mocks.NewMockProvisioner()
+	mockDeployer := mocks.NewMockDeployer()
+
+	r := &TeamReconciler{
+		Client:      k8sClient,
+		Provisioner: mockProv,
+		Deployer:    mockDeployer,
+	}
+
+	err := r.handleDelete(context.Background(), teamA)
+	if err != nil {
+		t.Fatalf("handleDelete: %v", err)
+	}
+
+	// Both leader and unshared worker should be cleaned up.
+	if !sliceContains(mockProv.Calls.DeleteWorkerCredentials, "leader-a") {
+		t.Error("leader-a credentials should have been deleted")
+	}
+	if !sliceContains(mockProv.Calls.DeleteWorkerCredentials, "worker-unshared") {
+		t.Error("worker-unshared credentials should have been deleted (no other team references it)")
+	}
+	if !sliceContains(mockDeployer.Calls.CleanupOSSData, "worker-unshared") {
+		t.Error("worker-unshared OSS data should have been cleaned up")
+	}
+}
+
+func TestHandleDelete_RefcountFailureFailClosed(t *testing.T) {
+	scheme := newTeamTestScheme(t)
+
+	teamA := &v1beta1.Team{}
+	teamA.Name = "team-a"
+	teamA.Namespace = "default"
+	teamA.Spec.Leader = v1beta1.LeaderSpec{Name: "leader-a"}
+	teamA.Spec.Workers = []v1beta1.TeamWorkerSpec{{Name: "worker-x"}}
+	teamA.Status.Members = []v1beta1.TeamMemberStatus{
+		{Name: "leader-a", Role: RoleTeamLeader.String(), Observed: true},
+		{Name: "worker-x", Role: RoleTeamWorker.String(), Observed: true},
+	}
+
+	// No field indexer registered → List with MatchingFieldsSelector will fail.
+	k8sClient := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(teamA).
+		Build()
+
+	mockProv := mocks.NewMockProvisioner()
+	mockDeployer := mocks.NewMockDeployer()
+
+	r := &TeamReconciler{
+		Client:      k8sClient,
+		Provisioner: mockProv,
+		Deployer:    mockDeployer,
+	}
+
+	err := r.handleDelete(context.Background(), teamA)
+	if err == nil {
+		t.Fatal("expected error from refcount failure, got nil")
+	}
+
+	// Worker MUST NOT be cleaned up when refcount fails.
+	if sliceContains(mockProv.Calls.DeleteWorkerCredentials, "worker-x") {
+		t.Error("worker-x credentials should NOT have been deleted (refcount failed)")
+	}
+	if sliceContains(mockDeployer.Calls.CleanupOSSData, "worker-x") {
+		t.Error("worker-x OSS data should NOT have been cleaned up (refcount failed)")
+	}
+}
+
+func sliceContains(slice []string, target string) bool {
+	for _, s := range slice {
+		if s == target {
+			return true
+		}
+	}
+	return false
+}
+
+func newTeamTestScheme(t *testing.T) *runtime.Scheme {
+	t.Helper()
+	scheme := runtime.NewScheme()
+	if err := v1beta1.AddToScheme(scheme); err != nil {
+		t.Fatalf("add v1beta1 to scheme: %v", err)
+	}
+	return scheme
 }
