@@ -98,6 +98,13 @@ else
     log_fail "On-demand skill 'github-operations' missing in MinIO"
 fi
 
+if wait_for_worker_container "${TEST_WORKER}" 180; then
+    log_pass "Worker container running before skills update"
+else
+    log_fail "Worker container not running before skills update"
+fi
+PRE_UPDATE_CONTAINER_ID=$(docker inspect --format '{{.Id}}' "hiclaw-worker-${TEST_WORKER}" 2>/dev/null | head -c 12 || echo "")
+
 # ============================================================
 # Section 3: Update skills via `hiclaw update worker --skills`
 # ============================================================
@@ -150,9 +157,16 @@ else
     log_fail "On-demand skill 'git-delegation' missing in MinIO after update"
 fi
 
-# Worker container should still be running (skills update must not crash it)
-if docker ps --format '{{.Names}}' 2>/dev/null | grep -q "^hiclaw-worker-${TEST_WORKER}$"; then
+# Worker container should still be running (skills update must not crash it).
+# Wait here so a slow initial start is not mistaken for an update regression.
+if wait_for_worker_container "${TEST_WORKER}" 120; then
     log_pass "Worker container still running after skills update"
+    POST_UPDATE_CONTAINER_ID=$(docker inspect --format '{{.Id}}' "hiclaw-worker-${TEST_WORKER}" 2>/dev/null | head -c 12 || echo "")
+    if [ -n "${PRE_UPDATE_CONTAINER_ID}" ] && [ "${POST_UPDATE_CONTAINER_ID}" = "${PRE_UPDATE_CONTAINER_ID}" ]; then
+        log_pass "Worker container survived skills update without recreation"
+    else
+        log_info "Worker container id changed during skills update (before: ${PRE_UPDATE_CONTAINER_ID}, after: ${POST_UPDATE_CONTAINER_ID})"
+    fi
 else
     log_fail "Worker container disappeared after skills update"
 fi

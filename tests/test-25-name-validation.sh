@@ -78,7 +78,7 @@ INVALID_CASES=(
     "underscore|alice_dev|invalid worker name"
     "leading-hyphen|-alice|invalid worker name"
     "special-char|alice!|invalid worker name"
-    "empty|||--name is required"
+    "empty||--name is required"
 )
 
 for case_entry in "${INVALID_CASES[@]}"; do
@@ -103,7 +103,7 @@ for case_entry in "${INVALID_CASES[@]}"; do
         fi
     fi
 
-    if echo "${OUTPUT}" | grep -q "${expected_substr}"; then
+    if echo "${OUTPUT}" | grep -q -- "${expected_substr}"; then
         log_pass "Error message for ${label} contains '${expected_substr}'"
     else
         log_fail "Error message for ${label} missing '${expected_substr}' (got: ${OUTPUT})"
