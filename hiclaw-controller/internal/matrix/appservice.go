@@ -25,7 +25,7 @@ func RenderAppServiceRegistration(cfg Config) AppServiceRegistration {
 				{Exclusive: true, Regex: fmt.Sprintf("@.*:%s", domain)},
 			},
 			Aliases: []AppServiceNamespace{
-				{Exclusive: true, Regex: fmt.Sprintf("#hiclaw-.*:%s", domain)},
+				{Exclusive: false, Regex: fmt.Sprintf("#hiclaw-.*:%s", domain)},
 			},
 			Rooms: []AppServiceNamespace{},
 		},
