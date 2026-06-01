@@ -89,7 +89,8 @@ type Worker struct {
 
 type WorkerSpec struct {
 	Model         string              `json:"model"`
-	Runtime       string              `json:"runtime,omitempty"`    // openclaw | copaw | hermes (default: openclaw)
+	Runtime       string              `json:"runtime,omitempty"`    // openclaw | copaw | hermes | harness (default: openclaw)
+	HarnessType   string              `json:"harnessType,omitempty"` // claude | gemini | opencode | codex (default: claude)
 	Image         string              `json:"image,omitempty"`      // custom Docker image
 	WorkerName    string              `json:"workerName,omitempty"` // business/runtime identity (Matrix localpart, OSS path key)
 	Identity      string              `json:"identity,omitempty"`
@@ -287,6 +288,7 @@ type TeamWorkerSpec struct {
 	WorkerName    string              `json:"workerName,omitempty"`
 	Model         string              `json:"model,omitempty"`
 	Runtime       string              `json:"runtime,omitempty"`
+	HarnessType   string              `json:"harnessType,omitempty"` // claude | gemini | opencode | codex (default: claude)
 	Image         string              `json:"image,omitempty"`
 	Identity      string              `json:"identity,omitempty"`
 	Soul          string              `json:"soul,omitempty"`

@@ -19,11 +19,12 @@ import (
 
 // DockerConfig holds Docker backend configuration.
 type DockerConfig struct {
-	SocketPath        string
-	WorkerImage       string // default worker image (HICLAW_WORKER_IMAGE)
-	CopawWorkerImage  string // default copaw worker image (HICLAW_COPAW_WORKER_IMAGE)
-	HermesWorkerImage string // default hermes worker image (HICLAW_HERMES_WORKER_IMAGE)
-	DefaultNetwork    string // default Docker network (default "hiclaw-net")
+	SocketPath         string
+	WorkerImage        string // default worker image (HICLAW_WORKER_IMAGE)
+	CopawWorkerImage   string // default copaw worker image (HICLAW_COPAW_WORKER_IMAGE)
+	HermesWorkerImage  string // default hermes worker image (HICLAW_HERMES_WORKER_IMAGE)
+	HarnessWorkerImage string // default harness worker image (HICLAW_HARNESS_WORKER_IMAGE)
+	DefaultNetwork     string // default Docker network (default "hiclaw-net")
 }
 
 // DockerBackend manages worker containers via the Docker Engine API over a Unix socket.
@@ -110,6 +111,8 @@ func (d *DockerBackend) Create(ctx context.Context, req CreateRequest) (*WorkerR
 			image = d.config.CopawWorkerImage
 		case req.Runtime == RuntimeHermes && d.config.HermesWorkerImage != "":
 			image = d.config.HermesWorkerImage
+		case req.Runtime == RuntimeHarness && d.config.HarnessWorkerImage != "":
+			image = d.config.HarnessWorkerImage
 		default:
 			image = d.config.WorkerImage
 		}

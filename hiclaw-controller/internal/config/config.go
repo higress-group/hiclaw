@@ -430,10 +430,11 @@ func (c *Config) ManagerResources() *backend.ResourceRequirements {
 
 func (c *Config) DockerConfig() backend.DockerConfig {
 	return backend.DockerConfig{
-		SocketPath:        c.SocketPath,
-		WorkerImage:       envOrDefault("HICLAW_WORKER_IMAGE", "hiclaw/worker-agent:latest"),
-		CopawWorkerImage:  envOrDefault("HICLAW_COPAW_WORKER_IMAGE", "hiclaw/copaw-worker:latest"),
-		HermesWorkerImage: envOrDefault("HICLAW_HERMES_WORKER_IMAGE", "hiclaw/hermes-worker:latest"),
+		SocketPath:         c.SocketPath,
+		WorkerImage:        envOrDefault("HICLAW_WORKER_IMAGE", "hiclaw/worker-agent:latest"),
+		CopawWorkerImage:   envOrDefault("HICLAW_COPAW_WORKER_IMAGE", "hiclaw/copaw-worker:latest"),
+		HermesWorkerImage:  envOrDefault("HICLAW_HERMES_WORKER_IMAGE", "hiclaw/hermes-worker:latest"),
+		HarnessWorkerImage: envOrDefault("HICLAW_HARNESS_WORKER_IMAGE", "hiclaw/harness-worker:latest"),
 		DefaultNetwork:    envOrDefault("HICLAW_DOCKER_NETWORK", "hiclaw-net"),
 	}
 }
@@ -470,14 +471,15 @@ func (c *Config) UsesExternalOSS() bool {
 
 func (c *Config) K8sConfig() backend.K8sConfig {
 	return backend.K8sConfig{
-		Namespace:         c.K8sNamespace,
-		WorkerImage:       envOrDefault("HICLAW_WORKER_IMAGE", "hiclaw/worker-agent:latest"),
-		CopawWorkerImage:  envOrDefault("HICLAW_COPAW_WORKER_IMAGE", "hiclaw/copaw-worker:latest"),
-		HermesWorkerImage: envOrDefault("HICLAW_HERMES_WORKER_IMAGE", "hiclaw/hermes-worker:latest"),
-		WorkerCPU:         c.K8sWorkerCPU,
-		WorkerMemory:      c.K8sWorkerMemory,
-		ControllerName:    c.ControllerName,
-		ResourcePrefix:    c.ResourcePrefix,
+		Namespace:          c.K8sNamespace,
+		WorkerImage:        envOrDefault("HICLAW_WORKER_IMAGE", "hiclaw/worker-agent:latest"),
+		CopawWorkerImage:   envOrDefault("HICLAW_COPAW_WORKER_IMAGE", "hiclaw/copaw-worker:latest"),
+		HermesWorkerImage:  envOrDefault("HICLAW_HERMES_WORKER_IMAGE", "hiclaw/hermes-worker:latest"),
+		HarnessWorkerImage: envOrDefault("HICLAW_HARNESS_WORKER_IMAGE", "hiclaw/harness-worker:latest"),
+		WorkerCPU:          c.K8sWorkerCPU,
+		WorkerMemory:       c.K8sWorkerMemory,
+		ControllerName:     c.ControllerName,
+		ResourcePrefix:     c.ResourcePrefix,
 	}
 }
 
