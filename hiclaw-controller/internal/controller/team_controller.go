@@ -18,6 +18,7 @@ import (
 	"github.com/hiclaw/hiclaw-controller/internal/service"
 	corev1 "k8s.io/api/core/v1"
 	kerrors "k8s.io/apimachinery/pkg/util/errors"
+	"k8s.io/apimachinery/pkg/fields"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -532,6 +533,31 @@ func (r *TeamReconciler) handleDelete(ctx context.Context, t *v1beta1.Team) erro
 
 	errs := make([]error, 0)
 	for name, role := range names {
+		// Before deleting a worker, check whether it is still referenced
+		// by other live Team CRs. Shared workers (ADR 0010 path A) must
+		// not have their credentials / OSS data / containers wiped when
+		// only one of their owning teams is dismissed.
+		if role == RoleTeamWorker {
+			otherTeams, refErr := r.listOtherTeamsReferencingWorker(ctx, t.Namespace, name, t.Name)
+			if refErr != nil {
+				// Refcount failure must be fail-closed: never delete
+				// credentials when we cannot prove the worker is unused.
+				logger.Error(refErr, "refcount check failed; skipping member cleanup to protect shared worker",
+					"name", name)
+				errs = append(errs, fmt.Errorf("refcount worker %s: %w", name, refErr))
+				continue
+			}
+			if len(otherTeams) > 0 {
+				teamNames := make([]string, len(otherTeams))
+				for i, ot := range otherTeams {
+					teamNames[i] = ot.Name
+				}
+				logger.Info("skipping credential wipe; worker still referenced by other teams",
+					"worker", name, "referencingTeams", teamNames)
+				continue
+			}
+		}
+
 		var exposed []v1beta1.ExposedPortStatus
 		var existingRoomID string
 		if ms := t.Status.MemberByName(name); ms != nil {
@@ -602,6 +628,37 @@ func (r *TeamReconciler) handleDelete(ctx context.Context, t *v1beta1.Team) erro
 		return kerrors.NewAggregate(errs)
 	}
 	return nil
+}
+
+// listOtherTeamsReferencingWorker returns all live Team CRs (excluding
+// excludeTeam) whose spec.workers[] references the given worker name. Uses
+// the spec.workerNames field indexer registered by initFieldIndexers for
+// O(1) reverse lookup.
+//
+// Refcount failure (list error) is returned to the caller so it can
+// fail-closed: when we cannot prove a worker is unused, we must not delete
+// its credentials.
+func (r *TeamReconciler) listOtherTeamsReferencingWorker(ctx context.Context, namespace, workerName, excludeTeam string) ([]v1beta1.Team, error) {
+	var list v1beta1.TeamList
+	if err := r.List(ctx, &list,
+		client.InNamespace(namespace),
+		client.MatchingFieldsSelector{
+			Selector: fields.OneTermEqualSelector(TeamWorkerNameField, workerName),
+		},
+	); err != nil {
+		return nil, fmt.Errorf("list teams referencing worker %s: %w", workerName, err)
+	}
+
+	out := make([]v1beta1.Team, 0, len(list.Items))
+	for _, t := range list.Items {
+		if t.Name == excludeTeam {
+			continue
+		}
+		if t.DeletionTimestamp.IsZero() {
+			out = append(out, t)
+		}
+	}
+	return out, nil
 }
 
 // reconcileLegacyMember upserts a team member (leader or worker) into the
