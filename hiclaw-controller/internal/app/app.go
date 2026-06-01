@@ -186,6 +186,16 @@ func (a *App) Start(ctx context.Context) error {
 			logger.Error(err, "cluster initialization failed (non-fatal, continuing)")
 		}
 
+		// When switching from AppService mode to legacy password mode,
+		// automatically backfill passwords for workers/managers that were
+		// created without passwords in AS mode. This enables seamless
+		// rollback without manual intervention.
+		if !a.cfg.MatrixAppServiceEnabled {
+			if err := a.provisioner.BackfillLegacyPasswords(ctx); err != nil {
+				logger.Error(err, "legacy password backfill had errors (non-fatal)")
+			}
+		}
+
 		// Mint a long-lived admin SA token and write it to a known location
 		// so the bundled `hiclaw` CLI inside this container can authenticate
 		// against the controller's HTTP API out of the box (see Dockerfile

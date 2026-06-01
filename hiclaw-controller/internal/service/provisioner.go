@@ -1546,3 +1546,77 @@ func (p *Provisioner) DeprovisionManager(ctx context.Context, name string) error
 
 	return nil
 }
+
+// BackfillLegacyPasswords generates and sets Matrix passwords for workers
+// and managers that were created in AppService mode (no password) when the
+// controller is switched back to legacy password-based mode. This ensures
+// a seamless rollback without manual intervention.
+func (p *Provisioner) BackfillLegacyPasswords(ctx context.Context) error {
+	logger := log.FromContext(ctx).WithName("backfill")
+
+	names, err := p.creds.List(ctx)
+	if err != nil {
+		return fmt.Errorf("list credentials: %w", err)
+	}
+	if len(names) == 0 {
+		return nil
+	}
+
+	var firstErr error
+	backfilled := 0
+	for _, name := range names {
+		creds, err := p.creds.Load(ctx, name)
+		if err != nil {
+			logger.Error(err, "failed to load credentials", "name", name)
+			if firstErr == nil {
+				firstErr = err
+			}
+			continue
+		}
+		if creds == nil {
+			continue
+		}
+		// Already has a password — nothing to do.
+		if creds.MatrixPassword != "" {
+			continue
+		}
+
+		password, err := matrix.GeneratePassword(16)
+		if err != nil {
+			logger.Error(err, "failed to generate password", "name", name)
+			if firstErr == nil {
+				firstErr = err
+			}
+			continue
+		}
+
+		userID := p.matrix.UserID(name)
+		if err := p.matrix.SetPasswordAsAdmin(ctx, userID, password); err != nil {
+			logger.Error(err, "failed to set password via admin", "name", name, "userID", userID)
+			if firstErr == nil {
+				firstErr = err
+			}
+			continue
+		}
+
+		creds.MatrixPassword = password
+		// Clear cached AS token — it's no longer valid after password reset
+		// and legacy mode will obtain a new token via password login.
+		creds.MatrixToken = ""
+		if err := p.creds.Save(ctx, name, creds); err != nil {
+			logger.Error(err, "failed to save backfilled credentials", "name", name)
+			if firstErr == nil {
+				firstErr = err
+			}
+			continue
+		}
+
+		backfilled++
+		logger.Info("backfilled legacy password", "name", name, "userID", userID)
+	}
+
+	if backfilled > 0 {
+		logger.Info("legacy password backfill complete", "backfilled", backfilled, "total", len(names))
+	}
+	return firstErr
+}
